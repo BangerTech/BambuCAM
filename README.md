@@ -1,18 +1,38 @@
+# Bambu CAM
+
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+![NodeJS](https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+
 <div align="center">
   <img src="assets/logo.png" alt="Bambu CAM Logo" width="400"/>
 </div>
 
-Eine Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren Kamera-Feeds.
+> 🎥 Eine moderne Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren Kamera-Feeds
 
-![Bambu CAM Screenshot](screenshot.png)
+## Screenshots
 
-## Features
+<img src="assets/screenshot1.png" width="49%" /> <img src="assets/screenshot2.png" width="49%" />
 
-- Live-Kamera-Feeds von mehreren BambuLab X1C Druckern
-- Drag & Drop Interface zur Anordnung der Kameras
-- Vollbild-Modus für jeden Drucker
-- Einfaches Hinzufügen und Entfernen von Druckern
-- Automatische Verbindung über RTSP
+## Table of Contents
+- [Was ist Bambu CAM?](#was-ist-bambu-cam)
+- [Features](#features)
+- [Installation](#installation)
+- [Voraussetzungen](#voraussetzungen)
+- [Fehlerbehebung](#fehlerbehebung)
+- [Support](#support)
+
+## Was ist Bambu CAM?
+Bambu CAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwachung mehrerer BambuLab X1C 3D-Drucker. Die App ermöglicht es, alle Drucker-Kameras in einer übersichtlichen Oberfläche zu organisieren und zu monitoren.
+
+### Features
+- 🎥 Live-Kamera-Feeds von mehreren Druckern
+- 🖱️ Drag & Drop Interface zur Anordnung der Kameras
+- 🖥️ Vollbild-Modus für jeden Drucker
+- ➕ Einfaches Hinzufügen und Entfernen von Druckern
+- 🔄 Automatische RTSP-Verbindung
+- 📱 Responsive Design für mobile Geräte
 
 ## Installation
 
@@ -21,55 +41,49 @@ Eine Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren 
 2. Die neueste Version von [Bambu CAM](https://github.com/IHR_USERNAME/Bambu-CAM/releases) herunterladen
 3. ZIP-Datei an einen beliebigen Ort entpacken
 4. `start.bat` per Rechtsklick als Administrator ausführen
-5. Die App öffnet sich automatisch im Browser unter:
+5. Im Browser öffnen:
    - http://localhost:3000
    - oder http://IHRE-IP-ADRESSE:3000
 
 ### Für Linux-Benutzer
-1. Docker und Docker Compose installieren:
-   ```bash
-   # Für Ubuntu/Debian
-   sudo apt-get update
-   sudo apt-get install docker.io docker-compose
-   ```
 
-2. Repository klonen und starten:
-   ```bash
-   # Repository klonen
-   git clone https://github.com/IHR_USERNAME/Bambu-CAM.git
-   cd Bambu-CAM
+#### Quick Start Installation
+1. Repository klonen:
+```bash
+git clone https://github.com/IHR_USERNAME/Bambu-CAM.git
+cd Bambu-CAM
+```
 
-   # Docker Compose starten
-   docker-compose up --build
-   ```
+2. Docker Compose starten:
+```bash
+docker-compose up -d
+```
 
 3. Im Browser öffnen:
-   - http://localhost:3000
-   - oder http://IHRE-IP-ADRESSE:3000
+```bash
+http://localhost:3000
+```
 
-### Drucker einrichten
+## Drucker Einrichtung
 
-1. Im Drucker "LAN Only Mode" aktivieren:
-   - Druckereinstellungen → Netzwerk → LAN Only Mode
-2. Kamera in den Einstellungen aktivieren
-3. Drucker neu starten
-4. Access Code notieren (zu finden in den Druckereinstellungen unter "Netzwerk")
-
-### Drucker hinzufügen
-
-1. In der App auf "Drucker hinzufügen" klicken
-2. Namen für den Drucker eingeben (z.B. "X1C Werkstatt")
-3. IP-Adresse des Druckers eingeben (z.B. "192.168.1.100")
-4. Access Code eingeben
-5. Auf "Hinzufügen" klicken
-
-## Voraussetzungen
-
-- Windows 10/11
-- Docker Desktop
+### Voraussetzungen
 - BambuLab X1C Drucker im gleichen Netzwerk
 - Aktivierter "LAN Only Mode" auf den Druckern
 - Aktivierte Kamera in den Druckereinstellungen
+
+### Drucker hinzufügen
+1. In der App auf "Drucker hinzufügen" klicken
+2. Namen für den Drucker eingeben (z.B. "X1C Werkstatt")
+3. IP-Adresse des Druckers eingeben (z.B. "192.168.1.100")
+4. Access Code eingeben (zu finden in den Druckereinstellungen unter "Netzwerk")
+5. Auf "Hinzufügen" klicken
+
+## Technologien
+- React.js Frontend
+- Node.js Backend
+- Docker & Docker Compose
+- RTSP Stream Verarbeitung
+- WebSocket Verbindung
 
 ## Fehlerbehebung
 
@@ -84,6 +98,7 @@ Falls keine Verbindung zum Drucker möglich ist:
 
 Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/IHR_USERNAME/Bambu-CAM/issues).
 
-## Lizenz
-
-[MIT](LICENSE) 
+## Keywords
+`bambulab` `x1c` `3d-printer` `camera-monitoring` `rtsp-stream` `docker` 
+`react` `nodejs` `web-ui` `monitoring` `dashboard` `camera-feed` 
+`printer-management` `live-stream` `self-hosted` `open-source` 
