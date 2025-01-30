@@ -183,7 +183,7 @@ function App() {
           ipAddress: newPrinter.ip,
           accessCode: newPrinter.accessCode,
           streamUrl: streamUrl,
-          wsPort: 9100 + printers.length  // Dynamischer Port basierend auf Anzahl der Drucker
+          wsPort: 9100 + printers.length
         })
       });
 
@@ -194,6 +194,7 @@ function App() {
       }
 
       setPrinters(prev => [...prev, data.printer]);
+      connectToPrinter(data.printer);
       setOpenDialog(false);
       setNewPrinter({ name: '', ip: '', accessCode: '' });
     } catch (error) {
@@ -235,21 +236,43 @@ function App() {
     // Warte kurz bis der neue Canvas gerendert ist
     setTimeout(() => {
       const canvas = document.getElementById(`canvas-${printer.id}-fullscreen`);
-      if (canvas && printer.wsPort) {
-        // Erstelle einen neuen Player für den Fullscreen
+      if (canvas) {
         const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}`;
-        new JSMpeg.Player(wsUrl, {
+        const player = new JSMpeg.Player(wsUrl, {
           canvas: canvas,
           audio: false,
           pauseWhenHidden: false
         });
+
+        // Speichere den Fullscreen-Player
+        setStreams(prev => new Map(prev.set(`${printer.id}-fullscreen`, player)));
       }
     }, 100);
   };
 
   // Cleanup beim Schließen des Fullscreen
   const handleCloseFullscreen = () => {
-    setFullscreenPrinter(null);
+    if (fullscreenPrinter) {
+      const fullscreenPlayer = streams.get(`${fullscreenPrinter.id}-fullscreen`);
+      // Erst den Printer auf null setzen, dann den Player zerstören
+      setFullscreenPrinter(null);
+      
+      // Kurze Verzögerung vor dem Zerstören des Players
+      setTimeout(() => {
+        if (fullscreenPlayer) {
+          try {
+            fullscreenPlayer.destroy();
+            setStreams(prev => {
+              const newStreams = new Map(prev);
+              newStreams.delete(`${fullscreenPrinter.id}-fullscreen`);
+              return newStreams;
+            });
+          } catch (error) {
+            console.error('Fehler beim Beenden des Fullscreen-Players:', error);
+          }
+        }
+      }, 100);
+    }
   };
 
   // Render der Kamera-Karte
@@ -280,14 +303,22 @@ function App() {
         )}
       </CameraOverlay>
       
-      <CameraCanvas 
+      <canvas 
         id={`canvas-${printer.id}${isFullscreen ? '-fullscreen' : ''}`} 
+        style={{ 
+          width: '100%', 
+          height: '100%',
+          backgroundColor: '#000'
+        }}
       />
       
       {!isFullscreen && (
         <ControlsOverlay>
           <IconButton
-            onClick={() => handleDeletePrinter(printer.id)}
+            onClick={(e) => {
+              e.stopPropagation();  // Verhindert das Öffnen des Fullscreens
+              handleDeletePrinter(printer.id);
+            }}
             sx={{ color: 'white' }}
           >
             <DeleteIcon />

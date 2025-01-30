@@ -253,9 +253,9 @@ function startStream(printer) {
   return new Promise((resolve, reject) => {
     log('info', `Starte Stream für Drucker`, { 
       printerId: printer.id, 
-      name: printer.name, 
-      rtspUrl: printer.rtspUrl,
-      isMockPrinter: printer.ipAddress === 'mock-printer'
+      name: printer.name,
+      streamUrl: printer.streamUrl,  // Wichtig!
+      isMockPrinter: printer.ipAddress.includes('mock-printer')
     });
 
     if (activeStreams.has(printer.id)) {
@@ -263,11 +263,10 @@ function startStream(printer) {
       return resolve(activeStreams.get(printer.id));
     }
 
-    const wsPort = 9100 + activeStreams.size;
     const stream = new RTSPStream({
-      streamUrl: printer.rtspUrl,
-      wsPort: wsPort,
-      isMockPrinter: printer.ipAddress === 'mock-printer'
+      streamUrl: printer.streamUrl,  // Hier war der Fehler
+      wsPort: printer.wsPort,
+      isMockPrinter: printer.ipAddress.includes('mock-printer')
     });
 
     let outputBuffer = '';
@@ -309,7 +308,7 @@ function startStream(printer) {
           printerId: printer.id 
         });
         clearTimeout(timeout);
-        stream.wsPort = wsPort;  // Fügen Sie den wsPort zum Stream-Objekt hinzu
+        stream.wsPort = printer.wsPort;  // Fügen Sie den wsPort zum Stream-Objekt hinzu
         activeStreams.set(printer.id, stream);
         resolve(stream);
       }
