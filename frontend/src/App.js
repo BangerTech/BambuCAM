@@ -95,7 +95,7 @@ function App() {
   const [openDialog, setOpenDialog] = useState(false);
   const [newPrinter, setNewPrinter] = useState({ 
     name: '', 
-    ipAddress: '',
+    ip: '',
     accessCode: ''
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -167,10 +167,24 @@ function App() {
     try {
       setIsLoading(true);
 
+      // Prüfe ob es ein Mock-Printer ist
+      const isMockPrinter = newPrinter.ip.startsWith('mock-printer');
+      
+      // Baue die korrekte URL basierend auf Printer-Typ
+      const streamUrl = isMockPrinter
+        ? `rtsp://bblp:12345678@${newPrinter.ip}:8554/streaming/live/1`
+        : `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`;
+
       const response = await fetch(`${API_URL}/printers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newPrinter)
+        body: JSON.stringify({
+          name: newPrinter.name,
+          ipAddress: newPrinter.ip,
+          accessCode: newPrinter.accessCode,
+          streamUrl: streamUrl,
+          wsPort: 9100 + printers.length  // Dynamischer Port basierend auf Anzahl der Drucker
+        })
       });
 
       const data = await response.json();
@@ -180,9 +194,8 @@ function App() {
       }
 
       setPrinters(prev => [...prev, data.printer]);
-      connectToPrinter(data.printer);
       setOpenDialog(false);
-      setNewPrinter({ name: '', ipAddress: '', accessCode: '' });
+      setNewPrinter({ name: '', ip: '', accessCode: '' });
     } catch (error) {
       alert(`Fehler: ${error.message}`);
     } finally {
@@ -392,8 +405,8 @@ function App() {
               margin="dense"
               label="IP-Adresse"
               fullWidth
-              value={newPrinter.ipAddress}
-              onChange={(e) => setNewPrinter(prev => ({ ...prev, ipAddress: e.target.value }))}
+              value={newPrinter.ip}
+              onChange={(e) => setNewPrinter(prev => ({ ...prev, ip: e.target.value }))}
             />
             <TextField
               margin="dense"
@@ -419,7 +432,7 @@ function App() {
             <Button 
               onClick={handleAddPrinter} 
               variant="contained"
-              disabled={isLoading || !newPrinter.name || !newPrinter.ipAddress || !newPrinter.accessCode}
+              disabled={isLoading || !newPrinter.name || !newPrinter.ip || !newPrinter.accessCode}
             >
               {isLoading ? 'Verbinde...' : 'Hinzufügen'}
             </Button>

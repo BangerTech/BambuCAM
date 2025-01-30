@@ -365,31 +365,23 @@ function startStream(printer) {
 // Funktion zum Hinzufügen eines Druckers
 app.post('/printers', async (req, res) => {
   try {
-    const { name, ipAddress } = req.body;
+    const { name, ipAddress, streamUrl, wsPort } = req.body;
     const id = Date.now();
-    let rtspUrl;
-
-    if (ipAddress.startsWith('mock-printer-')) {
-      // Mock-Printer verwenden Port 8554 im Container
-      rtspUrl = `rtsp://bblp:12345678@${ipAddress}:8554/streaming/live/1`;
-    } else {
-      // Echte Drucker verwenden Port 322
-      rtspUrl = `rtsps://bblp:${req.body.accessCode}@${ipAddress}:322/streaming/live/1`;
-    }
 
     const printer = {
       id,
       name,
       ipAddress,
-      rtspUrl
+      streamUrl,
+      wsPort  // Verwende den übergebenen Port
     };
 
     // Test RTSP connection before starting stream
     try {
-      await testRTSPConnection(printer.rtspUrl);
+      await testRTSPConnection(printer.streamUrl);
     } catch (error) {
       log('error', `RTSP-Verbindungstest fehlgeschlagen`, { 
-        url: printer.rtspUrl,
+        url: printer.streamUrl,
         error: error.message 
       });
       throw error;
@@ -397,20 +389,18 @@ app.post('/printers', async (req, res) => {
 
     try {
       const stream = await startStream(printer);
-      
-      // Speichere Drucker-Informationen
       printers.set(printer.id, printer);
       
       log('info', `Drucker erfolgreich hinzugefügt`, { 
         printerId: printer.id,
-        wsPort: stream.wsPort 
+        wsPort: wsPort 
       });
 
       res.json({
         success: true,
         printer: {
           ...printer,
-          wsPort: stream.wsPort
+          wsPort: wsPort
         }
       });
     } catch (error) {
