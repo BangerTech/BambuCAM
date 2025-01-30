@@ -52,7 +52,7 @@ BambuCAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwachu
 #### Quick Start Installation
 1. Repository klonen:
 ```bash
-git clone https://github.com/IHR_USERNAME/BambuCAM.git
+git clone https://github.com/BangerTech/BambuCAM.git
 cd BambuCAM
 ```
 
@@ -98,7 +98,7 @@ Falls keine Verbindung zum Drucker möglich ist:
 
 ## Support
 
-Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/IHR_USERNAME/BambuCAM/issues).
+Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/BangerTech/BambuCAM/issues).
 
 ## Keywords
 `bambulab`
