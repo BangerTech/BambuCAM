@@ -1,0 +1,39 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Create Release ZIP
+        run: |
+          chmod +x create-release.sh
+          ./create-release.sh
+
+      - name: Get version
+        id: version
+        run: echo "::set-output name=version::$(date +'v%Y.%m.%d-%H%M')"
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: BambuCAM ${{ steps.version.outputs.version }}
+          body: |
+            Automatisches Release von BambuCAM
+            
+            Änderungen in diesem Release:
+            - ${{ github.event.head_commit.message }}
+          files: BambuCAM.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
