@@ -13,7 +13,9 @@
 
 ## Screenshots
 
-<img src="assets/screenshot1.png" width="49%" /> <img src="assets/screenshot2.png" width="49%" />
+<img src="assets/dashboard-empty.png" width="32%" /> <img src="assets/add-printer.png" width="32%" /> <img src="assets/dashboard-printers.png" width="32%" />
+
+_Von links nach rechts: Startseite, Drucker hinzufügen, Überwachungsansicht mit mehreren Druckern_
 
 ## Table of Contents
 - [Was ist Bambu CAM?](#was-ist-bambu-cam)
@@ -101,4 +103,4 @@ Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.
 ## Keywords
 `bambulab` `x1c` `3d-printer` `camera-monitoring` `rtsp-stream` `docker` 
 `react` `nodejs` `web-ui` `monitoring` `dashboard` `camera-feed` 
-`printer-management` `live-stream` `self-hosted` `open-source` 
+`printer-management` `live-stream`

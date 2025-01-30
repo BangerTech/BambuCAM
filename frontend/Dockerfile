@@ -5,8 +5,8 @@ WORKDIR /app
 # Kopiere package.json und package-lock.json
 COPY package*.json ./
 
-# Installiere Abhängigkeiten
-RUN npm install
+# Installiere Abhängigkeiten und react-scripts global
+RUN npm install -g react-scripts && npm install
 
 # Kopiere den Rest des Codes
 COPY . .
