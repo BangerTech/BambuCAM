@@ -1,0 +1,14 @@
+{
+  "name": "bambulab-camera-viewer-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.17.1",
+    "node-rtsp-stream": "^0.0.9",
+    "ws": "^8.2.3",
+    "cors": "^2.8.5"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+} 
