@@ -14,12 +14,11 @@ services:
 
   backend:
     build: ./backend
-    network_mode: "host"  # Für RTSP/SSDP
-    environment:
-      - NODE_ENV=production
-    restart: unless-stopped  # Automatischer Neustart
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "4000:4000"
+      - "9100-9200:9100-9200"
+    networks:
+      - printer-network
 
   # Mock Printer für Tests
   mock-printer-1:

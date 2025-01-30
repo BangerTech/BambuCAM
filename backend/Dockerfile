@@ -1,18 +1,15 @@
 FROM node:18-alpine
 
-# FFmpeg mit SSL Support
-RUN apk add --no-cache ffmpeg openssl curl
+# FFmpeg installieren
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-# Erst package.json kopieren und installieren
 COPY package*.json ./
-RUN npm install --production
+RUN npm install
 
-# Dann erst den Rest kopieren
 COPY . .
 
-# Ports
-EXPOSE 4000 322 9100-9200
+EXPOSE 4000
 
-CMD ["node", "src/index.js"]  # Direkter Start statt npm 
+CMD ["npm", "start"] 
