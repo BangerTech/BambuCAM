@@ -11,7 +11,6 @@ const testRTSPConnection = async (streamUrl) => {
   try {
     console.log('Testing RTSP connection to:', streamUrl);
     
-    // Für Mock-Drucker immer true zurückgeben
     if (streamUrl.includes('mock-printer')) {
       console.log('Mock printer detected, skipping RTSP test');
       return true;
@@ -32,13 +31,15 @@ const testRTSPConnection = async (streamUrl) => {
         }
       };
 
-      // Angepasste FFmpeg Parameter für BambuLab
+      // Angepasste Parameter für BambuLab Kamera
       ffmpegProcess = spawn('ffmpeg', [
-        '-rtsp_transport', 'tcp',
-        '-rtsp_flags', 'prefer_tcp',
-        '-timeout', '3000000',  // 3 Sekunden Timeout
+        '-rtsp_transport', 'tcp',        // TCP für stabilere Verbindung
+        '-rtsp_flags', 'prefer_tcp',     // TCP bevorzugen
+        '-allowed_media_types', 'video', // Nur Video
+        '-analyzeduration', '100000',    // Schnellere Analyse
+        '-probesize', '100000',         // Kleinere Probe
         '-i', streamUrl,
-        '-t', '1',
+        '-t', '1',                      // 1 Sekunde Test
         '-f', 'null',
         '-'
       ]);
@@ -50,10 +51,11 @@ const testRTSPConnection = async (streamUrl) => {
         const output = data.toString();
         console.log('FFmpeg test output:', output);
         
-        // Verschiedene Erfolgsindikatoren prüfen
+        // Erfolgsindikatoren für BambuLab Stream
         if (output.includes('frame=') || 
             output.includes('Stream mapping:') || 
-            output.includes('Opening')) {
+            output.includes('Opening') ||
+            output.includes('Video:')) {
           success = true;
           cleanup();
           resolve(true);
@@ -65,15 +67,16 @@ const testRTSPConnection = async (streamUrl) => {
         console.log('FFmpeg process closed with code:', code);
         console.log('Accumulated error:', error);
         cleanup();
-        // Auch bei Code 1 kann die Verbindung erfolgreich sein
+        // Code 1 ist OK bei SSL-Warnungen
         resolve(success || code === 0 || code === 1);
       });
 
+      // Längerer Timeout für langsame Verbindungen
       timeoutId = setTimeout(() => {
         console.log('RTSP test timeout');
         cleanup();
         resolve(success);
-      }, 5000);  // 5 Sekunden Timeout
+      }, 8000);  // 8 Sekunden Timeout
     });
   } catch (error) {
     console.error('Error testing RTSP connection:', error);

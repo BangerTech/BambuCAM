@@ -11,15 +11,20 @@ const startStream = async (printer) => {
     const wss = new WebSocket.Server({ port: printer.wsPort });
     console.log(`WebSocket server started on port ${printer.wsPort}`);
 
-    // FFmpeg Prozess mit angepassten Parametern
+    // Angepasste FFmpeg Parameter für BambuLab
     const ffmpeg = spawn('ffmpeg', [
       '-rtsp_transport', 'tcp',
+      '-rtsp_flags', 'prefer_tcp',
+      '-allowed_media_types', 'video',
+      '-analyzeduration', '100000',
+      '-probesize', '100000',
       '-i', printer.streamUrl,
-      '-f', 'mpegts',
-      '-codec:v', 'mpeg1video',
-      '-b:v', '1000k',
-      '-bf', '0',
-      '-muxdelay', '0.001',
+      '-c:v', 'mpeg1video',    // MPEG1 für JSMpeg
+      '-f', 'mpegts',         // MPEG-TS Format
+      '-b:v', '1000k',        // Bitrate
+      '-bf', '0',             // Keine B-Frames
+      '-r', '30',             // 30 FPS
+      '-muxdelay', '0.001',   // Minimale Verzögerung
       'pipe:1'
     ]);
 
