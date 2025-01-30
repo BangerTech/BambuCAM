@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="assets/logo.png" alt="BambuLab Cameras Logo" width="400"/>
+  <img src="assets/logo.png" alt="Bambu CAM Logo" width="400"/>
 </div>
 
 Eine Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren Kamera-Feeds.
 
-![BambuLab Cameras Screenshot](screenshot.png)
+![Bambu CAM Screenshot](screenshot.png)
 
 ## Features
 
@@ -18,10 +18,32 @@ Eine Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren 
 
 ### Für Windows-Benutzer
 1. [Docker Desktop für Windows](https://www.docker.com/products/docker-desktop/) installieren
-2. Die neueste Version von [BambuLab Cameras](https://github.com/IHR_USERNAME/BambuLab-Cameras/releases) herunterladen
+2. Die neueste Version von [Bambu CAM](https://github.com/IHR_USERNAME/Bambu-CAM/releases) herunterladen
 3. ZIP-Datei an einen beliebigen Ort entpacken
 4. `start.bat` per Rechtsklick als Administrator ausführen
 5. Die App öffnet sich automatisch im Browser unter:
+   - http://localhost:3000
+   - oder http://IHRE-IP-ADRESSE:3000
+
+### Für Linux-Benutzer
+1. Docker und Docker Compose installieren:
+   ```bash
+   # Für Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install docker.io docker-compose
+   ```
+
+2. Repository klonen und starten:
+   ```bash
+   # Repository klonen
+   git clone https://github.com/IHR_USERNAME/Bambu-CAM.git
+   cd Bambu-CAM
+
+   # Docker Compose starten
+   docker-compose up --build
+   ```
+
+3. Im Browser öffnen:
    - http://localhost:3000
    - oder http://IHRE-IP-ADRESSE:3000
 
@@ -60,7 +82,7 @@ Falls keine Verbindung zum Drucker möglich ist:
 
 ## Support
 
-Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/IHR_USERNAME/BambuLab-Cameras/issues).
+Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/IHR_USERNAME/Bambu-CAM/issues).
 
 ## Lizenz
 
