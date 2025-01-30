@@ -19,64 +19,69 @@ const testRTSPConnection = async (streamUrl) => {
     return new Promise((resolve) => {
       let ffmpegProcess = null;
       let timeoutId = null;
+      let isResolved = false;
 
       const cleanup = () => {
-        if (timeoutId) clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
         if (ffmpegProcess) {
           try {
             ffmpegProcess.kill('SIGKILL');
+            ffmpegProcess = null;
           } catch (e) {
             console.log('Cleanup error:', e);
           }
         }
       };
 
-      // Angepasste Parameter für BambuLab Kamera
+      const resolveOnce = (value) => {
+        if (!isResolved) {
+          isResolved = true;
+          cleanup();
+          resolve(value);
+        }
+      };
+
       ffmpegProcess = spawn('ffmpeg', [
-        '-rtsp_transport', 'tcp',        // TCP für stabilere Verbindung
-        '-rtsp_flags', 'prefer_tcp',     // TCP bevorzugen
-        '-allowed_media_types', 'video', // Nur Video
-        '-analyzeduration', '100000',    // Schnellere Analyse
-        '-probesize', '100000',         // Kleinere Probe
+        '-rtsp_transport', 'tcp',
+        '-rtsp_flags', 'prefer_tcp',
+        '-allowed_media_types', 'video',
+        '-analyzeduration', '100000',
+        '-probesize', '100000',
         '-i', streamUrl,
-        '-t', '1',                      // 1 Sekunde Test
+        '-t', '1',
         '-f', 'null',
         '-'
       ]);
-
-      let success = false;
-      let error = '';
 
       ffmpegProcess.stderr.on('data', (data) => {
         const output = data.toString();
         console.log('FFmpeg test output:', output);
         
-        // Erfolgsindikatoren für BambuLab Stream
         if (output.includes('frame=') || 
             output.includes('Stream mapping:') || 
             output.includes('Opening') ||
             output.includes('Video:')) {
-          success = true;
-          cleanup();
-          resolve(true);
+          resolveOnce(true);
         }
-        error += output;
       });
 
       ffmpegProcess.on('close', (code) => {
         console.log('FFmpeg process closed with code:', code);
-        console.log('Accumulated error:', error);
-        cleanup();
-        // Code 1 ist OK bei SSL-Warnungen
-        resolve(success || code === 0 || code === 1);
+        resolveOnce(code === 0 || code === 1);
       });
 
-      // Längerer Timeout für langsame Verbindungen
-      timeoutId = setTimeout(() => {
+      ffmpegProcess.on('error', (error) => {
+        console.error('FFmpeg process error:', error);
+        resolveOnce(false);
+      });
+
+      setTimeout(() => {
         console.log('RTSP test timeout');
-        cleanup();
-        resolve(success);
-      }, 8000);  // 8 Sekunden Timeout
+        resolveOnce(false);
+      }, 8000);
     });
   } catch (error) {
     console.error('Error testing RTSP connection:', error);
@@ -101,7 +106,6 @@ const addPrinter = async (printerData) => {
       isMockPrinter: printerData.isMockPrinter
     };
 
-    // Teste die Verbindung nur für echte Drucker
     if (!cleanPrinterData.isMockPrinter) {
       console.log('Testing connection for real printer...');
       const isConnectable = await testRTSPConnection(cleanPrinterData.streamUrl);
@@ -110,22 +114,23 @@ const addPrinter = async (printerData) => {
       }
     }
 
-    // Stream starten
     const streamProcess = await initStream(cleanPrinterData);
     
-    // Nur die sauberen Daten für die Antwort
-    const responseData = { ...cleanPrinterData };
-    delete responseData.process;
+    // Nur die notwendigen Daten zurückgeben
+    const responseData = {
+      id: cleanPrinterData.id,
+      name: cleanPrinterData.name,
+      ipAddress: cleanPrinterData.ipAddress,
+      streamUrl: cleanPrinterData.streamUrl,
+      wsPort: cleanPrinterData.wsPort,
+      isMockPrinter: cleanPrinterData.isMockPrinter
+    };
     
-    // Intern mit Prozess speichern
-    const storageData = { ...cleanPrinterData };
-    if (streamProcess) {
-      storageData.process = {
-        pid: streamProcess.pid
-      };
-    }
-    
-    printers.set(cleanPrinterData.id, storageData);
+    // Intern speichern
+    printers.set(cleanPrinterData.id, {
+      ...cleanPrinterData,
+      processId: streamProcess ? streamProcess.pid : null
+    });
     
     return responseData;
   } catch (error) {

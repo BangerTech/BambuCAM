@@ -2,10 +2,6 @@ const os = require('os');
 const net = require('net');
 const dgram = require('dgram');
 
-const SSDP_PORT = 1990;  // Bambu Lab verwendet Port 1990 und 2021
-const SSDP_MULTICAST_ADDR = '239.255.255.250';
-const SEARCH_TARGET = 'urn:bambulab-com:device:3dprinter:1';
-
 const mockPrinters = [
   {
     name: 'Mock Printer 1',
@@ -18,19 +14,14 @@ const mockPrinters = [
     ip: 'mock-printer-2',
     model: 'X1C',
     isMockPrinter: true
-  },
-  {
-    name: 'Mock Printer 3',
-    ip: 'mock-printer-3',
-    model: 'X1C',
-    isMockPrinter: true
   }
 ];
 
+// Port-Scan für BambuLab Drucker
 const checkPort = (host, port) => {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    socket.setTimeout(1000);  // 1 Sekunde Timeout
+    socket.setTimeout(1000);
 
     socket.on('connect', () => {
       socket.destroy();
@@ -51,19 +42,19 @@ const checkPort = (host, port) => {
   });
 };
 
+// SSDP-Suche nach BambuLab Druckern
 const searchBambuPrinters = () => {
   return new Promise((resolve) => {
     const found = new Set();
     const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
 
-    // SSDP M-SEARCH Nachricht für BambuLab
+    // BambuLab SSDP Discovery Message
     const searchMessage = Buffer.from(
       'M-SEARCH * HTTP/1.1\r\n' +
-      'HOST: 239.255.255.250:1982\r\n' +  // BambuLab spezifischer Port
+      'HOST: 239.255.255.250:1990\r\n' +
       'MAN: "ssdp:discover"\r\n' +
-      'MX: 1\r\n' +
-      'ST: urn:bambu-lab:service:3dprinter:1\r\n' + // BambuLab spezifischer Service Type
-      'USER-AGENT: bambu-lab\r\n' + // BambuLab spezifischer User Agent
+      'MX: 3\r\n' +
+      'ST: urn:bambulab-com:device:3dprinter:1\r\n' +
       '\r\n'
     );
 
@@ -73,72 +64,73 @@ const searchBambuPrinters = () => {
 
     socket.on('message', (msg, rinfo) => {
       const response = msg.toString();
-      console.log('SSDP Response from:', rinfo.address);
-      console.log('Response:', response);
+      console.log('SSDP Response from:', rinfo.address, '\n', response);
 
-      // BambuLab spezifische Header prüfen
-      if (response.includes('bambu-lab') || 
-          response.includes('Bambu Lab') || 
-          response.includes('X1C') || 
-          response.includes('P1P')) {
+      // BambuLab spezifische Antwort prüfen
+      if (response.includes('bambulab') || response.includes('Bambu Lab')) {
         console.log('Found BambuLab printer at:', rinfo.address);
         found.add({
           name: `BambuLab Printer (${rinfo.address})`,
           ip: rinfo.address,
-          model: response.includes('X1C') ? 'X1C' : 
-                 response.includes('P1P') ? 'P1P' : 
-                 'Auto-detected',
+          model: 'Auto-detected',
           isMockPrinter: false
         });
       }
     });
 
-    socket.on('listening', () => {
-      console.log('SSDP Discovery started...');
-      try {
-        // Sende auf verschiedenen Ports
-        [1982, 1990, 2021].forEach(port => {
-          socket.send(searchMessage, 0, searchMessage.length, port, '239.255.255.250');
-          console.log(`Sent SSDP discovery on port ${port}`);
+    // Sende auf beiden BambuLab Ports
+    const sendDiscovery = () => {
+      [1990, 2021].forEach(port => {
+        socket.send(searchMessage, 0, searchMessage.length, port, '239.255.255.250', (err) => {
+          if (err) console.error(`Error sending to port ${port}:`, err);
+          else console.log(`Sent discovery to port ${port}`);
         });
-      } catch (error) {
-        console.error('Error sending SSDP:', error);
-      }
-    });
+      });
+    };
 
-    // Bind to all interfaces
     socket.bind(() => {
       socket.setBroadcast(true);
       socket.setMulticastTTL(4);
-      socket.addMembership('239.255.255.250');
+      try {
+        socket.addMembership('239.255.255.250');
+        console.log('Started SSDP discovery');
+        sendDiscovery();
+        // Wiederhole die Suche alle 1.5 Sekunden
+        const interval = setInterval(sendDiscovery, 1500);
+        setTimeout(() => {
+          clearInterval(interval);
+          socket.close();
+        }, 4500);  // Nach 4.5 Sekunden beenden
+      } catch (e) {
+        console.error('SSDP setup error:', e);
+      }
     });
 
-    // Nach 3 Sekunden Suche beenden
+    // Nach 5 Sekunden Ergebnisse zurückgeben
     setTimeout(() => {
       try {
         socket.close();
       } catch (e) {
         console.error('Error closing socket:', e);
       }
-      console.log('SSDP Discovery finished, found:', Array.from(found));
+      console.log('SSDP search finished, found:', Array.from(found));
       resolve(Array.from(found));
-    }, 3000);
+    }, 5000);
   });
 };
 
+// Hauptsuchfunktion
 const scanNetwork = async () => {
   const printers = [];
-  
-  // Mock Printer für Tests
   printers.push(...mockPrinters);
 
   try {
-    // SSDP-Suche
+    // 1. SSDP-Suche
     console.log('Starting SSDP discovery...');
     const ssdpPrinters = await searchBambuPrinters();
     printers.push(...ssdpPrinters);
 
-    // Fallback: Port-Scan wenn keine Drucker gefunden
+    // 2. Port-Scan als Fallback
     if (ssdpPrinters.length === 0) {
       console.log('No printers found via SSDP, trying port scan...');
       const networkInterfaces = os.networkInterfaces();
@@ -155,7 +147,7 @@ const scanNetwork = async () => {
         for (let i = 1; i < 255; i++) {
           const ip = `${subnet}.${i}`;
           scanPromises.push(
-            checkPort(ip, 322)
+            checkPort(ip, 322)  // BambuLab RTSP Port
               .then(isOpen => {
                 if (isOpen) {
                   console.log(`Found potential printer at ${ip}`);
@@ -167,7 +159,6 @@ const scanNetwork = async () => {
                   });
                 }
               })
-              .catch(error => console.debug(`Error scanning ${ip}:`, error))
           );
         }
         await Promise.all(scanPromises);
