@@ -1,3 +1,40 @@
+const os = require('os');
+const net = require('net');
+
+const mockPrinters = [
+  {
+    name: 'Mock Printer 1',
+    ip: 'mock-printer-1',
+    model: 'X1C',
+    isMockPrinter: true
+  },
+  // ... andere Mock Printer
+];
+
+const checkPort = (host, port) => {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1000);  // 1 Sekunde Timeout
+
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.on('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.connect(port, host);
+  });
+};
+
 const scanNetwork = async () => {
   const printers = [];
   
@@ -5,7 +42,6 @@ const scanNetwork = async () => {
   printers.push(...mockPrinters);
 
   try {
-    // Netzwerk-Scan für echte BambuLab Drucker
     const networkInterfaces = os.networkInterfaces();
     const localIps = Object.values(networkInterfaces)
       .flat()
@@ -16,28 +52,35 @@ const scanNetwork = async () => {
       const subnet = localIp.substring(0, localIp.lastIndexOf('.'));
       console.log(`Scanning subnet: ${subnet}`);
 
-      // Scan Port 322 auf allen IPs im Subnetz
+      // Parallele Scans mit Promise.all
+      const scanPromises = [];
       for (let i = 1; i < 255; i++) {
         const ip = `${subnet}.${i}`;
-        try {
-          const isOpen = await checkPort(ip, 322);
-          if (isOpen) {
-            console.log(`Found potential printer at ${ip}`);
-            printers.push({
-              name: `BambuLab Printer (${ip})`,
-              ip: ip,
-              model: 'Auto-detected',
-              isMockPrinter: false
-            });
-          }
-        } catch (error) {
-          console.debug(`Error scanning ${ip}: ${error.message}`);
-        }
+        scanPromises.push(
+          checkPort(ip, 322)
+            .then(isOpen => {
+              if (isOpen) {
+                console.log(`Found potential printer at ${ip}`);
+                printers.push({
+                  name: `BambuLab Printer (${ip})`,
+                  ip: ip,
+                  model: 'Auto-detected',
+                  isMockPrinter: false
+                });
+              }
+            })
+            .catch(error => console.debug(`Error scanning ${ip}:`, error))
+        );
       }
+      await Promise.all(scanPromises);
     }
   } catch (error) {
     console.error('Network scan error:', error);
   }
 
   return printers;
+};
+
+module.exports = {
+  scanNetwork
 }; 
