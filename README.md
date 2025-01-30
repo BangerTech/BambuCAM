@@ -1,4 +1,4 @@
-# Bambu CAM
+# BambuCAM
 
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 <div align="center">
-  <img src="assets/logo.png" alt="Bambu CAM Logo" width="400"/>
+  <img src="assets/logo.png" alt="BambuCAM Logo" width="400"/>
 </div>
 
 > 🎥 Eine moderne Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren Kamera-Feeds
@@ -18,15 +18,15 @@
 _Von links nach rechts: Startseite, Drucker hinzufügen, Überwachungsansicht mit mehreren Druckern_
 
 ## Table of Contents
-- [Was ist Bambu CAM?](#was-ist-bambu-cam)
+- [Was ist BambuCAM?](#was-ist-bambucam)
 - [Features](#features)
 - [Installation](#installation)
 - [Voraussetzungen](#voraussetzungen)
 - [Fehlerbehebung](#fehlerbehebung)
 - [Support](#support)
 
-## Was ist Bambu CAM?
-Bambu CAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwachung mehrerer BambuLab X1C 3D-Drucker. Die App ermöglicht es, alle Drucker-Kameras in einer übersichtlichen Oberfläche zu organisieren und zu monitoren.
+## Was ist BambuCAM?
+BambuCAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwachung mehrerer BambuLab X1C 3D-Drucker. Die App ermöglicht es, alle Drucker-Kameras in einer übersichtlichen Oberfläche zu organisieren und zu monitoren.
 
 ### Features
 - 🎥 Live-Kamera-Feeds von mehreren Druckern
@@ -40,7 +40,7 @@ Bambu CAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwach
 
 ### Für Windows-Benutzer
 1. [Docker Desktop für Windows](https://www.docker.com/products/docker-desktop/) installieren
-2. Die neueste Version von [Bambu CAM](https://github.com/IHR_USERNAME/Bambu-CAM/releases) herunterladen
+2. Die neueste Version von [BambuCAM](https://github.com/IHR_USERNAME/BambuCAM/releases) herunterladen
 3. ZIP-Datei an einen beliebigen Ort entpacken
 4. `start.bat` per Rechtsklick als Administrator ausführen
 5. Im Browser öffnen:
@@ -52,8 +52,8 @@ Bambu CAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwach
 #### Quick Start Installation
 1. Repository klonen:
 ```bash
-git clone https://github.com/IHR_USERNAME/Bambu-CAM.git
-cd Bambu-CAM
+git clone https://github.com/IHR_USERNAME/BambuCAM.git
+cd BambuCAM
 ```
 
 2. Docker Compose starten:
@@ -98,9 +98,7 @@ Falls keine Verbindung zum Drucker möglich ist:
 
 ## Support
 
-Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/IHR_USERNAME/Bambu-CAM/issues).
+Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/IHR_USERNAME/BambuCAM/issues).
 
 ## Keywords
-`bambulab` `x1c` `3d-printer` `camera-monitoring` `rtsp-stream` `docker` 
-`react` `nodejs` `web-ui` `monitoring` `dashboard` `camera-feed` 
-`printer-management` `live-stream`
+`bambulab`
