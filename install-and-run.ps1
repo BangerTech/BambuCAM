@@ -60,10 +60,10 @@ $appPath = "$env:USERPROFILE\BambuLabViewer"
 if (Test-Path $appPath) {
     Remove-Item -Path $appPath -Recurse -Force
 }
+New-Item -ItemType Directory -Path $appPath | Out-Null
 
-# Kopiere App-Dateien aus dem lokalen app-Ordner
-$sourceDir = Join-Path $PSScriptRoot "app"
-Copy-Item -Path $sourceDir -Destination $appPath -Recurse
+# Kopiere alle Dateien aus dem aktuellen Verzeichnis
+Copy-Item -Path "$PSScriptRoot\*" -Destination $appPath -Recurse -Exclude "install-and-run.ps1","start.bat"
 
 # Wechsel ins App-Verzeichnis
 Set-Location $appPath
