@@ -75,74 +75,60 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
   }, [printers]);
 
   const handleAddPrinter = async (selectedPrinter) => {
-    setIsAdding(true);
     try {
-      console.log('Füge Drucker hinzu:', newPrinter);
-      const isMockPrinter = newPrinter.ip.startsWith('mock-printer');
+      console.log('Füge Drucker hinzu:', selectedPrinter);
       
-      const streamUrl = isMockPrinter
-        ? `rtsp://bblp:12345678@${newPrinter.ip}:8554/streaming/live/1`
-        : `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`;
+      const streamUrl = selectedPrinter.isMockPrinter
+        ? `rtsp://bblp:12345678@${selectedPrinter.ip}:8554/streaming/live/1`
+        : `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`;
 
       console.log('Stream URL:', streamUrl);
 
+      // Nur die notwendigen Daten senden
+      const printerData = {
+        name: selectedPrinter.name,
+        ipAddress: selectedPrinter.ip,
+        accessCode: selectedPrinter.accessCode,
+        streamUrl: streamUrl,
+        isMockPrinter: selectedPrinter.isMockPrinter || false
+      };
+
       const response = await fetch(`${API_URL}/printers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newPrinter.name,
-          ipAddress: newPrinter.ip,
-          accessCode: newPrinter.accessCode,
-          streamUrl,
-          isMockPrinter
-        })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(printerData)
       });
 
-      const responseText = await response.clone().text();
-      console.log('Server Response:', responseText);
-
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.error('JSON Parse Error:', e);
-        throw new Error('Ungültige Server-Antwort');
-      }
+      const data = await response.json();
+      console.log('Server Response:', data);
 
       if (!response.ok) {
-        throw new Error(data.details || 'Unbekannter Fehler');
+        throw new Error(data.details || data.error || 'Unknown error');
       }
 
-      console.log('Drucker erfolgreich hinzugefügt:', data);
-      
-      // Wichtig: Prüfe die Struktur des neuen Druckers
-      const newPrinterData = {
-        id: data.printer.id,
-        name: data.printer.name,
-        streamUrl: data.printer.streamUrl,
-        isMockPrinter: true
-      };
-      console.log('Füge neuen Drucker hinzu:', newPrinterData);
-      
-      setSnackbar({
-        open: true,
-        message: `Drucker "${newPrinterData.name}" wurde erfolgreich hinzugefügt`,
-        severity: 'success'
-      });
-      
-      setPrinters(prev => [...prev, newPrinterData]);
-      setFoundPrinters(prev => prev.filter(p => p.ip !== selectedPrinter.ip));
-      setOpen(false);
-      setNewPrinter({ name: '', ip: '', accessCode: '' });
+      if (data.success && data.printer) {
+        setPrinters(prev => [...prev, data.printer]);
+        setFoundPrinters(prev => prev.filter(p => p.ip !== selectedPrinter.ip));
+        setOpen(false);
+        setNewPrinter({ name: '', ip: '', accessCode: '' });
+        
+        // Erfolgs-Snackbar anzeigen
+        setSnackbar({
+          open: true,
+          message: `Drucker "${data.printer.name}" wurde erfolgreich hinzugefügt`,
+          severity: 'success'
+        });
+      }
     } catch (error) {
       console.error('Fehler beim Hinzufügen:', error);
+      // Error-Snackbar anzeigen
       setSnackbar({
         open: true,
         message: `Fehler: ${error.message}`,
         severity: 'error'
       });
-    } finally {
-      setIsAdding(false);
     }
   };
 

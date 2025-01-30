@@ -54,44 +54,75 @@ const checkPort = (host, port) => {
 const searchBambuPrinters = () => {
   return new Promise((resolve) => {
     const found = new Set();
-    const socket = dgram.createSocket('udp4');
-    
-    // SSDP M-SEARCH Nachricht
+    const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+
+    // SSDP M-SEARCH Nachricht für BambuLab
     const searchMessage = Buffer.from(
       'M-SEARCH * HTTP/1.1\r\n' +
-      'HOST: 239.255.255.250:1990\r\n' +
+      'HOST: 239.255.255.250:1982\r\n' +  // BambuLab spezifischer Port
       'MAN: "ssdp:discover"\r\n' +
-      'MX: 3\r\n' +
-      'ST: ' + SEARCH_TARGET + '\r\n' +
+      'MX: 1\r\n' +
+      'ST: urn:bambu-lab:service:3dprinter:1\r\n' + // BambuLab spezifischer Service Type
+      'USER-AGENT: bambu-lab\r\n' + // BambuLab spezifischer User Agent
       '\r\n'
     );
 
+    socket.on('error', (err) => {
+      console.error('SSDP error:', err);
+    });
+
     socket.on('message', (msg, rinfo) => {
       const response = msg.toString();
-      if (response.includes('bambulab')) {
-        console.log('Found Bambu Lab printer at:', rinfo.address);
+      console.log('SSDP Response from:', rinfo.address);
+      console.log('Response:', response);
+
+      // BambuLab spezifische Header prüfen
+      if (response.includes('bambu-lab') || 
+          response.includes('Bambu Lab') || 
+          response.includes('X1C') || 
+          response.includes('P1P')) {
+        console.log('Found BambuLab printer at:', rinfo.address);
         found.add({
           name: `BambuLab Printer (${rinfo.address})`,
           ip: rinfo.address,
-          model: 'Auto-detected',
+          model: response.includes('X1C') ? 'X1C' : 
+                 response.includes('P1P') ? 'P1P' : 
+                 'Auto-detected',
           isMockPrinter: false
         });
       }
     });
 
-    socket.bind(() => {
-      socket.setBroadcast(true);
-      socket.send(searchMessage, 0, searchMessage.length, SSDP_PORT, SSDP_MULTICAST_ADDR);
-      
-      // Auch auf Port 2021 suchen
-      socket.send(searchMessage, 0, searchMessage.length, 2021, SSDP_MULTICAST_ADDR);
+    socket.on('listening', () => {
+      console.log('SSDP Discovery started...');
+      try {
+        // Sende auf verschiedenen Ports
+        [1982, 1990, 2021].forEach(port => {
+          socket.send(searchMessage, 0, searchMessage.length, port, '239.255.255.250');
+          console.log(`Sent SSDP discovery on port ${port}`);
+        });
+      } catch (error) {
+        console.error('Error sending SSDP:', error);
+      }
     });
 
-    // Nach 5 Sekunden Suche beenden
+    // Bind to all interfaces
+    socket.bind(() => {
+      socket.setBroadcast(true);
+      socket.setMulticastTTL(4);
+      socket.addMembership('239.255.255.250');
+    });
+
+    // Nach 3 Sekunden Suche beenden
     setTimeout(() => {
-      socket.close();
+      try {
+        socket.close();
+      } catch (e) {
+        console.error('Error closing socket:', e);
+      }
+      console.log('SSDP Discovery finished, found:', Array.from(found));
       resolve(Array.from(found));
-    }, 5000);
+    }, 3000);
   });
 };
 

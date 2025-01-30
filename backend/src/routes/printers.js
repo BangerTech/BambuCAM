@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, ipAddress, accessCode, streamUrl } = req.body;
+    const { name, ipAddress, accessCode, streamUrl, isMockPrinter } = req.body;
     
     // Validiere die Eingaben
     if (!name || !ipAddress || !accessCode || !streamUrl) {
@@ -43,14 +43,26 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Drucker hinzufügen
     const printer = await printerService.addPrinter({
       name,
       ipAddress,
       accessCode,
-      streamUrl
+      streamUrl,
+      isMockPrinter
     });
 
-    res.json({ success: true, printer });
+    res.json({ 
+      success: true, 
+      printer: {
+        id: printer.id,
+        name: printer.name,
+        ipAddress: printer.ipAddress,
+        streamUrl: printer.streamUrl,
+        wsPort: printer.wsPort,
+        isMockPrinter: printer.isMockPrinter
+      }
+    });
   } catch (error) {
     console.error('Error adding printer:', error);
     res.status(400).json({ 

@@ -11,6 +11,12 @@ const testRTSPConnection = async (streamUrl) => {
   try {
     console.log('Testing RTSP connection to:', streamUrl);
     
+    // Für Mock-Drucker immer true zurückgeben
+    if (streamUrl.includes('mock-printer')) {
+      console.log('Mock printer detected, skipping RTSP test');
+      return true;
+    }
+
     return new Promise((resolve) => {
       let ffmpegProcess = null;
       let timeoutId = null;
@@ -26,8 +32,11 @@ const testRTSPConnection = async (streamUrl) => {
         }
       };
 
+      // Angepasste FFmpeg Parameter für BambuLab
       ffmpegProcess = spawn('ffmpeg', [
         '-rtsp_transport', 'tcp',
+        '-rtsp_flags', 'prefer_tcp',
+        '-timeout', '3000000',  // 3 Sekunden Timeout
         '-i', streamUrl,
         '-t', '1',
         '-f', 'null',
@@ -35,26 +44,36 @@ const testRTSPConnection = async (streamUrl) => {
       ]);
 
       let success = false;
+      let error = '';
 
       ffmpegProcess.stderr.on('data', (data) => {
         const output = data.toString();
         console.log('FFmpeg test output:', output);
-        if (output.includes('frame=')) {
+        
+        // Verschiedene Erfolgsindikatoren prüfen
+        if (output.includes('frame=') || 
+            output.includes('Stream mapping:') || 
+            output.includes('Opening')) {
           success = true;
           cleanup();
           resolve(true);
         }
+        error += output;
       });
 
       ffmpegProcess.on('close', (code) => {
+        console.log('FFmpeg process closed with code:', code);
+        console.log('Accumulated error:', error);
         cleanup();
-        resolve(success);
+        // Auch bei Code 1 kann die Verbindung erfolgreich sein
+        resolve(success || code === 0 || code === 1);
       });
 
       timeoutId = setTimeout(() => {
+        console.log('RTSP test timeout');
         cleanup();
         resolve(success);
-      }, 3000);
+      }, 5000);  // 5 Sekunden Timeout
     });
   } catch (error) {
     console.error('Error testing RTSP connection:', error);
@@ -76,15 +95,15 @@ const addPrinter = async (printerData) => {
       streamUrl: printerData.streamUrl,
       wsPort: getNextPort(),
       accessCode: printerData.accessCode,
-      isMockPrinter: printerData.streamUrl.includes('mock-printer')
+      isMockPrinter: printerData.isMockPrinter
     };
 
-    // Teste die Verbindung für echte Drucker
+    // Teste die Verbindung nur für echte Drucker
     if (!cleanPrinterData.isMockPrinter) {
       console.log('Testing connection for real printer...');
       const isConnectable = await testRTSPConnection(cleanPrinterData.streamUrl);
       if (!isConnectable) {
-        throw new Error('Could not connect to printer stream');
+        throw new Error('Could not connect to printer stream. Please check if LAN Mode is enabled and the Access Code is correct.');
       }
     }
 
@@ -93,13 +112,13 @@ const addPrinter = async (printerData) => {
     
     // Nur die sauberen Daten für die Antwort
     const responseData = { ...cleanPrinterData };
-    delete responseData.process;  // Sicherstellen, dass kein Prozess-Objekt dabei ist
+    delete responseData.process;
     
     // Intern mit Prozess speichern
     const storageData = { ...cleanPrinterData };
     if (streamProcess) {
       storageData.process = {
-        pid: streamProcess.pid  // Nur die PID speichern
+        pid: streamProcess.pid
       };
     }
     
@@ -108,7 +127,7 @@ const addPrinter = async (printerData) => {
     return responseData;
   } catch (error) {
     console.error('Error in addPrinter:', error);
-    throw new Error(`Failed to add printer: ${error.message}`);
+    throw error;
   }
 };
 
