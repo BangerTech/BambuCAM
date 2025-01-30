@@ -6,7 +6,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - REACT_APP_API_URL=http://192.168.188.105:4000
+      - REACT_APP_API_URL=http://localhost:4000
     networks:
       - printer-network
     depends_on:
@@ -48,6 +48,22 @@ services:
       - RTSP_USERNAME=bblp
       - RTSP_PASSWORD=12345678
       - INPUT=pattern:snow
+      - ENABLE_TIME_OVERLAY=true
+      - FRAMERATE=30
+    networks:
+      - printer-network
+
+  mock-printer-3:
+    image: ullaakut/rtspatt
+    ports:
+      - "8556:8554"
+    environment:
+      - RTSP_ADDRESS=0.0.0.0
+      - RTSP_PORT=8554
+      - RTSP_ROUTE=/streaming/live/1
+      - RTSP_USERNAME=bblp
+      - RTSP_PASSWORD=12345678
+      - INPUT=pattern:checkers
       - ENABLE_TIME_OVERLAY=true
       - FRAMERATE=30
     networks:

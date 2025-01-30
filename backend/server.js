@@ -6,8 +6,8 @@ const WebSocket = require('ws');
 const mqtt = require('mqtt');
 const dgram = require('dgram');
 const os = require('os');
-const { scanNetwork } = require('./services/scanService');
-const printerRoutes = require('./routes/printers');
+const { scanNetwork } = require('./src/services/scanService');
+const printerRoutes = require('./src/routes/printers');
 
 const app = express();
 const activeStreams = new Map();
@@ -29,13 +29,19 @@ function log(level, message, data = null) {
     console.log(JSON.stringify(logMessage));
 }
 
+// CORS für Frontend-Zugriff
 app.use(cors({
-  origin: 'http://localhost:3000',  // Frontend URL
-  methods: ['GET', 'POST', 'DELETE'],
-  credentials: true
+  origin: '*',  // Erlaubt alle Origins
+  methods: ['GET', 'POST', 'DELETE']
 }));
 
 app.use(express.json());
+
+// Debug-Log für CORS
+app.use((req, res, next) => {
+  console.log('Request from:', req.headers.origin);
+  next();
+});
 
 // Funktion zum Testen der Port-Erreichbarkeit
 function testPort(host, port) {
@@ -417,7 +423,8 @@ app.post('/printers', async (req, res) => {
     if (printer.ipAddress.includes('mock-printer')) {
       printer.mqtt = new MockMQTTService({
         name: printer.name,
-        id: printer.id
+        id: printer.id,
+        model: 'Test'
       });
     } else {
       printer.mqtt = new BambuLabPrinter({
@@ -566,31 +573,75 @@ class BambuLabPrinter {
 
 class MockMQTTService {
   constructor(options) {
-    // Statt des ganzen Printers nur die benötigten Infos speichern
     this.name = options.name;
     this.id = options.id;
+    this.model = options.model;
     
-    this.data = {
-      temperatures: {
-        bed: 60,
-        nozzle: 200
+    // Basis-Konfiguration basierend auf Drucker-Modell
+    const configs = {
+      'X1C': {
+        tempRange: { bed: [55, 65], nozzle: [195, 215] },
+        hasAMS: true,
+        hasChamber: true,
+        chamberTemp: 35
       },
-      printTime: {
-        remaining: 45 * 60,
-        total: 60 * 60
+      'P1P': {
+        tempRange: { bed: [50, 60], nozzle: [190, 210] },
+        hasAMS: false,
+        hasChamber: false
       },
-      status: 'printing'
+      'Test': {
+        tempRange: { bed: [20, 30], nozzle: [20, 30] },
+        hasAMS: false,
+        hasChamber: false
+      }
     };
 
-    // Simuliere Temperaturänderungen
-    setInterval(() => {
-      this.data.temperatures.bed += (Math.random() - 0.5) * 2;
-      this.data.temperatures.nozzle += (Math.random() - 0.5) * 2;
-      
-      if (this.data.printTime.remaining > 0) {
-        this.data.printTime.remaining -= 5;
-      }
-    }, 5000);
+    const config = configs[this.model] || configs.Test;
+    
+    // Realistische Startwerte
+    this.data = {
+      temperatures: {
+        bed: Math.random() * (config.tempRange.bed[1] - config.tempRange.bed[0]) + config.tempRange.bed[0],
+        nozzle: Math.random() * (config.tempRange.nozzle[1] - config.tempRange.nozzle[0]) + config.tempRange.nozzle[0]
+      },
+      printTime: {
+        remaining: this.model === 'Test' ? 0 : 45 * 60,
+        total: this.model === 'Test' ? 0 : 60 * 60
+      },
+      status: this.model === 'Test' ? 'offline' : 'printing',
+      progress: 0,
+      material: 'PLA',
+      speed: 100,
+      fan_speed: 100,
+      layer: 1,
+      total_layers: 100,
+      ams: config.hasAMS,
+      chamber_temp: config.hasChamber ? config.chamberTemp : null
+    };
+
+    // Simuliere realistische Temperaturänderungen
+    if (this.model !== 'Test') {
+      setInterval(() => {
+        // Kleine zufällige Schwankungen
+        this.data.temperatures.bed += (Math.random() - 0.5) * 0.5;
+        this.data.temperatures.nozzle += (Math.random() - 0.5) * 1.0;
+        if (config.hasChamber) {
+          this.data.chamber_temp += (Math.random() - 0.5) * 0.2;
+        }
+        
+        // Druckfortschritt
+        if (this.data.status === 'printing') {
+          if (this.data.printTime.remaining > 0) {
+            this.data.printTime.remaining -= 1;
+            this.data.progress = (this.data.printTime.total - this.data.printTime.remaining) / this.data.printTime.total * 100;
+            this.data.layer = Math.floor(this.data.progress / 100 * this.data.total_layers);
+          } else {
+            this.data.status = 'completed';
+          }
+        }
+      }, 1000);
+    }
   }
 
   getData() {
@@ -604,11 +655,18 @@ app.use('/printers', printerRoutes);
 // Scan-Route
 app.get('/scan', async (req, res) => {
   try {
+    console.log('Starting network scan...');
     const printers = await scanNetwork();
+    console.log('Scan complete, found printers:', printers);
     res.json(printers);
   } catch (error) {
     console.error('Scan error:', error);
-    res.status(500).json({ error: 'Scan failed' });
+    // Sende eine ordentliche Fehlerantwort
+    res.status(500).json({ 
+      error: 'Scan failed', 
+      details: error.message,
+      mockPrinters: mockPrinters // Fallback zu Mock-Printern
+    });
   }
 });
 

@@ -8,7 +8,10 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import InfoIcon from '@mui/icons-material/Info';
 import CloseIcon from '@mui/icons-material/Close';
 
+// Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
+
+console.log('Using API URL:', API_URL);  // Debug log
 
 const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
   const [printers, setPrinters] = useState([]);
@@ -79,9 +82,12 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
     try {
       console.log('Füge Drucker hinzu:', selectedPrinter);
       
-      const streamUrl = selectedPrinter.isMockPrinter
-        ? `rtsp://bblp:12345678@${selectedPrinter.ip}:8554/streaming/live/1`
-        : `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`;
+      // Verwende die Stream-URL aus dem gefundenen Drucker, falls vorhanden
+      const streamUrl = selectedPrinter.streamUrl || (
+        selectedPrinter.isMockPrinter
+          ? `rtsp://bblp:12345678@${selectedPrinter.ip}:8554/streaming/live/1`  // Port 8554 für Mock
+          : `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`  // Port 322 für echte
+      );
 
       console.log('Stream URL:', streamUrl);
 
@@ -139,11 +145,32 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
       setIsScanning(true);
       const response = await fetch(`${API_URL}/scan`);
       console.log('Scan Response:', response);
+      
+      if (!response.ok) {
+        throw new Error(`Scan failed with status ${response.status}`);
+      }
+      
       const data = await response.json();
       console.log('Gefundene Drucker:', data);
-      setFoundPrinters(data);
+      
+      if (Array.isArray(data)) {
+        setFoundPrinters(data);
+      } else if (data.mockPrinters) {
+        // Fallback zu Mock-Printern wenn der Scan fehlschlägt
+        setFoundPrinters(data.mockPrinters);
+        setSnackbar({
+          open: true,
+          message: 'Scan fehlgeschlagen, zeige Mock-Drucker',
+          severity: 'warning'
+        });
+      }
     } catch (error) {
       console.error('Fehler beim Scannen:', error);
+      setSnackbar({
+        open: true,
+        message: `Scan-Fehler: ${error.message}`,
+        severity: 'error'
+      });
     } finally {
       setIsScanning(false);
     }
