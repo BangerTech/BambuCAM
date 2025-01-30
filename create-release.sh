@@ -6,6 +6,7 @@ mkdir -p "$TEMP_DIR"
 
 # Kopiere notwendige Dateien
 cp README.md start.bat docker-compose.yml "$TEMP_DIR/"
+cp install-and-run.ps1 "$TEMP_DIR/"
 
 # Frontend Dateien
 mkdir -p "$TEMP_DIR/frontend"
