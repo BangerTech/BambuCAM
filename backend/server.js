@@ -364,19 +364,21 @@ function startStream(printer) {
 // Funktion zum Hinzufügen eines Druckers
 app.post('/printers', async (req, res) => {
   try {
-    const { name, ipAddress, streamUrl, wsPort } = req.body;
+    const { name, ipAddress, streamUrl, wsPort, accessCode } = req.body;
     const id = Date.now();
 
     const printer = {
       id,
       name,
       ipAddress,
-      streamUrl,
-      wsPort  // Verwende den übergebenen Port
+      streamUrl,  // Direkt die URL vom Frontend verwenden
+      wsPort,
+      accessCode
     };
 
     // Test RTSP connection before starting stream
     try {
+      log('info', `Teste RTSP-Verbindung`, { url: printer.streamUrl });
       await testRTSPConnection(printer.streamUrl);
     } catch (error) {
       log('error', `RTSP-Verbindungstest fehlgeschlagen`, { 
@@ -392,7 +394,7 @@ app.post('/printers', async (req, res) => {
       
       log('info', `Drucker erfolgreich hinzugefügt`, { 
         printerId: printer.id,
-        wsPort: wsPort 
+        wsPort: wsPort
       });
 
       res.json({

@@ -236,16 +236,22 @@ function App() {
     // Warte kurz bis der neue Canvas gerendert ist
     setTimeout(() => {
       const canvas = document.getElementById(`canvas-${printer.id}-fullscreen`);
-      if (canvas) {
-        const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}`;
-        const player = new JSMpeg.Player(wsUrl, {
-          canvas: canvas,
-          audio: false,
-          pauseWhenHidden: false
-        });
+      if (canvas && typeof JSMpeg !== 'undefined') {
+        try {
+          const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}`;
+          const player = new JSMpeg.Player(wsUrl, {
+            canvas: canvas,
+            audio: false,
+            pauseWhenHidden: false,
+            onDestroy: () => {
+              console.log('Player wurde sauber beendet');
+            }
+          });
 
-        // Speichere den Fullscreen-Player
-        setStreams(prev => new Map(prev.set(`${printer.id}-fullscreen`, player)));
+          setStreams(prev => new Map(prev.set(`${printer.id}-fullscreen`, player)));
+        } catch (error) {
+          console.error('Fehler beim Erstellen des Fullscreen-Players:', error);
+        }
       }
     }, 100);
   };
@@ -253,25 +259,36 @@ function App() {
   // Cleanup beim Schließen des Fullscreen
   const handleCloseFullscreen = () => {
     if (fullscreenPrinter) {
-      const fullscreenPlayer = streams.get(`${fullscreenPrinter.id}-fullscreen`);
-      // Erst den Printer auf null setzen, dann den Player zerstören
-      setFullscreenPrinter(null);
-      
-      // Kurze Verzögerung vor dem Zerstören des Players
-      setTimeout(() => {
+      try {
+        const fullscreenPlayer = streams.get(`${fullscreenPrinter.id}-fullscreen`);
+        
+        // Erst den Player aus der Map entfernen
+        setStreams(prev => {
+          const newStreams = new Map(prev);
+          newStreams.delete(`${fullscreenPrinter.id}-fullscreen`);
+          return newStreams;
+        });
+
+        // Dann den Fullscreen-State zurücksetzen
+        setFullscreenPrinter(null);
+
+        // Zuletzt versuchen den Player zu zerstören
         if (fullscreenPlayer) {
-          try {
-            fullscreenPlayer.destroy();
-            setStreams(prev => {
-              const newStreams = new Map(prev);
-              newStreams.delete(`${fullscreenPrinter.id}-fullscreen`);
-              return newStreams;
-            });
-          } catch (error) {
-            console.error('Fehler beim Beenden des Fullscreen-Players:', error);
-          }
+          setTimeout(() => {
+            try {
+              if (fullscreenPlayer.destroy && typeof fullscreenPlayer.destroy === 'function') {
+                fullscreenPlayer.destroy();
+              }
+            } catch (error) {
+              console.warn('Player wurde bereits beendet');
+            }
+          }, 100);
         }
-      }, 100);
+      } catch (error) {
+        console.warn('Fehler beim Beenden des Fullscreen:', error);
+        // Trotzdem Fullscreen-State zurücksetzen
+        setFullscreenPrinter(null);
+      }
     }
   };
 
