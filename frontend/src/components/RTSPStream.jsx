@@ -12,7 +12,7 @@ const RTSPStream = ({ url }) => {
       return;
     }
 
-    const wsUrl = `ws://${window.location.hostname}:${url.includes('mock-printer-1') ? '9100' : '9101'}/stream`;
+    const wsUrl = `ws://${window.location.hostname}:${url.includes('mock-printer') ? '9100' : '9101'}/stream`;
     console.log('WebSocket URL:', wsUrl);
 
     if (canvasRef.current && typeof JSMpeg !== 'undefined') {
@@ -25,6 +25,7 @@ const RTSPStream = ({ url }) => {
           canvas: canvasRef.current,
           audio: false,
           pauseWhenHidden: false,
+          videoBufferSize: 1024*1024*2,
           onError: (error) => {
             console.error('Stream Fehler:', error);
           }

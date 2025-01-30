@@ -11,17 +11,19 @@ const startStream = async (printer) => {
     const wss = new WebSocket.Server({ port: printer.wsPort });
     console.log(`WebSocket server started on port ${printer.wsPort}`);
 
-    // FFmpeg Prozess starten
+    // FFmpeg Prozess mit angepassten Parametern
     const ffmpeg = spawn('ffmpeg', [
       '-rtsp_transport', 'tcp',
       '-i', printer.streamUrl,
-      '-c:v', 'mpeg1video',
       '-f', 'mpegts',
-      '-b:v', '800k',
+      '-codec:v', 'mpeg1video',
+      '-b:v', '1000k',
+      '-bf', '0',
+      '-muxdelay', '0.001',
       'pipe:1'
     ]);
 
-    // Error handling
+    // Verbesserte Fehlerbehandlung
     ffmpeg.on('error', (error) => {
       console.error(`FFmpeg error for printer ${printer.name}:`, error);
     });
@@ -30,7 +32,7 @@ const startStream = async (printer) => {
       console.log(`FFmpeg output for ${printer.name}:`, data.toString());
     });
 
-    // Stream zu allen verbundenen Clients senden
+    // Verbesserte Client-Verbindung
     wss.on('connection', (ws) => {
       console.log(`New client connected to stream for printer ${printer.name}`);
       
@@ -38,10 +40,21 @@ const startStream = async (printer) => {
         console.error(`WebSocket error for printer ${printer.name}:`, error);
       });
 
-      ffmpeg.stdout.on('data', (data) => {
+      // Direkte Datenweiterleitung
+      const streamHandler = (data) => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(data);
+          try {
+            ws.send(data);
+          } catch (error) {
+            console.error(`Error sending stream data for ${printer.name}:`, error);
+          }
         }
+      };
+
+      ffmpeg.stdout.on('data', streamHandler);
+
+      ws.on('close', () => {
+        ffmpeg.stdout.removeListener('data', streamHandler);
       });
     });
 

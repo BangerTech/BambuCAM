@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const printers = new Map();  // Wichtig: Map initialisieren
 let nextPort = 9100;
+const { startStream: initStream, stopStream } = require('./streamService');
 
 const getNextPort = () => {
   return nextPort++;
@@ -65,19 +66,21 @@ const addPrinter = async (printerData) => {
       isMockPrinter: printerData.streamUrl.includes('mock-printer')
     };
 
-    const streamProcess = await startStream(cleanPrinterData);
+    // Stream starten und Prozess speichern
+    const streamProcess = await initStream(cleanPrinterData);
     
-    const printerForStorage = {
-      ...cleanPrinterData,
-      process: null
+    // Nur die sauberen Daten für die Antwort
+    const responseData = {
+      ...cleanPrinterData
     };
     
+    // Intern mit Prozess speichern
     printers.set(cleanPrinterData.id, {
-      ...printerForStorage,
+      ...cleanPrinterData,
       process: streamProcess
     });
     
-    return printerForStorage;
+    return responseData;
   } catch (error) {
     console.error('Error in addPrinter:', error);
     throw new Error(`Failed to add printer: ${error.message}`);

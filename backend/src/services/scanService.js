@@ -8,7 +8,18 @@ const mockPrinters = [
     model: 'X1C',
     isMockPrinter: true
   },
-  // ... andere Mock Printer
+  {
+    name: 'Mock Printer 2',
+    ip: 'mock-printer-2',
+    model: 'X1C',
+    isMockPrinter: true
+  },
+  {
+    name: 'Mock Printer 3',
+    ip: 'mock-printer-3',
+    model: 'X1C',
+    isMockPrinter: true
+  }
 ];
 
 const checkPort = (host, port) => {
