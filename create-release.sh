@@ -10,7 +10,7 @@ cp install-and-run.ps1 "$TEMP_DIR/"
 
 # Frontend Dateien
 mkdir -p "$TEMP_DIR/frontend"
-cp frontend/Dockerfile frontend/nginx.conf frontend/package.json "$TEMP_DIR/frontend/"
+cp frontend/Dockerfile frontend/package.json "$TEMP_DIR/frontend/"
 cp -r frontend/src frontend/public "$TEMP_DIR/frontend/"
 
 # Backend Dateien
