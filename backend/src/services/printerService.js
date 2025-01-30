@@ -11,37 +11,50 @@ const testRTSPConnection = async (streamUrl) => {
   try {
     console.log('Testing RTSP connection to:', streamUrl);
     
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {  // Kein reject Parameter nötig
       const ffmpeg = spawn('ffmpeg', [
         '-rtsp_transport', 'tcp',
         '-i', streamUrl,
-        '-t', '1',  // Nur 1 Sekunde testen
+        '-t', '1',
         '-f', 'null',
         '-'
       ]);
 
       let error = '';
+      let success = false;
 
       ffmpeg.stderr.on('data', (data) => {
-        error += data.toString();
-        console.log('FFmpeg test output:', data.toString());
+        const output = data.toString();
+        console.log('FFmpeg test output:', output);
+        // Auch bei Fehlermeldungen können Frames empfangen werden
+        if (output.includes('frame=')) {
+          success = true;
+        }
+        error += output;
       });
 
       ffmpeg.on('close', (code) => {
-        if (code === 0 || error.includes('frame=')) {
-          console.log('RTSP connection test successful');
-          resolve(true);
-        } else {
-          console.log('RTSP connection test failed:', error);
-          resolve(false);
+        console.log('FFmpeg process closed with code:', code);
+        console.log('Success:', success);
+        resolve(success);  // Nutze die success Variable
+        
+        // Cleanup
+        try {
+          ffmpeg.kill('SIGKILL');
+        } catch (e) {
+          console.log('Cleanup error:', e);
         }
       });
 
-      // Timeout nach 5 Sekunden
+      // Timeout nach 3 Sekunden
       setTimeout(() => {
-        ffmpeg.kill();
-        resolve(false);
-      }, 5000);
+        try {
+          ffmpeg.kill('SIGKILL');
+        } catch (e) {
+          console.log('Timeout cleanup error:', e);
+        }
+        resolve(success);  // Nutze die success Variable
+      }, 3000);
     });
   } catch (error) {
     console.error('Error testing RTSP connection:', error);
@@ -66,12 +79,22 @@ const addPrinter = async (printerData) => {
       isMockPrinter: printerData.streamUrl.includes('mock-printer')
     };
 
-    // Stream starten und Prozess speichern
+    // Teste die Verbindung für echte Drucker
+    if (!cleanPrinterData.isMockPrinter) {
+      console.log('Testing connection for real printer...');
+      const isConnectable = await testRTSPConnection(cleanPrinterData.streamUrl);
+      if (!isConnectable) {
+        throw new Error('Could not connect to printer stream');
+      }
+    }
+
+    // Stream starten
     const streamProcess = await initStream(cleanPrinterData);
     
     // Nur die sauberen Daten für die Antwort
     const responseData = {
-      ...cleanPrinterData
+      ...cleanPrinterData,
+      process: undefined  // Explizit ausschließen
     };
     
     // Intern mit Prozess speichern
