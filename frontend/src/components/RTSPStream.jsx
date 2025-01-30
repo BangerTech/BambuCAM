@@ -1,24 +1,63 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 const RTSPStream = ({ url }) => {
+  const canvasRef = useRef(null);
+  const playerRef = useRef(null);
+
   useEffect(() => {
-    const canvasId = `canvas-${Date.now()}`;
-    const canvas = document.getElementById(canvasId);
+    console.log('Initialisiere Stream mit URL:', url);
     
-    if (canvas && typeof JSMpeg !== 'undefined') {
-      new JSMpeg.Player(url, {
-        canvas: canvas,
-        audio: false,
-        pauseWhenHidden: false
-      });
+    if (!url) {
+      console.error('Keine Stream-URL vorhanden');
+      return;
     }
+
+    const wsUrl = `ws://${window.location.hostname}:${url.includes('mock-printer-1') ? '9100' : '9101'}/stream`;
+    console.log('WebSocket URL:', wsUrl);
+
+    if (canvasRef.current && typeof JSMpeg !== 'undefined') {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+      }
+
+      try {
+        playerRef.current = new JSMpeg.Player(wsUrl, {
+          canvas: canvasRef.current,
+          audio: false,
+          pauseWhenHidden: false,
+          onError: (error) => {
+            console.error('Stream Fehler:', error);
+          }
+        });
+      } catch (error) {
+        console.error('Fehler beim Initialisieren des Players:', error);
+      }
+    }
+
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+      }
+    };
   }, [url]);
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div style={{ 
+      width: '100%', 
+      paddingBottom: '56.25%', // 16:9 Aspect Ratio
+      position: 'relative',
+      background: '#000'
+    }}>
       <canvas 
-        id={`canvas-${Date.now()}`} 
-        style={{ width: '100%', height: '100%' }}
+        ref={canvasRef}
+        style={{ 
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain'
+        }}
       />
     </div>
   );

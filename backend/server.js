@@ -3,6 +3,9 @@ const cors = require('cors');
 const net = require('net');
 const { spawn } = require('child_process');
 const WebSocket = require('ws');
+const mqtt = require('mqtt');
+const dgram = require('dgram');
+const os = require('os');
 
 const app = express();
 const activeStreams = new Map();
@@ -10,6 +13,7 @@ const printers = new Map(); // Speichere Drucker-Informationen
 
 const MOCK_PRINTER_TIMEOUT = 45000; // 45 Sekunden für Mock-Printer
 const STREAM_START_TIMEOUT = 30000; // 30 Sekunden für normale Printer
+const MAX_PRINTERS = 10;  // Oder eine andere sinnvolle Zahl
 
 // Logger Funktion
 function log(level, message, data = null) {
@@ -361,18 +365,32 @@ function startStream(printer) {
   });
 }
 
+// Funktion zum Finden des nächsten freien Ports
+function findNextFreePort() {
+  const usedPorts = Array.from(printers.values()).map(p => p.wsPort);
+  let port = 9100;
+  while (usedPorts.includes(port)) {
+    port++;
+  }
+  return port;
+}
+
 // Funktion zum Hinzufügen eines Druckers
 app.post('/printers', async (req, res) => {
   try {
-    const { name, ipAddress, streamUrl, wsPort, accessCode } = req.body;
+    if (printers.size >= MAX_PRINTERS) {
+      throw new Error(`Maximale Anzahl von ${MAX_PRINTERS} Druckern erreicht`);
+    }
+    const { name, ipAddress, streamUrl, accessCode } = req.body;
     const id = Date.now();
+    const wsPort = findNextFreePort();  // Dynamischer Port
 
     const printer = {
       id,
       name,
       ipAddress,
-      streamUrl,  // Direkt die URL vom Frontend verwenden
-      wsPort,
+      streamUrl,
+      wsPort,    // Verwende den gefundenen Port
       accessCode
     };
 
@@ -386,6 +404,20 @@ app.post('/printers', async (req, res) => {
         error: error.message 
       });
       throw error;
+    }
+
+    if (printer.ipAddress.includes('mock-printer')) {
+      printer.mqtt = new MockMQTTService({
+        name: printer.name,
+        id: printer.id
+      });
+    } else {
+      printer.mqtt = new BambuLabPrinter({
+        ip: printer.ipAddress,
+        accessCode: printer.accessCode,
+        name: printer.name
+      });
+      printer.mqtt.connect();
     }
 
     try {
@@ -423,14 +455,28 @@ app.post('/printers', async (req, res) => {
   }
 });
 
-// Endpunkt zum Abrufen aller Drucker
+// Drucker-Liste abrufen
 app.get('/printers', (req, res) => {
-  const printerList = Array.from(printers.values()).map(printer => ({
-    ...printer,
-    wsPort: activeStreams.get(printer.id)?.wsPort
-  }));
-  log('info', `Drucker-Liste abgerufen`, { count: printerList.length });
-  res.json(printerList);
+  try {
+    const printerList = Array.from(printers.values()).map(printer => {
+      log('debug', 'Drucker-Details', printer);
+      return {
+        id: printer.id,
+        name: printer.name,
+        streamUrl: printer.streamUrl,
+        isMockPrinter: printer.ipAddress.includes('mock-printer')
+      };
+    });
+    
+    log('info', `Drucker-Liste abgerufen`, { 
+      count: printerList.length,
+      printers: printerList 
+    });
+    res.json(printerList);
+  } catch (error) {
+    log('error', `Fehler beim Abrufen der Drucker-Liste`, { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Endpunkt zum Löschen eines Druckers
@@ -451,6 +497,173 @@ app.delete('/printers/:id', (req, res) => {
 app.get('/health', (req, res) => {
   log('debug', `Health check durchgeführt`);
   res.json({ status: 'healthy' });
+});
+
+class BambuLabPrinter {
+  constructor(options) {
+    this.ip = options.ip;
+    this.accessCode = options.accessCode;
+    this.name = options.name;
+    this.client = null;
+    this.data = {
+      temperatures: {
+        bed: 0,
+        nozzle: 0
+      },
+      printTime: {
+        remaining: 0,
+        total: 0
+      },
+      status: 'offline'
+    };
+  }
+
+  connect() {
+    const url = `mqtt://${this.ip}:1883`;
+    this.client = mqtt.connect(url, {
+      username: 'bblp',
+      password: this.accessCode
+    });
+
+    this.client.on('connect', () => {
+      console.log(`Connected to ${this.name}`);
+      this.client.subscribe('bambu/+/sensors/#');
+    });
+
+    this.client.on('message', (topic, message) => {
+      const data = JSON.parse(message.toString());
+      if (topic.includes('temperature')) {
+        this.data.temperatures = {
+          bed: data.bed,
+          nozzle: data.nozzle
+        };
+      } else if (topic.includes('print_stats')) {
+        this.data.printTime = {
+          remaining: data.time_remaining,
+          total: data.total_time
+        };
+      }
+    });
+  }
+
+  disconnect() {
+    if (this.client) {
+      this.client.end();
+    }
+  }
+
+  getData() {
+    return this.data;
+  }
+}
+
+class MockMQTTService {
+  constructor(options) {
+    // Statt des ganzen Printers nur die benötigten Infos speichern
+    this.name = options.name;
+    this.id = options.id;
+    
+    this.data = {
+      temperatures: {
+        bed: 60,
+        nozzle: 200
+      },
+      printTime: {
+        remaining: 45 * 60,
+        total: 60 * 60
+      },
+      status: 'printing'
+    };
+
+    // Simuliere Temperaturänderungen
+    setInterval(() => {
+      this.data.temperatures.bed += (Math.random() - 0.5) * 2;
+      this.data.temperatures.nozzle += (Math.random() - 0.5) * 2;
+      
+      if (this.data.printTime.remaining > 0) {
+        this.data.printTime.remaining -= 5;
+      }
+    }, 5000);
+  }
+
+  getData() {
+    return this.data;
+  }
+}
+
+async function scanNetwork() {
+  return new Promise((resolve) => {
+    const printers = [];
+    const socket = dgram.createSocket('udp4');
+    const interfaces = os.networkInterfaces();
+    
+    // Füge Mock-Printer hinzu
+    for (let i = 1; i <= 3; i++) {
+      printers.push({
+        ip: `mock-printer-${i}`,
+        name: `Mock Printer ${i}`,
+        model: 'Mock X1C',
+        isMockPrinter: true
+      });
+    }
+
+    // Discovery für echte Drucker
+    socket.on('message', (msg, rinfo) => {
+      try {
+        const data = JSON.parse(msg.toString());
+        if (data.type === 'BambuLab') {
+          printers.push({
+            ip: rinfo.address,
+            name: data.name,
+            model: data.model,
+            isMockPrinter: false
+          });
+        }
+      } catch (e) {
+        console.error('Invalid discovery response:', e);
+      }
+    });
+
+    // Discovery message
+    const message = Buffer.from('BambuLab Printer Discovery');
+
+    // Broadcast auf allen Interfaces
+    Object.values(interfaces).forEach(iface => {
+      iface.forEach(addr => {
+        if (addr.family === 'IPv4') {
+          socket.send(message, 0, message.length, 2021, '255.255.255.255');
+        }
+      });
+    });
+
+    // Nach 5 Sekunden Ergebnisse zurückgeben
+    setTimeout(() => {
+      socket.close();
+      resolve(printers);
+    }, 5000);
+  });
+}
+
+// Drucker suchen
+app.get('/scan', async (req, res) => {
+  try {
+    const foundPrinters = await scanNetwork();
+    res.json(foundPrinters);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Drucker-Status abrufen
+app.get('/printers/:id/status', (req, res) => {
+  const id = parseInt(req.params.id);
+  const printer = printers.get(id);
+  
+  if (!printer || !printer.mqtt) {
+    return res.status(404).json({ error: 'Printer not found' });
+  }
+
+  res.json(printer.mqtt.getData());
 });
 
 const port = 4000;

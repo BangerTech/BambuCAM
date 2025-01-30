@@ -1,0 +1,97 @@
+.neon-pulse-button {
+    padding: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 1rem;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.8);
+    border: 0.15rem solid #00ffff;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 2rem rgba(0, 255, 255, 0.3);
+}
+
+.neon-pulse-button span {
+    display: none;
+}
+
+.neon-pulse-button:before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(0, 255, 255, 0.4) 0%, transparent 70%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: pulse 2s infinite;
+}
+
+.neon-pulse-button:hover {
+    width: auto;
+    padding: 0.5rem 1.5rem;
+    border-radius: 1.5rem;
+    box-shadow: 0 0 5rem rgba(0, 255, 255, 0.6);
+}
+
+.neon-pulse-button:hover span {
+    display: inline;
+    margin-left: 8px;
+}
+
+@keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(0.5); }
+    50% { transform: translate(-50%, -50%) scale(1); }
+    100% { transform: translate(-50%, -50%) scale(0.5); }
+}
+
+.neon-scan-button {
+    padding: 0.5rem 1.5rem;
+    font-size: 1rem;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.8);
+    border: 0.15rem solid #00ffff;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    text-transform: uppercase;
+    border-radius: 1.5rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 2rem rgba(0, 255, 255, 0.3);
+    width: auto;
+    margin: 1rem auto;
+    display: block;
+    max-width: 50%;
+}
+
+.neon-scan-button:before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(0, 255, 255, 0.4) 0%, transparent 70%);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: pulse 2s infinite;
+}
+
+.neon-scan-button:hover {
+    box-shadow: 0 0 5rem rgba(0, 255, 255, 0.6);
+}
+
+.neon-scan-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+} 
