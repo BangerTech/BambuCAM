@@ -30,6 +30,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
     const loadPrinters = async () => {
       try {
         console.log('Lade Drucker...');
+        console.log('API URL:', API_URL);  // Debug-Log
         const response = await fetch(`${API_URL}/printers`);
         console.log('Response:', response);
         if (!response.ok) {

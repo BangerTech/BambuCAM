@@ -100,19 +100,20 @@ const searchBambuPrinters = () => {
 // Hauptsuchfunktion
 const scanNetwork = async () => {
   try {
-    const printers = [...mockPrinters];  // Start mit Mock Printern
+    console.log('Starting network scan...');
+    const printers = [...mockPrinters];
     console.log('Added mock printers:', printers);
 
-    // Suche nach echten Druckern
-    console.log('Starting search for real printers...');
+    console.log('Starting SSDP discovery...');
     const realPrinters = await searchBambuPrinters();
     console.log('Found real printers:', realPrinters);
     
     printers.push(...realPrinters);
+    console.log('Final printer list:', printers);
     return printers;
   } catch (error) {
     console.error('Network scan error:', error);
-    return mockPrinters;  // Fallback zu Mock Printern
+    return mockPrinters;
   }
 };
 
