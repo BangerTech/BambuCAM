@@ -16,13 +16,20 @@ const PrinterGrid = () => {
   }, []);
 
   const handleAddPrinter = () => {
-    const streamUrl = `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`;
+    // Prüfe ob es ein Mock-Printer ist
+    const isMockPrinter = newPrinter.ip.startsWith('mock-printer');
+    
+    // Baue die korrekte URL basierend auf Printer-Typ
+    const streamUrl = isMockPrinter
+      ? `rtsp://bblp:12345678@${newPrinter.ip}:8554/streaming/live/1`
+      : `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`;
     
     const printer = {
       id: Date.now(),
       name: newPrinter.name,
       url: streamUrl,
-      accessCode: newPrinter.accessCode
+      accessCode: newPrinter.accessCode,
+      isMockPrinter
     };
 
     const updatedPrinters = [...printers, printer];

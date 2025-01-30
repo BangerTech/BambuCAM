@@ -70,14 +70,33 @@ function testPort(host, port) {
 function startFFmpeg(url) {
     return new Promise((resolve, reject) => {
         log('info', `Starte FFmpeg`, { url });
-        const ffmpeg = spawn('ffmpeg', [
+        
+        // Basis-Argumente für FFmpeg
+        const args = [];
+
+        // Konfiguration basierend auf Printer-Typ
+        const isMockPrinter = url.includes('mock-printer');
+        if (isMockPrinter) {
+            args.push('-rtsp_transport', 'tcp');
+        } else {
+            args.push(
+                '-rtsp_transport', 'tcp',
+                '-rtsp_flags', 'prefer_tcp',
+                '-allowed_media_types', 'video'
+            );
+        }
+
+        // Gemeinsame Argumente
+        args.push(
             '-i', url,
             '-c:v', 'mpeg1video',
-            '-b:v', '200k',
             '-f', 'mpegts',
+            '-b:v', '800k',
             'pipe:1'
-        ]);
+        );
 
+        const ffmpeg = spawn('ffmpeg', args);
+        
         let streamStarted = false;
         const timeoutId = setTimeout(() => {
             if (!streamStarted) {
@@ -123,49 +142,46 @@ function startFFmpeg(url) {
 
 async function testRTSPConnection(url) {
   return new Promise((resolve, reject) => {
-    // Füge einen kleinen Delay hinzu, wenn es ein Mock-Printer ist
-    const delay = url.includes('mock-printer') ? 1000 : 0;
-    
-    setTimeout(() => {
-      log('info', `Teste RTSP-Verbindung`, { url });
-      
-      const isMockUrl = url.startsWith('rtsp://');
-      const ffmpegArgs = [
-        '-timeout', '5000000',  // 5 Sekunden Timeout
-      ];
+    const isMockUrl = url.includes('mock-printer');
+    const ffmpegArgs = [
+      '-timeout', '5000000',  // 5 Sekunden Timeout
+    ];
 
-      if (!isMockUrl) {
-        ffmpegArgs.push('-rtsp_flags', 'prefer_tcp');
-        ffmpegArgs.push('-allowed_media_types', 'video');
-      }
-
+    if (!isMockUrl) {
+      // Für echte BambuLab Drucker
       ffmpegArgs.push(
-        '-i', url,
-        '-t', '1',  // Nur 1 Sekunde testen
-        '-f', 'null',
-        '-'
+        '-rtsp_transport', 'tcp',
+        '-rtsp_flags', 'prefer_tcp',
+        '-allowed_media_types', 'video'
       );
+    }
 
-      const ffmpeg = spawn('ffmpeg', ffmpegArgs);
+    ffmpegArgs.push(
+      '-i', url,
+      '-t', '1',
+      '-f', 'null',
+      '-'
+    );
 
-      let error = '';
-      
-      ffmpeg.stderr.on('data', (data) => {
-        const output = data.toString();
-        error += output;
-        log('debug', `RTSP Test Output`, { output });
-      });
+    const ffmpeg = spawn('ffmpeg', ffmpegArgs);
 
-      ffmpeg.on('close', (code) => {
-        if (code === 0) {
-          log('info', `RTSP-Verbindung erfolgreich`);
-          resolve();
-        } else {
-          log('error', `RTSP-Verbindung fehlgeschlagen`, { error });
-          reject(new Error(`RTSP-Verbindung fehlgeschlagen: ${error}`));
-        }
-      });
-    }, delay);
+    let error = '';
+    
+    ffmpeg.stderr.on('data', (data) => {
+      const output = data.toString();
+      error += output;
+      log('debug', `RTSP Test Output`, { output });
+    });
+
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        log('info', `RTSP-Verbindung erfolgreich`);
+        resolve();
+      } else {
+        log('error', `RTSP-Verbindung fehlgeschlagen`, { error });
+        reject(new Error(`RTSP-Verbindung fehlgeschlagen: ${error}`));
+      }
+    });
   });
 }
 
@@ -173,7 +189,7 @@ class RTSPStream {
   constructor(options) {
     this.url = options.streamUrl;
     this.wsPort = options.wsPort;
-    this.isMockPrinter = options.streamUrl.startsWith('rtsp://');  // Prüfen ob Mock oder echter Drucker
+    this.isMockPrinter = options.streamUrl.includes('mock-printer');  // Geändert
     this.wss = new WebSocket.Server({ port: this.wsPort });
     this.clients = new Set();
     
@@ -185,24 +201,28 @@ class RTSPStream {
 
   start() {
     // Basis-Argumente für FFmpeg
-    const args = [
-      '-rtsp_transport', 'tcp',
-      '-i', this.url,
-      '-c:v', 'mpeg1video',
-      '-f', 'mpegts',
-      '-b:v', '800k'
-    ];
+    const args = [];
 
-    // Zusätzliche Optionen für echten Drucker (RTSPS)
-    if (!this.isMockPrinter) {
-      args.unshift(
+    // Konfiguration basierend auf Printer-Typ
+    if (this.isMockPrinter) {
+      args.push('-rtsp_transport', 'tcp');
+    } else {
+      // Für echte BambuLab Drucker
+      args.push(
+        '-rtsp_transport', 'tcp',
         '-rtsp_flags', 'prefer_tcp',
         '-allowed_media_types', 'video'
       );
     }
 
-    // Füge pipe:1 als letztes Argument hinzu
-    args.push('pipe:1');
+    // Gemeinsame Argumente
+    args.push(
+      '-i', this.url,
+      '-c:v', 'mpeg1video',
+      '-f', 'mpegts',
+      '-b:v', '800k',
+      'pipe:1'
+    );
 
     log('info', 'Starte FFmpeg mit Argumenten', { args });
     
