@@ -5,31 +5,26 @@ services:
     build: ./frontend
     ports:
       - "3000:3000"
-    depends_on:
-      backend:
-        condition: service_healthy
     environment:
       - REACT_APP_API_URL=http://localhost:4000
     networks:
       - printer-network
+    depends_on:
+      backend:
+        condition: service_healthy
 
   backend:
     build: ./backend
-    ports:
-      - "4000:4000"
-      - "9100-9110:9100-9110"
-    networks:
-      - printer-network
-    depends_on:
-      - mock-printer-1
-      - mock-printer-2
-      - mock-printer-3
+    network_mode: "host"  # Wichtig für RTSP/SSDP
+    environment:
+      - NODE_ENV=production
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   mock-printer-1:
     image: ullaakut/rtspatt

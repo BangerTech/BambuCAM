@@ -1,17 +1,16 @@
 FROM node:18-alpine
 
-# Installiere notwendige Tools
-RUN apk add --no-cache ffmpeg wget
+# FFmpeg mit SSL Support installieren
+RUN apk add --no-cache ffmpeg openssl
 
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
 
-# Setze Umgebungsvariablen
-ENV NODE_ENV=development
-
+# Ports für RTSP und WebSocket
 EXPOSE 4000
+EXPOSE 322
+EXPOSE 9100-9200
 
-# Warte auf Port-Verfügbarkeit und starte dann den Server
 CMD ["npm", "start"] 

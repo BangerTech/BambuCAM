@@ -11,7 +11,7 @@ const startStream = async (printer) => {
     const wss = new WebSocket.Server({ port: printer.wsPort });
     console.log(`WebSocket server started on port ${printer.wsPort}`);
 
-    // Angepasste FFmpeg Parameter für BambuLab
+    // Verbesserte FFmpeg Parameter für RTSPS
     const ffmpeg = spawn('ffmpeg', [
       '-rtsp_transport', 'tcp',
       '-rtsp_flags', 'prefer_tcp',
@@ -19,22 +19,27 @@ const startStream = async (printer) => {
       '-analyzeduration', '100000',
       '-probesize', '100000',
       '-i', printer.streamUrl,
-      '-c:v', 'mpeg1video',    // MPEG1 für JSMpeg
-      '-f', 'mpegts',         // MPEG-TS Format
-      '-b:v', '1000k',        // Bitrate
-      '-bf', '0',             // Keine B-Frames
-      '-r', '30',             // 30 FPS
-      '-muxdelay', '0.001',   // Minimale Verzögerung
+      '-c:v', 'mpeg1video',
+      '-f', 'mpegts',
+      '-b:v', '1000k',
+      '-bf', '0',
+      '-r', '30',
+      '-muxdelay', '0.001',
+      '-fflags', 'nobuffer',  // Reduziert Latenz
+      '-flags', 'low_delay',  // Reduziert Latenz
+      '-strict', 'experimental',
+      '-tune', 'zerolatency', // Optimiert für Streaming
       'pipe:1'
     ]);
 
     // Verbesserte Fehlerbehandlung
-    ffmpeg.on('error', (error) => {
-      console.error(`FFmpeg error for printer ${printer.name}:`, error);
-    });
-
     ffmpeg.stderr.on('data', (data) => {
-      console.log(`FFmpeg output for ${printer.name}:`, data.toString());
+      const output = data.toString();
+      if (output.includes('Error') || output.includes('Failed')) {
+        console.error(`FFmpeg error for ${printer.name}:`, output);
+      } else {
+        console.debug(`FFmpeg output for ${printer.name}:`, output);
+      }
     });
 
     // Verbesserte Client-Verbindung
