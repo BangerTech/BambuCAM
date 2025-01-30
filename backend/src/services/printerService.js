@@ -11,8 +11,22 @@ const testRTSPConnection = async (streamUrl) => {
   try {
     console.log('Testing RTSP connection to:', streamUrl);
     
-    return new Promise((resolve) => {  // Kein reject Parameter nötig
-      const ffmpeg = spawn('ffmpeg', [
+    return new Promise((resolve) => {
+      let ffmpegProcess = null;
+      let timeoutId = null;
+
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (ffmpegProcess) {
+          try {
+            ffmpegProcess.kill('SIGKILL');
+          } catch (e) {
+            console.log('Cleanup error:', e);
+          }
+        }
+      };
+
+      ffmpegProcess = spawn('ffmpeg', [
         '-rtsp_transport', 'tcp',
         '-i', streamUrl,
         '-t', '1',
@@ -20,40 +34,26 @@ const testRTSPConnection = async (streamUrl) => {
         '-'
       ]);
 
-      let error = '';
       let success = false;
 
-      ffmpeg.stderr.on('data', (data) => {
+      ffmpegProcess.stderr.on('data', (data) => {
         const output = data.toString();
         console.log('FFmpeg test output:', output);
-        // Auch bei Fehlermeldungen können Frames empfangen werden
         if (output.includes('frame=')) {
           success = true;
-        }
-        error += output;
-      });
-
-      ffmpeg.on('close', (code) => {
-        console.log('FFmpeg process closed with code:', code);
-        console.log('Success:', success);
-        resolve(success);  // Nutze die success Variable
-        
-        // Cleanup
-        try {
-          ffmpeg.kill('SIGKILL');
-        } catch (e) {
-          console.log('Cleanup error:', e);
+          cleanup();
+          resolve(true);
         }
       });
 
-      // Timeout nach 3 Sekunden
-      setTimeout(() => {
-        try {
-          ffmpeg.kill('SIGKILL');
-        } catch (e) {
-          console.log('Timeout cleanup error:', e);
-        }
-        resolve(success);  // Nutze die success Variable
+      ffmpegProcess.on('close', (code) => {
+        cleanup();
+        resolve(success);
+      });
+
+      timeoutId = setTimeout(() => {
+        cleanup();
+        resolve(success);
       }, 3000);
     });
   } catch (error) {
@@ -92,16 +92,18 @@ const addPrinter = async (printerData) => {
     const streamProcess = await initStream(cleanPrinterData);
     
     // Nur die sauberen Daten für die Antwort
-    const responseData = {
-      ...cleanPrinterData,
-      process: undefined  // Explizit ausschließen
-    };
+    const responseData = { ...cleanPrinterData };
+    delete responseData.process;  // Sicherstellen, dass kein Prozess-Objekt dabei ist
     
     // Intern mit Prozess speichern
-    printers.set(cleanPrinterData.id, {
-      ...cleanPrinterData,
-      process: streamProcess
-    });
+    const storageData = { ...cleanPrinterData };
+    if (streamProcess) {
+      storageData.process = {
+        pid: streamProcess.pid  // Nur die PID speichern
+      };
+    }
+    
+    printers.set(cleanPrinterData.id, storageData);
     
     return responseData;
   } catch (error) {
@@ -113,14 +115,11 @@ const addPrinter = async (printerData) => {
 const getAllPrinters = async () => {
   try {
     console.log('Getting all printers, count:', printers.size);
-    return Array.from(printers.values()).map(printer => ({
-      id: printer.id,
-      name: printer.name,
-      ipAddress: printer.ipAddress,
-      streamUrl: printer.streamUrl,
-      wsPort: printer.wsPort,
-      isMockPrinter: printer.isMockPrinter
-    }));
+    return Array.from(printers.values()).map(printer => {
+      const cleanPrinter = { ...printer };
+      delete cleanPrinter.process;  // Prozess-Objekt entfernen
+      return cleanPrinter;
+    });
   } catch (error) {
     console.error('Error getting printers:', error);
     throw error;
