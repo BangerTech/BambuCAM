@@ -40,7 +40,7 @@ BambuCAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwachu
 
 ### Für Windows-Benutzer
 1. [Docker Desktop für Windows](https://www.docker.com/products/docker-desktop/) installieren
-2. Die neueste Version von [BambuCAM](https://github.com/IHR_USERNAME/BambuCAM/releases) herunterladen
+2. Die neueste Version von [BambuCAM](https://github.com/BangerTech/BambuCAM/releases) herunterladen
 3. ZIP-Datei an einen beliebigen Ort entpacken
 4. `start.bat` per Rechtsklick als Administrator ausführen
 5. Im Browser öffnen:
