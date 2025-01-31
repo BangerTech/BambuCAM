@@ -1,26 +1,23 @@
 version: '3.8'
 
 services:
+  backend:
+    build: ./backend
+    ports:
+      - "4000:4000"
+      - "9100-9200:9100-9200"  # WebSocket-Port-Range
+    networks:
+      - printer-network
+
   frontend:
     build: ./frontend
     ports:
       - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:4000
     networks:
       - printer-network
     depends_on:
       - backend
 
-  backend:
-    build: ./backend
-    ports:
-      - "4000:4000"
-      - "9100-9200:9100-9200"
-    networks:
-      - printer-network
-
-  # Mock Printer für Tests
   mock-printer-1:
     image: ullaakut/rtspatt
     ports:

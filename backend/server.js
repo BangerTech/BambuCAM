@@ -200,64 +200,104 @@ async function testRTSPConnection(url) {
 
 class RTSPStream {
   constructor(options) {
-    this.url = options.streamUrl;
+    this.streamUrl = options.streamUrl;
     this.wsPort = options.wsPort;
-    this.isMockPrinter = options.streamUrl.includes('mock-printer');  // Geändert
-    this.wss = new WebSocket.Server({ port: this.wsPort });
+    this.isMockPrinter = options.isMockPrinter;
     this.clients = new Set();
+    this.isStreaming = false;
+    
+    this.wss = new WebSocket.Server({ 
+      port: this.wsPort,
+      path: '/stream'
+    });
     
     this.wss.on('connection', (ws) => {
+      console.log(`Client connected to stream on port ${this.wsPort}`);
       this.clients.add(ws);
-      ws.on('close', () => this.clients.delete(ws));
+      
+      // Wenn es der erste Client ist, starte den Stream
+      if (this.clients.size === 1 && !this.isStreaming) {
+        this.start();
+      }
+
+      ws.on('close', () => {
+        console.log('Client disconnected');
+        this.clients.delete(ws);
+        
+        // Wenn keine Clients mehr da sind, stoppe den Stream
+        if (this.clients.size === 0) {
+          this.stop();
+        }
+      });
+
+      ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+        this.clients.delete(ws);
+      });
     });
   }
 
   start() {
-    // Basis-Argumente für FFmpeg
-    const args = [];
+    if (this.isStreaming) return;
+    
+    console.log(`Starting stream on port ${this.wsPort}`);
+    this.isStreaming = true;
 
-    // Konfiguration basierend auf Printer-Typ
-    if (this.isMockPrinter) {
-      args.push('-rtsp_transport', 'tcp');
-    } else {
-      // Für echte BambuLab Drucker
-      args.push(
-        '-rtsp_transport', 'tcp',
-        '-rtsp_flags', 'prefer_tcp',
-        '-allowed_media_types', 'video'
-      );
-    }
-
-    // Gemeinsame Argumente
-    args.push(
-      '-i', this.url,
-      '-c:v', 'mpeg1video',
+    const args = [
+      '-rtsp_transport', 'tcp',
+      '-i', this.streamUrl,
       '-f', 'mpegts',
-      '-b:v', '800k',
+      '-codec:v', 'mpeg1video',
+      '-b:v', '1000k',
+      '-bf', '0',
       'pipe:1'
-    );
+    ];
 
-    log('info', 'Starte FFmpeg mit Argumenten', { args });
-    
     this.ffmpeg = spawn('ffmpeg', args);
-    
+
     this.ffmpeg.stdout.on('data', (data) => {
       this.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(data);
+          try {
+            client.send(data);
+          } catch (e) {
+            console.error('Error sending data:', e);
+            this.clients.delete(client);
+          }
         }
       });
+    });
+
+    this.ffmpeg.stderr.on('data', (data) => {
+      console.log(`FFmpeg stderr: ${data}`);
+    });
+
+    this.ffmpeg.on('close', (code) => {
+      console.log(`FFmpeg process closed with code ${code}`);
+      this.isStreaming = false;
     });
 
     return this.ffmpeg;
   }
 
   stop() {
+    if (!this.isStreaming) return;
+    
+    console.log(`Stopping stream on port ${this.wsPort}`);
+    this.isStreaming = false;
+    
     if (this.ffmpeg) {
-      this.ffmpeg.kill();
+      this.ffmpeg.kill('SIGTERM');
     }
-    this.clients.forEach(client => client.close());
-    this.wss.close();
+    
+    this.clients.forEach(client => {
+      try {
+        client.close();
+      } catch (e) {
+        console.error('Error closing client:', e);
+      }
+    });
+    this.clients.clear();
   }
 }
 
@@ -470,15 +510,38 @@ app.post('/printers', async (req, res) => {
   }
 });
 
-// Drucker-Liste abrufen
-app.get('/printers', (req, res) => {
+// Funktion zum Wiederherstellen der Streams beim Server-Start
+async function restoreStreams() {
   try {
+    for (const [id, printer] of printers.entries()) {
+      if (!activeStreams.has(id)) {
+        try {
+          console.log(`Stelle Stream wieder her für Drucker ${printer.name}`);
+          const stream = await startStream(printer);
+          activeStreams.set(id, stream);
+        } catch (error) {
+          console.error(`Fehler beim Wiederherstellen des Streams für ${printer.name}:`, error);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Fehler beim Wiederherstellen der Streams:', error);
+  }
+}
+
+// Drucker-Liste abrufen
+app.get('/printers', async (req, res) => {
+  try {
+    // Stelle sicher, dass alle Streams aktiv sind
+    await restoreStreams();
+    
     const printerList = Array.from(printers.values()).map(printer => {
-      log('debug', 'Drucker-Details', printer);
+      const stream = activeStreams.get(printer.id);
       return {
         id: printer.id,
         name: printer.name,
         streamUrl: printer.streamUrl,
+        wsPort: stream?.wsPort,
         isMockPrinter: printer.ipAddress.includes('mock-printer')
       };
     });
@@ -513,12 +576,48 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Status-Route hinzufügen (direkt nach den anderen Routes)
+app.get('/printers/:id/status', (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const printer = printers.get(id);
+    
+    if (!printer) {
+      return res.status(404).json({ error: 'Printer not found' });
+    }
+
+    // Mock-Status für Test-Drucker
+    const status = {
+      temperatures: {
+        bed: 60 + Math.random() * 2,
+        nozzle: 200 + Math.random() * 5
+      },
+      printTime: {
+        remaining: 45 * 60,
+        total: 60 * 60
+      },
+      status: 'printing',
+      progress: 75,
+      material: 'PLA',
+      speed: 100,
+      fan_speed: 100,
+      layer: 75,
+      total_layers: 100
+    };
+
+    res.json(status);
+  } catch (error) {
+    console.error('Error getting printer status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 class BambuLabPrinter {
   constructor(options) {
     this.ip = options.ip;
     this.accessCode = options.accessCode;
     this.name = options.name;
-    this.client = null;
+    this.mqttClient = null;
     this.data = {
       temperatures: {
         bed: 0,
@@ -533,36 +632,43 @@ class BambuLabPrinter {
   }
 
   connect() {
-    const url = `mqtt://${this.ip}:1883`;
-    this.client = mqtt.connect(url, {
+    if (!this.ip || !this.accessCode) return;
+
+    this.mqttClient = mqtt.connect(`mqtt://${this.ip}:8883`, {
       username: 'bblp',
-      password: this.accessCode
+      password: this.accessCode,
+      rejectUnauthorized: false
     });
 
-    this.client.on('connect', () => {
-      console.log(`Connected to ${this.name}`);
-      this.client.subscribe('bambu/+/sensors/#');
+    this.mqttClient.on('connect', () => {
+      console.log(`MQTT Connected to ${this.name}`);
+      this.mqttClient.subscribe('device/+/report');
     });
 
-    this.client.on('message', (topic, message) => {
-      const data = JSON.parse(message.toString());
-      if (topic.includes('temperature')) {
-        this.data.temperatures = {
-          bed: data.bed,
-          nozzle: data.nozzle
-        };
-      } else if (topic.includes('print_stats')) {
-        this.data.printTime = {
-          remaining: data.time_remaining,
-          total: data.total_time
-        };
+    this.mqttClient.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        if (data.temperature) {
+          this.data.temperatures = {
+            bed: data.temperature.bed,
+            nozzle: data.temperature.nozzle
+          };
+        }
+        if (data.print) {
+          this.data.printTime = {
+            remaining: data.print.remaining_time,
+            total: data.print.total_time
+          };
+        }
+      } catch (error) {
+        console.error('MQTT parse error:', error);
       }
     });
   }
 
   disconnect() {
-    if (this.client) {
-      this.client.end();
+    if (this.mqttClient) {
+      this.mqttClient.end();
     }
   }
 
@@ -671,6 +777,7 @@ app.get('/scan', async (req, res) => {
 });
 
 const port = 4000;
-app.listen(port, '0.0.0.0', () => {  // Wichtig: '0.0.0.0' statt localhost
-  console.log(`Server running on port ${port}`);
+app.listen(port, async () => {
+  log('info', `Backend gestartet`, { port });
+  await restoreStreams();
 }); 

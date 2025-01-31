@@ -14,7 +14,37 @@ const API_URL = `http://${window.location.hostname}:4000`;
 console.log('Using API URL:', API_URL);  // Debug log
 
 const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
-  const [printers, setPrinters] = useState([]);
+  const [printers, setPrinters] = useState(() => {
+    // Versuche gespeicherte Drucker beim Start zu laden
+    const savedPrinters = localStorage.getItem('printers');
+    return savedPrinters ? JSON.parse(savedPrinters) : [];
+  });
+
+  // Speichere Drucker bei Änderungen
+  useEffect(() => {
+    localStorage.setItem('printers', JSON.stringify(printers));
+  }, [printers]);
+
+  // Lade Drucker beim Start und alle 30 Sekunden neu
+  useEffect(() => {
+    const loadPrinters = async () => {
+      try {
+        console.log('Lade Drucker...');
+        const response = await fetch(`${API_URL}/printers`);
+        if (!response.ok) throw new Error('Netzwerk-Antwort war nicht ok');
+        const data = await response.json();
+        setPrinters(data);
+      } catch (error) {
+        console.error('Fehler beim Laden der Drucker:', error);
+      }
+    };
+
+    loadPrinters();
+    const interval = setInterval(loadPrinters, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const [open, setOpen] = useState(false);
   const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
   const [isScanning, setIsScanning] = useState(false);
@@ -28,31 +58,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
     message: '',
     severity: 'success' // oder 'error'
   });
-
-  useEffect(() => {
-    const loadPrinters = async () => {
-      try {
-        console.log('Lade Drucker...');
-        console.log('API URL:', API_URL);  // Debug-Log
-        const response = await fetch(`${API_URL}/printers`);
-        console.log('Response:', response);
-        if (!response.ok) {
-          throw new Error('Fehler beim Laden der Drucker');
-        }
-        const data = await response.json();
-        console.log('Geladene Drucker:', data);
-        setPrinters(data || []);
-      } catch (error) {
-        console.error('Fehler beim Laden der Drucker:', error);
-        setPrinters([]);
-      }
-    };
-
-    loadPrinters();
-    // Aktualisiere alle 30 Sekunden
-    const interval = setInterval(loadPrinters, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -80,24 +85,24 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
 
   const handleAddPrinter = async (selectedPrinter) => {
     try {
+      setIsAdding(true);  // Start Loading
       console.log('Füge Drucker hinzu:', selectedPrinter);
       
-      // Verwende die Stream-URL aus dem gefundenen Drucker, falls vorhanden
+      // Generiere die Stream-URL basierend auf dem Drucker-Typ
       const streamUrl = selectedPrinter.streamUrl || (
-        selectedPrinter.isMockPrinter
-          ? `rtsp://bblp:12345678@${selectedPrinter.ip}:8554/streaming/live/1`  // Port 8554 für Mock
-          : `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`  // Port 322 für echte
+        selectedPrinter.ip.includes('mock-printer')
+          ? `rtsp://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:8554/streaming/live/1`
+          : `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
       );
 
       console.log('Stream URL:', streamUrl);
 
-      // Nur die notwendigen Daten senden
       const printerData = {
         name: selectedPrinter.name,
         ipAddress: selectedPrinter.ip,
         accessCode: selectedPrinter.accessCode,
         streamUrl: streamUrl,
-        isMockPrinter: selectedPrinter.isMockPrinter || false
+        isMockPrinter: selectedPrinter.ip.includes('mock-printer')
       };
 
       const response = await fetch(`${API_URL}/printers`, {
@@ -136,6 +141,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
         message: `Fehler: ${error.message}`,
         severity: 'error'
       });
+    } finally {
+      setIsAdding(false);  // Ende Loading
     }
   };
 
@@ -307,7 +314,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                           bottom: '40px', // Angepasst
                           background: '#000'
                         }}>
-                          <RTSPStream url={printer.streamUrl} />
+                          <RTSPStream 
+                            url={printer.streamUrl} 
+                            wsPort={printer.wsPort}
+                          />
                         </Box>
 
                         {/* Footer-Bereich */}
@@ -620,7 +630,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
             flexDirection: 'column'
           }}>
             <Box sx={{ flex: 1, position: 'relative' }}>
-              <RTSPStream url={fullscreenPrinter.streamUrl} />
+              <RTSPStream 
+                url={fullscreenPrinter.streamUrl} 
+                wsPort={fullscreenPrinter.wsPort}
+              />
             </Box>
             
             {/* Status-Overlay */}

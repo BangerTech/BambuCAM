@@ -11,7 +11,13 @@ const testRTSPConnection = async (streamUrl) => {
   try {
     console.log('Testing RTSP connection to:', streamUrl);
     
-    if (streamUrl.includes('mock-printer')) {
+    if (!streamUrl) {
+      throw new Error('No stream URL provided');
+    }
+
+    const isMockPrinter = streamUrl.includes('mock-printer');
+    
+    if (isMockPrinter) {
       console.log('Mock printer detected, skipping RTSP test');
       return true;
     }
@@ -96,43 +102,34 @@ const startStream = async (printer) => {
 
 const addPrinter = async (printerData) => {
   try {
+    // Generiere eine eindeutige ID
+    const id = Date.now();
+    const wsPort = 9100 + printers.size; // Dynamischer Port für jeden Drucker
+
+    // Erstelle sauberes Drucker-Objekt
     const cleanPrinterData = {
-      id: Date.now(),
+      id,
       name: printerData.name,
       ipAddress: printerData.ipAddress,
       streamUrl: printerData.streamUrl,
-      wsPort: getNextPort(),
+      wsPort: wsPort,
       accessCode: printerData.accessCode,
       isMockPrinter: printerData.isMockPrinter
     };
 
-    if (!cleanPrinterData.isMockPrinter) {
-      console.log('Testing connection for real printer...');
-      const isConnectable = await testRTSPConnection(cleanPrinterData.streamUrl);
-      if (!isConnectable) {
-        throw new Error('Could not connect to printer stream. Please check if LAN Mode is enabled and the Access Code is correct.');
-      }
-    }
+    // Teste RTSP-Verbindung
+    await testRTSPConnection(cleanPrinterData.streamUrl);
 
-    const streamProcess = await initStream(cleanPrinterData);
-    
-    // Nur die notwendigen Daten zurückgeben
-    const responseData = {
-      id: cleanPrinterData.id,
-      name: cleanPrinterData.name,
-      ipAddress: cleanPrinterData.ipAddress,
-      streamUrl: cleanPrinterData.streamUrl,
-      wsPort: cleanPrinterData.wsPort,
-      isMockPrinter: cleanPrinterData.isMockPrinter
+    // Starte Stream
+    await initStream(cleanPrinterData);
+
+    // Speichere Drucker
+    printers.set(cleanPrinterData.id, cleanPrinterData);
+
+    return {
+      success: true,
+      printer: cleanPrinterData
     };
-    
-    // Intern speichern
-    printers.set(cleanPrinterData.id, {
-      ...cleanPrinterData,
-      processId: streamProcess ? streamProcess.pid : null
-    });
-    
-    return responseData;
   } catch (error) {
     console.error('Error in addPrinter:', error);
     throw error;
@@ -166,9 +163,48 @@ const deletePrinter = async (id) => {
   }
 };
 
+const getPrinterStatus = async (printerId) => {
+  try {
+    const printer = printers.get(printerId);
+    if (!printer) {
+      throw new Error('Printer not found');
+    }
+
+    // Mock-Status für Test-Drucker
+    if (printer.isMockPrinter) {
+      return {
+        temperatures: {
+          bed: 25 + Math.random() * 5,
+          nozzle: 28 + Math.random() * 5
+        },
+        printTime: {
+          remaining: 0,
+          total: 0
+        },
+        status: 'online',
+        progress: 0,
+        material: 'PLA',
+        speed: 100,
+        fan_speed: 100,
+        layer: 1,
+        total_layers: 100
+      };
+    }
+
+    // Hier später echte Drucker-Status-Abfrage implementieren
+    return {
+      status: 'unknown'
+    };
+  } catch (error) {
+    console.error('Error getting printer status:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   testRTSPConnection,
   addPrinter,
   getAllPrinters,
-  deletePrinter
+  deletePrinter,
+  getPrinterStatus
 }; 

@@ -1,66 +1,78 @@
 import React, { useEffect, useRef } from 'react';
 
-const RTSPStream = ({ url }) => {
+const RTSPStream = ({ url, wsPort }) => {
   const canvasRef = useRef(null);
   const playerRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
 
   useEffect(() => {
-    console.log('Initialisiere Stream mit URL:', url);
-    
-    if (!url) {
-      console.error('Keine Stream-URL vorhanden');
+    if (!url || !wsPort) {
+      console.log('Warte auf URL und Port:', { url, wsPort });
       return;
     }
 
-    const wsUrl = `ws://${window.location.hostname}:${url.includes('mock-printer') ? '9100' : '9101'}/stream`;
-    console.log('WebSocket URL:', wsUrl);
-
-    if (canvasRef.current && typeof JSMpeg !== 'undefined') {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-      }
-
-      try {
-        playerRef.current = new JSMpeg.Player(wsUrl, {
-          canvas: canvasRef.current,
-          audio: false,
-          pauseWhenHidden: false,
-          videoBufferSize: 1024*1024*2,
-          onError: (error) => {
-            console.error('Stream Fehler:', error);
+    const wsUrl = `ws://${window.location.hostname}:${wsPort}/stream`;
+    console.log('Verbinde mit WebSocket:', wsUrl);
+    
+    const connectWebSocket = () => {
+      if (canvasRef.current && typeof JSMpeg !== 'undefined') {
+        try {
+          if (playerRef.current) {
+            playerRef.current.destroy();
           }
-        });
-      } catch (error) {
-        console.error('Fehler beim Initialisieren des Players:', error);
-      }
-    }
 
+          playerRef.current = new JSMpeg.Player(wsUrl, {
+            canvas: canvasRef.current,
+            audio: false,
+            pauseWhenHidden: false,
+            onDestroy: () => {
+              console.log('Player destroyed');
+              if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+              }
+            },
+            onError: (error) => {
+              console.error('JSMpeg Error:', error);
+              // Automatischer Reconnect nach 2 Sekunden
+              if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+              }
+              reconnectTimeoutRef.current = setTimeout(connectWebSocket, 2000);
+            }
+          });
+        } catch (error) {
+          console.error('Fehler beim Erstellen des Players:', error);
+          // Auch hier Reconnect versuchen
+          if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+          }
+          reconnectTimeoutRef.current = setTimeout(connectWebSocket, 2000);
+        }
+      }
+    };
+
+    connectWebSocket();
+
+    // Cleanup
     return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       if (playerRef.current) {
         playerRef.current.destroy();
       }
     };
-  }, [url]);
+  }, [url, wsPort]);
 
   return (
-    <div style={{ 
-      width: '100%', 
-      paddingBottom: '56.25%', // 16:9 Aspect Ratio
-      position: 'relative',
-      background: '#000'
-    }}>
-      <canvas 
-        ref={canvasRef}
-        style={{ 
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain'
-        }}
-      />
-    </div>
+    <canvas 
+      ref={canvasRef}
+      style={{ 
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#000'
+      }}
+    />
   );
 };
 

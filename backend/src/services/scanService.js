@@ -12,6 +12,7 @@ const mockPrinters = [
     isMockPrinter: true,
     streamUrl: 'rtsp://bblp:12345678@mock-printer-1:8554/streaming/live/1',
     accessCode: '12345678',
+    mqttPort: 8883,
     temperatures: {
       bed: 60,
       nozzle: 200
