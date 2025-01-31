@@ -72,7 +72,7 @@ Set-Location $appPath
 docker-compose down
 
 # Starte die App
-Write-Host "Starte BambuLab Camera Viewer..."
+Write-Host "Installing BambuCAM..."
 docker-compose up --build -d
 
 # Öffne Browser

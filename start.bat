@@ -1,3 +1,6 @@
 @echo off
-powershell -ExecutionPolicy Bypass -Command "& {Start-Process PowerShell -ArgumentList '-ExecutionPolicy Bypass -File \"%~dp0install-and-run.ps1\"' -Verb RunAs}"
+echo Starting BambuCAM...
+echo Hinweis: Schließen dieses Fensters stoppt die Anwendung
+echo.
+docker compose up
 pause 

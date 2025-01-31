@@ -90,6 +90,63 @@ const checkPort = (host, port) => {
   });
 };
 
+// UDP-Discovery auf Port 2023
+const searchBambuPrintersUDP = () => {
+  return new Promise((resolve) => {
+    const found = new Set();
+    let socket = null;
+
+    try {
+      socket = dgram.createSocket('udp4');
+
+      socket.on('listening', () => {
+        socket.setBroadcast(true);
+        console.log('UDP Socket listening on port 2023');
+      });
+
+      socket.on('message', (data, rinfo) => {
+        const message = data.toString();
+        if (message.includes('Bambu')) {
+          console.log('Found BambuLab printer via UDP:', rinfo.address);
+          found.add({
+            name: `BambuLab Printer (${rinfo.address})`,
+            ip: rinfo.address,
+            model: 'Real Printer',
+            isMockPrinter: false
+          });
+        }
+      });
+
+      socket.on('error', (err) => {
+        console.error('UDP discovery error:', err);
+        if (socket) {
+          socket.close();
+          socket = null;
+        }
+      });
+
+      socket.bind(2023);
+
+      // Nach 5 Sekunden aufräumen
+      setTimeout(() => {
+        if (socket) {
+          socket.close();
+          socket = null;
+        }
+        resolve(Array.from(found));
+      }, 5000);
+
+    } catch (error) {
+      console.error('UDP setup error:', error);
+      if (socket) {
+        socket.close();
+        socket = null;
+      }
+      resolve([]);
+    }
+  });
+};
+
 // SSDP-Suche nach echten BambuLab Druckern
 const searchBambuPrinters = () => {
   return new Promise((resolve) => {
@@ -165,17 +222,31 @@ const searchBambuPrinters = () => {
   });
 };
 
-// Hauptsuchfunktion
+// Modifizierte Hauptsuchfunktion
 const scanNetwork = async () => {
   try {
     console.log('Starting network scan...');
     const printers = [...mockPrinters];
     console.log('Added mock printers:', printers);
 
-    console.log('Starting SSDP discovery...');
-    const realPrinters = await searchBambuPrinters();
-    console.log('Found real printers:', realPrinters);
-    
+    // Parallel beide Suchmethoden ausführen
+    const [ssdpPrinters, udpPrinters] = await Promise.all([
+      searchBambuPrinters(),
+      searchBambuPrintersUDP()
+    ]);
+
+    console.log('Found SSDP printers:', ssdpPrinters);
+    console.log('Found UDP printers:', udpPrinters);
+
+    // Kombiniere die Ergebnisse und entferne Duplikate basierend auf IP
+    const realPrinters = [...ssdpPrinters, ...udpPrinters].reduce((unique, printer) => {
+      const exists = unique.find(p => p.ip === printer.ip);
+      if (!exists) {
+        unique.push(printer);
+      }
+      return unique;
+    }, []);
+
     printers.push(...realPrinters);
     console.log('Final printer list:', printers);
     return printers;

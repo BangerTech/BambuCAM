@@ -1,30 +1,27 @@
 #!/bin/bash
 
 # Erstelle temporäres Verzeichnis
-TEMP_DIR="BambuCAM-Release"
-mkdir -p "$TEMP_DIR"
+temp_dir="BambuCAM-release"
+mkdir -p "$temp_dir"
 
-# Kopiere notwendige Dateien
-cp README.md start.bat docker-compose.yml "$TEMP_DIR/"
-cp install-and-run.ps1 "$TEMP_DIR/"
+# Kopiere notwendige Dateien und Ordner
+cp -r backend "$temp_dir/"
+cp -r frontend "$temp_dir/"
+cp docker-compose.yml "$temp_dir/"
+cp install-and-run.ps1 "$temp_dir/"
+cp start.bat "$temp_dir/"
+cp README.md "$temp_dir/"
 
-# Frontend Dateien
-mkdir -p "$TEMP_DIR/frontend"
-cp frontend/Dockerfile frontend/package.json "$TEMP_DIR/frontend/"
-cp -r frontend/src frontend/public "$TEMP_DIR/frontend/"
+# Entferne node_modules und andere nicht benötigte Verzeichnisse
+rm -rf "$temp_dir"/backend/node_modules
+rm -rf "$temp_dir"/frontend/node_modules
+rm -rf "$temp_dir"/backend/.git
+rm -rf "$temp_dir"/frontend/.git
 
-# Backend Dateien
-mkdir -p "$TEMP_DIR/backend"
-cp backend/Dockerfile backend/package.json backend/server.js "$TEMP_DIR/backend/"
-
-# Assets Ordner für Logo und Screenshots
-mkdir -p "$TEMP_DIR/assets"
-cp -r assets/* "$TEMP_DIR/assets/"
-
-# Erstelle ZIP
-cd "$TEMP_DIR" && zip -r ../BambuCAM.zip * && cd ..
+# Erstelle ZIP-Archiv
+zip -r BambuCAM.zip "$temp_dir"
 
 # Lösche temporäres Verzeichnis
-rm -rf "$TEMP_DIR"
+rm -rf "$temp_dir"
 
 echo "Release ZIP wurde erstellt: BambuCAM.zip" 

@@ -1,16 +1,18 @@
-version: '3.8'
-
 services:
   backend:
-    build: ./backend
+    build: 
+      context: ./backend  # Dies zeigt auf das Verzeichnis mit der Dockerfile
     ports:
       - "4000:4000"
       - "9100-9200:9100-9200"  # WebSocket-Port-Range
+      - "2023:2023/udp"  # Für Printer Discovery
     networks:
       - printer-network
 
   frontend:
     build: ./frontend
+    environment:
+      - HOST=0.0.0.0  # Macht die App auf allen Netzwerk-Interfaces verfügbar
     ports:
       - "3000:3000"
     networks:
