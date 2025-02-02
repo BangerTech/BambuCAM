@@ -2,16 +2,8 @@ import React, { useState } from 'react';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import PrinterGrid from './components/PrinterGrid';
 import { lightTheme, darkTheme } from './theme';
-import { Box, IconButton, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import styled from '@emotion/styled';
-import CameraView from './components/CameraView';
-import CameraOverlay from './components/CameraOverlay';
-import RTSPStream from './components/RTSPStream';
-import ControlsOverlay from './components/ControlsOverlay';
-import DeleteIcon from '@mui/icons-material/Delete';
-import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
-import FullscreenDialog from './components/FullscreenDialog';
 
 const PageBackground = styled(Box)(({ theme }) => ({
   position: 'relative',
@@ -46,89 +38,12 @@ function App() {
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
-    // Optional: Theme in localStorage speichern
     localStorage.setItem('theme', !isDarkMode ? 'dark' : 'light');
   };
 
-  const [fullscreenPrinter, setFullscreenPrinter] = useState(null);
-
-  // Fullscreen Handler
-  const handleFullscreen = (printer, event) => {
-    event.stopPropagation();
-    setFullscreenPrinter(printer);
-  };
-
-  // Cleanup beim Schließen des Fullscreen
-  const handleCloseFullscreen = () => {
-    if (fullscreenPrinter) {
-      setFullscreenPrinter(null);
-    }
-  };
-
-  // Render der Kamera-Karte
-  const renderCameraView = (printer, isFullscreen = false) => (
-    <CameraView 
-      elevation={3}
-      onClick={() => isFullscreen ? handleCloseFullscreen() : setFullscreenPrinter(printer)}
-      sx={{ cursor: 'pointer' }}
-    >
-      <CameraOverlay>
-        <Typography variant="h6" sx={{ fontWeight: 500 }}>
-          {printer.name}
-        </Typography>
-        {!isFullscreen ? (
-          <IconButton
-            onClick={(e) => handleFullscreen(printer, e)}
-            sx={{ color: 'white' }}
-          >
-            <FullscreenIcon />
-          </IconButton>
-        ) : (
-          <IconButton
-            onClick={handleCloseFullscreen}
-            sx={{ color: 'white' }}
-          >
-            <FullscreenExitIcon />
-          </IconButton>
-        )}
-      </CameraOverlay>
-
-      <RTSPStream 
-        key={`${printer.id}-${isFullscreen ? 'fullscreen' : 'normal'}`} 
-        url={printer.streamUrl} 
-        wsPort={printer.wsPort}
-      />
-
-      {!isFullscreen && (
-        <ControlsOverlay>
-          <IconButton
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeletePrinter(printer.id);
-            }}
-            sx={{ color: 'white' }}
-          >
-            <DeleteIcon />
-          </IconButton>
-        </ControlsOverlay>
-      )}
-    </CameraView>
-  );
-
-  // Fullscreen Dialog
-  <FullscreenDialog
-    open={!!fullscreenPrinter}
-    onClose={handleCloseFullscreen}
-    fullScreen
-  >
-    <Box sx={{ height: '100%', position: 'relative' }}>
-      {fullscreenPrinter && renderCameraView(fullscreenPrinter, true)}
-    </Box>
-  </FullscreenDialog>
-
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
-      <CssBaseline /> {/* Reset CSS und Theme Basics */}
+      <CssBaseline />
       <PageBackground>
         <BackgroundImage />
         <ContentWrapper>

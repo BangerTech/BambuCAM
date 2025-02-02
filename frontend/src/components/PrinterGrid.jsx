@@ -85,24 +85,22 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
 
   const handleAddPrinter = async (selectedPrinter) => {
     try {
-      setIsAdding(true);  // Start Loading
+      setIsAdding(true);
       console.log('Füge Drucker hinzu:', selectedPrinter);
       
-      // Generiere die Stream-URL basierend auf dem Drucker-Typ
+      // Erstelle die Stream-URL
       const streamUrl = selectedPrinter.streamUrl || (
-        selectedPrinter.ip.includes('mock-printer')
-          ? `rtsp://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:8554/streaming/live/1`
-          : `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
+        `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
       );
 
       console.log('Stream URL:', streamUrl);
 
+      // Angepasstes Drucker-Objekt für die API
       const printerData = {
         name: selectedPrinter.name,
-        ipAddress: selectedPrinter.ip,
+        ip: selectedPrinter.ip,
         accessCode: selectedPrinter.accessCode,
-        streamUrl: streamUrl,
-        isMockPrinter: selectedPrinter.ip.includes('mock-printer')
+        streamUrl: streamUrl
       };
 
       const response = await fetch(`${API_URL}/printers`, {
@@ -122,11 +120,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
 
       if (data.success && data.printer) {
         setPrinters(prev => [...prev, data.printer]);
-        setFoundPrinters(prev => prev.filter(p => p.ip !== selectedPrinter.ip));
         setOpen(false);
         setNewPrinter({ name: '', ip: '', accessCode: '' });
         
-        // Erfolgs-Snackbar anzeigen
         setSnackbar({
           open: true,
           message: `Drucker "${data.printer.name}" wurde erfolgreich hinzugefügt`,
@@ -135,14 +131,13 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
       }
     } catch (error) {
       console.error('Fehler beim Hinzufügen:', error);
-      // Error-Snackbar anzeigen
       setSnackbar({
         open: true,
         message: `Fehler: ${error.message}`,
         severity: 'error'
       });
     } finally {
-      setIsAdding(false);  // Ende Loading
+      setIsAdding(false);
     }
   };
 

@@ -1,0 +1,13 @@
+flask==2.0.1
+flask-cors==3.0.10
+python-dotenv==0.19.0
+requests==2.26.0
+websockets==10.0
+Werkzeug==2.0.3
+click==8.0.4
+itsdangerous==2.0.1
+Jinja2==3.0.3
+MarkupSafe==2.0.1
+opencv-python-headless==4.5.3.56
+numpy==1.21.2
+paho-mqtt==1.6.1 

@@ -1,72 +1,37 @@
 services:
   backend:
     build: 
-      context: ./backend  # Dies zeigt auf das Verzeichnis mit der Dockerfile
+      context: ./backend
     ports:
       - "4000:4000"
+      - "9000:9000"  # WebSocket-Port hinzufügen
       - "9100-9200:9100-9200"  # WebSocket-Port-Range
       - "2023:2023/udp"  # Für Printer Discovery
     networks:
       - printer-network
+    volumes:
+      - ./backend:/app  # Hot-Reload für Backend
+      - /app/__pycache__  # Verhindert Probleme mit Python-Cache
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - WS_PORT=9000
+    command: flask run --host=0.0.0.0 --port=4000
 
   frontend:
     build: ./frontend
     environment:
-      - HOST=0.0.0.0  # Macht die App auf allen Netzwerk-Interfaces verfügbar
+      - HOST=0.0.0.0
     ports:
       - "3000:3000"
     networks:
       - printer-network
+    volumes:
+      - ./frontend:/app  # Hot-Reload für Frontend
+      - /app/node_modules  # Verhindert Überschreiben der node_modules
     depends_on:
       - backend
-
-  mock-printer-1:
-    image: ullaakut/rtspatt
-    ports:
-      - "8554:8554"
-    environment:
-      - RTSP_ADDRESS=0.0.0.0
-      - RTSP_PORT=8554
-      - RTSP_ROUTE=/streaming/live/1
-      - RTSP_USERNAME=bblp
-      - RTSP_PASSWORD=12345678
-      - INPUT=pattern:ball
-      - ENABLE_TIME_OVERLAY=true
-      - FRAMERATE=30
-    networks:
-      - printer-network
-
-  mock-printer-2:
-    image: ullaakut/rtspatt
-    ports:
-      - "8555:8554"
-    environment:
-      - RTSP_ADDRESS=0.0.0.0
-      - RTSP_PORT=8554
-      - RTSP_ROUTE=/streaming/live/1
-      - RTSP_USERNAME=bblp
-      - RTSP_PASSWORD=12345678
-      - INPUT=pattern:snow
-      - ENABLE_TIME_OVERLAY=true
-      - FRAMERATE=30
-    networks:
-      - printer-network
-
-  mock-printer-3:
-    image: ullaakut/rtspatt
-    ports:
-      - "8556:8554"
-    environment:
-      - RTSP_ADDRESS=0.0.0.0
-      - RTSP_PORT=8554
-      - RTSP_ROUTE=/streaming/live/1
-      - RTSP_USERNAME=bblp
-      - RTSP_PASSWORD=12345678
-      - INPUT=pattern:checkers
-      - ENABLE_TIME_OVERLAY=true
-      - FRAMERATE=30
-    networks:
-      - printer-network
 
 networks:
   printer-network:

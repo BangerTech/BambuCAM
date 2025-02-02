@@ -1,0 +1,7 @@
+paths:
+  mock1:
+    source: pattern://testsrc
+    sourceProtocol: tcp
+  mock2:
+    source: pattern://testsrc2
+    sourceProtocol: tcp 
