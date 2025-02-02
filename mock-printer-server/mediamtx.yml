@@ -1,7 +1,20 @@
 paths:
-  mock1:
-    source: pattern://testsrc
-    sourceProtocol: tcp
-  mock2:
-    source: pattern://testsrc2
-    sourceProtocol: tcp 
+  bambu1:
+    source: rtsp://mock-printer:322/streaming/live/1
+    rtspTransport: tcp
+    
+  bambu2:
+    source: rtsp://mock-printer:322/streaming/live/1
+    rtspTransport: tcp
+    
+  bambu3:
+    source: rtsp://mock-printer:322/streaming/live/1
+    rtspTransport: tcp
+    
+  normal4:
+    source: rtsp://mock-printer:554/stream1
+    rtspTransport: tcp
+
+protocols: [tcp]
+rtspAddress: :322  # Für Bambulab
+rtspAddress2: :554  # Für normale Drucker 

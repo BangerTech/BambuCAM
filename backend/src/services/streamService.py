@@ -117,19 +117,13 @@ def startStream(printer_id):
         
         # Prüfe ob es ein Mock-Printer ist
         is_mock = "mock" in printer_id.lower()
-        is_normal = printer_number == "4"  # Printer 4 ist der normale Drucker
+        is_normal = printer_number == "4"
         
-        # Generiere die passende URL basierend auf Drucker-Daten
         if is_mock:
             port = f"855{printer_number}"
-            if is_normal:
-                # Normaler RTSP-Stream
-                url = f"rtsp://{printer['ip']}:{port}/stream1"
-            else:
-                # Bambulab-Style Stream
-                url = f"rtsps://bblp:{printer['accessCode']}@{printer['ip']}:{port}/streaming/live/1"
+            # Verwende TCP statt RTSP
+            url = f"tcp://{printer['ip']}:{port}"
         else:
-            # Echter Bambulab Drucker
             url = f"rtsps://bblp:{printer['accessCode']}@{printer['ip']}:322/streaming/live/1"
             
         print(f"Starting stream from URL: {url}")
