@@ -1,20 +1,28 @@
 paths:
-  bambu1:
-    source: rtsp://mock-printer:322/streaming/live/1
-    rtspTransport: tcp
+  'bambu1':
+    source: 'rtsp://mock-printer:322/streaming/live/1'
+    transport: 'tcp'
+    readUser: 'bblp'
+    readPass: '12345678'
     
-  bambu2:
-    source: rtsp://mock-printer:322/streaming/live/1
-    rtspTransport: tcp
+  'bambu2':
+    source: 'rtsp://mock-printer:322/streaming/live/1'
+    transport: 'tcp'
+    readUser: 'bblp'
+    readPass: '12345678'
     
-  bambu3:
-    source: rtsp://mock-printer:322/streaming/live/1
-    rtspTransport: tcp
+  'bambu3':
+    source: 'rtsp://mock-printer:322/streaming/live/1'
+    transport: 'tcp'
+    readUser: 'bblp'
+    readPass: '12345678'
     
-  normal4:
-    source: rtsp://mock-printer:554/stream1
-    rtspTransport: tcp
+  'normal4':
+    source: 'rtsp://mock-printer:554/stream1'
+    transport: 'tcp'
 
-protocols: [tcp]
-rtspAddress: :322  # Für Bambulab
-rtspAddress2: :554  # Für normale Drucker 
+logLevel: 'debug'
+rtspAddress: ':322'
+encryption: 'optional'
+
+protocols: ['tcp'] 

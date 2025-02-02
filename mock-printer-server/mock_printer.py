@@ -179,7 +179,13 @@ def start_rtsp_stream(printer_number):
     bind_ip = '0.0.0.0'
     is_normal = printer_number == 4
     port = "554" if is_normal else "322"
-    access_code = "12345678"
+    access_code = "12345678"  # Standard Access Code
+    
+    # Stream-URL im korrekten Format
+    stream_path = "stream1" if is_normal else "streaming/live/1"
+    stream_url = f"rtsp://{bind_ip}:{port}/{stream_path}"  # Intern immer rtsp://
+    
+    print(f"Starting {'Normal' if is_normal else 'Bambulab'} stream {printer_number} on {stream_url}")
     
     command = [
         'ffmpeg',
@@ -194,7 +200,7 @@ def start_rtsp_stream(printer_number):
         '-pix_fmt', 'yuv420p',
         '-f', 'rtsp',
         '-rtsp_transport', 'tcp',
-        f'rtsp://{bind_ip}:{port}/{"stream1" if is_normal else "streaming/live/1"}'
+        stream_url
     ]
     
     try:
@@ -206,9 +212,6 @@ def start_rtsp_stream(printer_number):
                                  stdout=log_file,
                                  stderr=log_file,
                                  bufsize=0)
-        
-        stream_path = "stream1" if is_normal else "streaming/live/1"
-        print(f"Starting {'Normal' if is_normal else 'Bambulab'} stream {printer_number} on rtsp://0.0.0.0:{port}/{stream_path}")
         
         # Warte kurz bis FFmpeg bereit ist
         time.sleep(2)

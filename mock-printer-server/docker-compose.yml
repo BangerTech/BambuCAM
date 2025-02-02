@@ -4,30 +4,33 @@ services:
     build: .            # Statt ./mock-printer
     environment:
       - HOST_IP=${HOST_IP:-0.0.0.0}  # Kann über .env überschrieben werden
+    networks:
+      - printer-network
     ports:
-      - "322:322"  # Bambulab RTSP
-      - "554:554"  # Standard RTSP
       - "8883:8883"  # Bambulab
       - "9100:9100"  # Printer
       - "1900:1900/udp"  # SSDP
       - "8991:8991/udp"  # Discovery
-    networks:
-      - printer-network
+    expose:
+      - "322"  # Intern für RTSP
+      - "554"  # Intern für RTSP
+    restart: unless-stopped
     tty: true  # Wichtig für interaktiven Modus
     stdin_open: true  # Wichtig für interaktiven Modus
 
   rtsp-proxy:
     container_name: rtsp-proxy
-    image: bluenviron/mediamtx
+    image: bluenviron/mediamtx:1.0.0  # Spezifische Version
+    networks:
+      - printer-network
     ports:
-      - "323:322"  # Proxy für Bambulab RTSP
-      - "555:554"  # Proxy für Standard RTSP
+      - "322:322"  # Bambulab RTSP (nach außen)
+      - "554:554"  # Standard RTSP (nach außen)
     volumes:
       - ./mediamtx.yml:/mediamtx.yml
     depends_on:
       - mock-printer
-    networks:
-      - printer-network
+    restart: unless-stopped
 
 networks:
   printer-network:
