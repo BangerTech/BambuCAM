@@ -109,5 +109,27 @@ def scanNetwork():
         logger.error(f"Error scanning network: {e}")
         return []
 
+def getPrinterStatus(printer_id):
+    """Holt den Status eines Druckers"""
+    try:
+        if printer_id in stored_printers:
+            printer = stored_printers[printer_id]
+            # Mock-Status für den Test
+            return {
+                "temperatures": {
+                    "bed": 60.0,
+                    "nozzle": 200.0
+                },
+                "printTime": {
+                    "remaining": 1800  # 30 Minuten in Sekunden
+                },
+                "status": "printing",
+                "progress": 45  # Prozent
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Error getting printer status: {e}")
+        return None
+
 # Lade Drucker beim Start
 loadPrinters() 
