@@ -47,4 +47,16 @@ def addPrinter(printer_data):
 
     except Exception as e:
         logger.error(f"Error adding printer: {e}")
-        return False, str(e) 
+        return False, str(e)
+
+def removePrinter(printer_id):
+    """Entfernt einen Drucker"""
+    try:
+        if printer_id in stored_printers:
+            del stored_printers[printer_id]
+            savePrinters()  # Speichere die aktualisierte Liste
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error removing printer: {e}")
+        return False 
