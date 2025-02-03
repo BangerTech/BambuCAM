@@ -1,2 +1,2 @@
-from .printerService import scanNetwork, getPrinterStatus, addPrinter, getPrinters, removePrinter
+from .printerService import scanNetwork, getPrinterStatus, addPrinter, getPrinters
 from .streamService import startStream 

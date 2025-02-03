@@ -1,32 +1,17 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
-import logging
-
-# Setup logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters
+import os
 
 app = Flask(__name__)
-
-# Konfiguriere CORS
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+CORS(app)
 
 @app.route('/printers', methods=['GET'])
 def get_printers():
-    """Gibt alle Drucker zurück"""
     try:
         printers = getPrinters()
-        logger.debug(f"Returning {len(printers)} printers")
         return jsonify(printers)
     except Exception as e:
-        logger.error(f"Error getting printers: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/scan', methods=['GET'])
@@ -117,15 +102,5 @@ def add_printer():
             "details": str(e)
         }), 400
 
-@app.route('/printers/<printer_id>', methods=['DELETE'])
-def delete_printer(printer_id):
-    """Löscht einen Drucker"""
-    try:
-        if removePrinter(printer_id):
-            return jsonify({"success": True, "message": f"Printer {printer_id} removed"})
-        return jsonify({"success": False, "error": "Printer not found"}), 404
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4000, debug=True) 
+    app.run(host='0.0.0.0', port=4000) 
