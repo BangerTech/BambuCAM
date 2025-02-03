@@ -16,10 +16,11 @@ def addPrinter(printer_data):
                 'name': printer_data.get('name', f'Bambulab ({ip})'),
                 'ip': ip,
                 'type': 'BAMBULAB',
-                # Korrekte Stream-URL für Bambulab X1C
-                'streamUrl': f"rtsp://bblp:{access_code}@{ip}:8554/camera_stream",
+                # Korrekte RTSP Stream URL für Bambulab
+                'streamUrl': f"rtsps://bblp:{access_code}@{ip}:322/streaming/live/1",
                 'accessCode': access_code,
-                'apiUrl': f"http://{ip}:8888/api/v1",  # Korrekte API Version
+                # Korrekte HTTP API URL
+                'apiUrl': f"http://{ip}:80/api/v1",
                 'wsPort': printer_data.get('wsPort', 9000)
             }
 
