@@ -1,7 +1,12 @@
 import socket
 import json
+import logging
 import paho.mqtt.client as mqtt
 from datetime import datetime
+import os
+
+# Logger konfigurieren
+logger = logging.getLogger(__name__)
 
 # Bambu Lab Ports
 MQTT_PORT = 8883  # Bambu Lab verwendet Port 8883 für MQTT
@@ -9,6 +14,27 @@ DISCOVERY_PORT = 8991  # Bambu Lab Discovery Port
 
 # Globale Variable für gespeicherte Drucker
 stored_printers = {}
+
+def savePrinters():
+    """Speichert die Drucker in einer JSON-Datei"""
+    try:
+        with open('printers.json', 'w') as f:
+            json.dump(stored_printers, f)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving printers: {e}")
+        return False
+
+def loadPrinters():
+    """Lädt die Drucker aus der JSON-Datei"""
+    global stored_printers
+    try:
+        if os.path.exists('printers.json'):
+            with open('printers.json', 'r') as f:
+                stored_printers = json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading printers: {e}")
+        stored_printers = {}
 
 # MQTT Callbacks
 def on_connect(client, userdata, flags, rc):
@@ -115,4 +141,7 @@ def removePrinter(printer_id):
         return False
     except Exception as e:
         logger.error(f"Error removing printer: {e}")
-        return False 
+        return False
+
+# Lade gespeicherte Drucker beim Start
+loadPrinters() 
