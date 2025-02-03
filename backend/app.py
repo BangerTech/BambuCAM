@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters
+from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
 import os
 
 app = Flask(__name__)
@@ -101,6 +101,16 @@ def add_printer():
             "error": "Connection error",
             "details": str(e)
         }), 400
+
+@app.route('/printers/<printer_id>', methods=['DELETE'])
+def delete_printer(printer_id):
+    """Löscht einen Drucker"""
+    try:
+        if removePrinter(printer_id):
+            return jsonify({"success": True, "message": f"Printer {printer_id} removed"})
+        return jsonify({"success": False, "error": "Printer not found"}), 404
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000) 
