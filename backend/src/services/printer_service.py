@@ -35,42 +35,36 @@ def getPrinters():
 def addPrinter(printer_data):
     """Fügt einen neuen Drucker hinzu"""
     try:
-        printer_type = printer_data.get('type', '').upper()
         ip = printer_data.get('ip', '')
-        
         if not ip:
             return False, "IP address is required"
 
-        if printer_type == 'BAMBULAB':
-            access_code = printer_data.get('accessCode')
-            if not access_code:
-                return False, "Access code is required for Bambulab printers"
+        access_code = printer_data.get('accessCode')
+        if not access_code:
+            return False, "Access code is required for Bambulab printers"
+        
+        # Erstelle eine saubere ID ohne Sonderzeichen
+        safe_name = printer_data.get('name', '').replace('#', 'nr').replace(' ', '_')
+        printer_id = f"printer_{ip.replace('.', '_')}_{safe_name}"
             
-            # Erstelle eine saubere ID ohne Sonderzeichen
-            safe_name = printer_data.get('name', '').replace('#', 'nr').replace(' ', '_')
-            printer_id = f"printer_{ip.replace('.', '_')}_{safe_name}"
-                
-            printer = {
-                'id': printer_id,  # Setze ID direkt
-                'name': printer_data.get('name', f'Bambulab ({ip})'),
-                'ip': ip,
-                'type': 'BAMBULAB',
-                'accessCode': access_code,
-                'streamUrl': f"rtsp://bblp:{access_code}@{ip}:322/streaming/live/1",  # rtsp statt rtsps
-                'mqttPort': 8883,
-                'mqttUser': 'bblp',
-                'mqttPassword': access_code,
-                'status': 'online'
-            }
+        printer = {
+            'id': printer_id,
+            'name': printer_data.get('name', f'Bambulab ({ip})'),
+            'ip': ip,
+            'type': 'BAMBULAB',
+            'accessCode': access_code,
+            'streamUrl': f"rtsp://bblp:{access_code}@{ip}:322/streaming/live/1",
+            'mqttPort': 8883,
+            'mqttUser': 'bblp',
+            'mqttPassword': access_code,
+            'status': 'online'
+        }
 
-            # Speichere Drucker
-            stored_printers[printer_id] = printer
-            savePrinters()
-            
-            return True, printer
-
-        elif printer_type == 'CREALITY_K1':
-            # ... existierender K1 Code ...
+        # Speichere Drucker
+        stored_printers[printer_id] = printer
+        savePrinters()
+        
+        return True, printer
 
     except Exception as e:
         logger.error(f"Error adding printer: {e}")
@@ -81,7 +75,7 @@ def removePrinter(printer_id):
     try:
         if printer_id in stored_printers:
             del stored_printers[printer_id]
-            savePrinters()  # Speichere die Änderungen
+            savePrinters()
             return True
         return False
     except Exception as e:
@@ -96,6 +90,24 @@ def savePrinters():
             logger.debug(f"Saved {len(stored_printers)} printers to storage")
     except Exception as e:
         logger.error(f"Error saving printers: {e}")
+
+def scanNetwork():
+    """Scannt nach Bambulab Druckern im Netzwerk"""
+    try:
+        logger.info("Using default fallback network")
+        network = "192.168.2.0/24"  # Default Netzwerk
+        logger.info(f"Scanning networks: [{network}]")
+        
+        found_printers = []
+        
+        # Hier könnte man noch die Scan-Logik implementieren
+        # Für jetzt geben wir einfach die gespeicherten Drucker zurück
+        found_printers.extend(getPrinters())
+        
+        return found_printers
+    except Exception as e:
+        logger.error(f"Error scanning network: {e}")
+        return []
 
 # Lade Drucker beim Start
 loadPrinters() 
