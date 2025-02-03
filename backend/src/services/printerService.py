@@ -103,4 +103,16 @@ def getPrinterStatus(printer_id):
         return None
     except Exception as e:
         print(f"Error getting printer status: {str(e)}")
-        return None 
+        return None
+
+def removePrinter(printer_id):
+    """Entfernt einen Drucker"""
+    try:
+        if printer_id in stored_printers:
+            del stored_printers[printer_id]
+            savePrinters()  # Speichere die aktualisierte Liste
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error removing printer: {e}")
+        return False 
