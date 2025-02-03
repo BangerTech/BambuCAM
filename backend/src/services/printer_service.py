@@ -1,6 +1,36 @@
 import uuid
 from datetime import datetime
 import json
+import socket
+import logging
+import os
+
+# Setup logging
+logger = logging.getLogger(__name__)
+
+# Globale Variable für gespeicherte Drucker
+stored_printers = {}
+
+def loadPrinters():
+    """Lädt Drucker aus JSON-Datei"""
+    global stored_printers
+    try:
+        if os.path.exists('printers.json'):
+            with open('printers.json', 'r') as f:
+                stored_printers = json.load(f)
+                logger.debug(f"Loaded {len(stored_printers)} printers from storage")
+    except Exception as e:
+        logger.error(f"Error loading printers: {e}")
+        stored_printers = {}
+
+def getPrinters():
+    """Gibt alle gespeicherten Drucker zurück"""
+    try:
+        loadPrinters()  # Lade aktuelle Drucker
+        return list(stored_printers.values())
+    except Exception as e:
+        logger.error(f"Error getting printers: {e}")
+        return []
 
 def addPrinter(printer_data):
     """Fügt einen neuen Drucker hinzu"""
@@ -65,4 +95,7 @@ def savePrinters():
             json.dump(stored_printers, f)
             logger.debug(f"Saved {len(stored_printers)} printers to storage")
     except Exception as e:
-        logger.error(f"Error saving printers: {e}") 
+        logger.error(f"Error saving printers: {e}")
+
+# Lade Drucker beim Start
+loadPrinters() 
