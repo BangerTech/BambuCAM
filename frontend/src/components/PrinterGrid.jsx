@@ -185,14 +185,32 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
   const handleDelete = async (id) => {
     try {
       const response = await fetch(`${API_URL}/printers/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        credentials: 'include'  // Wichtig für CORS
       });
-      
-      if (response.ok) {
-        setPrinters(prev => prev.filter(p => p.id !== id));
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      setPrinters(printers.filter(printer => printer.id !== id));
+      
+      setSnackbar({
+        open: true,
+        message: "Drucker erfolgreich gelöscht",
+        severity: "success"
+      });
     } catch (error) {
-      console.error('Fehler beim Löschen:', error);
+      console.error("Fehler beim Löschen:", error);
+      setSnackbar({
+        open: true,
+        message: `Fehler beim Löschen: ${error.message}`,
+        severity: "error"
+      });
     }
   };
 

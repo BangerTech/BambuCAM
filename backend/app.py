@@ -1,10 +1,20 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters
+from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
 import os
 
 app = Flask(__name__)
-CORS(app)
+
+# Konfiguriere CORS korrekt
+CORS(app, 
+     resources={r"/*": {
+         "origins": ["http://localhost:3000", "http://192.168.188.114:3000"],  # Erlaube Frontend Origins
+         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         "allow_headers": ["Content-Type", "Authorization", "Accept"],
+         "expose_headers": ["Content-Type"],
+         "supports_credentials": True,
+         "max_age": 600
+     }})
 
 @app.route('/printers', methods=['GET'])
 def get_printers():
@@ -102,5 +112,21 @@ def add_printer():
             "details": str(e)
         }), 400
 
+@app.route('/printers/<printer_id>', methods=['DELETE', 'OPTIONS'])
+def delete_printer(printer_id):
+    # Handle OPTIONS request für CORS preflight
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        return response
+
+    try:
+        success = removePrinter(printer_id)
+        if success:
+            return jsonify({"message": f"Printer {printer_id} removed"}), 200
+        else:
+            return jsonify({"error": "Printer not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4000) 
+    app.run(host='0.0.0.0', port=4000, debug=True) 
