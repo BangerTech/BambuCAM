@@ -10,4 +10,5 @@ Jinja2==3.0.3
 MarkupSafe==2.0.1
 opencv-python-headless==4.5.3.56
 numpy==1.21.2
-paho-mqtt==1.6.1 
+paho-mqtt==1.6.1
+bambulabs-api==1.0.0 

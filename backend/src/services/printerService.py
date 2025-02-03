@@ -4,6 +4,7 @@ import json
 import socket
 import logging
 import os
+from bambulabs_api import Printer
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -110,22 +111,33 @@ def scanNetwork():
         return []
 
 def getPrinterStatus(printer_id):
-    """Holt den Status eines Druckers"""
+    """Holt den Status eines Druckers via Bambulab API"""
     try:
         if printer_id in stored_printers:
             printer = stored_printers[printer_id]
-            # Mock-Status für den Test
+            
+            # Verbinde mit Bambulab Drucker
+            bambu_printer = Printer(
+                ip=printer['ip'], 
+                access_code=printer['accessCode']
+            )
+            
+            # Hole Druckerstatus
+            status = bambu_printer.get_state()
+            logger.debug(f"Received printer status: {status}")  # Debug-Log
+            
             return {
                 "temperatures": {
-                    "bed": 60.0,
-                    "nozzle": 200.0
+                    "bed": float(status.get('temperature', {}).get('bed', {}).get('actual', 0)),
+                    "nozzle": float(status.get('temperature', {}).get('nozzle', {}).get('actual', 0))
                 },
                 "printTime": {
-                    "remaining": 1800  # 30 Minuten in Sekunden
+                    "remaining": int(status.get('print', {}).get('time_remaining', 0))
                 },
-                "status": "printing",
-                "progress": 45  # Prozent
+                "status": status.get('print', {}).get('status', 'unknown'),
+                "progress": float(status.get('print', {}).get('progress', 0) * 100)  # Umrechnung in Prozent
             }
+            
         return None
     except Exception as e:
         logger.error(f"Error getting printer status: {e}")
