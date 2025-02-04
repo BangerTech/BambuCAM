@@ -63,19 +63,7 @@ def start_stream(printer_id):
 @app.route('/printers/<printer_id>/status', methods=['GET'])
 def get_printer_status(printer_id):
     try:
-        # Mock-Status für den Test
-        status = {
-            "temperatures": {
-                "bed": 60.0,
-                "nozzle": 200.0
-            },
-            "printTime": {
-                "remaining": 1800  # 30 Minuten in Sekunden
-            },
-            "status": "printing",
-            "progress": 45  # Prozent
-        }
-        
+        status = getPrinterStatus(printer_id)  # Verwende die echte Funktion
         return jsonify(status), 200
     except Exception as e:
         return jsonify({

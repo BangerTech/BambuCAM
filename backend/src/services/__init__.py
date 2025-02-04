@@ -54,14 +54,14 @@ def startStream(printer_id, stream_url=None):
         # Stoppe existierenden Stream falls vorhanden
         stopStream(printer_id)
         
-        # Vereinfachte FFmpeg Parameter, die nachweislich funktionieren
+        # Exakt die gleichen Parameter wie im funktionierenden Test
         command = [
             'ffmpeg',
             '-rtsp_transport', 'tcp',
             '-i', stream_url,
-            '-c:v', 'copy',  # Kopiere Video ohne Neucodierung
+            '-c:v', 'copy',
             '-f', 'mpegts',
-            f'http://localhost:{port}'
+            f'http://0.0.0.0:{port}'  # Wichtig: 0.0.0.0 statt localhost
         ]
         
         logger.info(f"Starting FFmpeg with command: {' '.join(command)}")

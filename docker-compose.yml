@@ -2,37 +2,25 @@ services:
   backend:
     build: 
       context: ./backend
-    ports:
-      - "4000:4000"
-      - "9000:9000"  # WebSocket-Port hinzufügen
-      - "9100-9200:9100-9200"  # WebSocket-Port-Range
-      - "2023:2023/udp"  # Für Printer Discovery
-    networks:
-      - printer-network
+    network_mode: "host"  # Verwendet das Host-Netzwerk für direkten Zugriff
     volumes:
-      - ./backend:/app  # Hot-Reload für Backend
-      - /app/__pycache__  # Verhindert Probleme mit Python-Cache
+      - ./backend:/app
+      - /app/__pycache__
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - WS_PORT=9000
     command: flask run --host=0.0.0.0 --port=4000
+    privileged: true
 
   frontend:
     build: ./frontend
-    environment:
-      - HOST=0.0.0.0
     ports:
       - "3000:3000"
-    networks:
-      - printer-network
     volumes:
-      - ./frontend:/app  # Hot-Reload für Frontend
-      - /app/node_modules  # Verhindert Überschreiben der node_modules
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
 
-networks:
-  printer-network:
-    driver: bridge 
+# Networks-Section entfernen, da wir host networking verwenden 
