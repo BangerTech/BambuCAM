@@ -1,19 +1,123 @@
 import socket
 import json
 import logging
-import paho.mqtt.client as mqtt
-from datetime import datetime
+import asyncio
 import os
+from datetime import datetime
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
 
 # Bambu Lab Ports
-MQTT_PORT = 8883  # Bambu Lab verwendet Port 8883 für MQTT
-DISCOVERY_PORT = 8991  # Bambu Lab Discovery Port
+MQTT_PORT = 8883
+DISCOVERY_PORT = 8991
 
 # Globale Variable für gespeicherte Drucker
 stored_printers = {}
+
+async def test_stream_url(url):
+    """Testet ob eine Stream-URL erreichbar ist"""
+    try:
+        command = [
+            'ffmpeg',
+            '-rtsp_transport', 'tcp',
+            '-i', url,
+            '-t', '1',  # Nur 1 Sekunde testen
+            '-f', 'null',
+            '-'
+        ]
+        
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        try:
+            await asyncio.wait_for(process.communicate(), timeout=2.0)
+            return process.returncode == 0
+        except asyncio.TimeoutError:
+            process.kill()
+            return False
+            
+    except Exception as e:
+        logger.debug(f"Error testing stream URL {url}: {e}")
+        return False
+
+def addPrinter(printer_data):
+    """Fügt einen neuen Drucker hinzu"""
+    try:
+        printer_type = printer_data.get('type', 'BAMBULAB').upper()  # Default zu BAMBULAB
+        ip = printer_data.get('ip', '')
+        
+        if not ip:
+            return {"success": False, "error": "IP address is required"}
+
+        # Generiere eine eindeutige ID basierend auf IP und Name
+        printer_id = f"printer_{printer_data['ip'].replace('.', '_')}_{printer_data['name'].replace(' ', '_')}"
+
+        if printer_type == 'BAMBULAB':
+            access_code = printer_data.get('accessCode')
+            if not access_code:
+                return {"success": False, "error": "Access code is required for Bambulab printers"}
+
+            # Teste beide möglichen Stream-URLs
+            stream_urls = [
+                f"rtsp://bblp:{access_code}@{ip}:8554/live",  # Alt (ungesichert)
+                f"rtsps://bblp:{access_code}@{ip}:322/streaming/live/1"  # Neu (SSL)
+            ]
+            
+            working_url = None
+            for url in stream_urls:
+                if asyncio.run(test_stream_url(url)):
+                    working_url = url
+                    logger.info(f"Found working stream URL: {url}")
+                    break
+            
+            if not working_url:
+                logger.warning("No working stream URL found, using default")
+                working_url = stream_urls[1]  # Fallback zur neuen URL
+                
+            printer = {
+                'id': printer_id,
+                'name': printer_data.get('name', f'Bambulab ({ip})'),
+                'ip': ip,
+                'type': 'BAMBULAB',  # Wichtig: Konsistenter Typ
+                'streamUrl': working_url,
+                'accessCode': access_code,
+                'apiUrl': f"http://{ip}:80/api/v1",
+                'wsPort': printer_data.get('wsPort', 9000),
+                'status': 'online',
+                'added': datetime.now().isoformat()
+            }
+
+        elif printer_type == 'CREALITY_K1':
+            printer = {
+                'id': printer_id,
+                'name': printer_data.get('name', f'K1 ({ip})'),
+                'ip': ip,
+                'type': 'CREALITY_K1',
+                'streamUrl': f"http://{ip}:4408/webcam/?action=stream",
+                'apiUrl': f"http://{ip}:7125/printer/objects/query",
+                'wsPort': printer_data.get('wsPort', 9000),
+                'status': 'online',
+                'added': datetime.now().isoformat()
+            }
+        else:
+            return {"success": False, "error": "Invalid printer type"}
+
+        # Speichere Drucker
+        stored_printers[printer_id] = printer
+        savePrinters()
+        
+        return {
+            "success": True,
+            "printer": printer  # Drucker als Objekt, nicht als Array
+        }
+
+    except Exception as e:
+        logger.error(f"Error adding printer: {e}")
+        return {"success": False, "error": str(e)}
 
 def savePrinters():
     """Speichert die Drucker in einer JSON-Datei"""
@@ -42,30 +146,6 @@ def on_connect(client, userdata, flags, rc):
 
 def on_message(client, userdata, msg):
     print(f"Message received on {msg.topic}: {msg.payload}")
-
-def addPrinter(printer_data):
-    """Fügt einen neuen Drucker hinzu"""
-    # Generiere eine eindeutige ID basierend auf IP und Name
-    printer_id = f"printer_{printer_data['ip'].replace('.', '_')}_{printer_data['name'].replace(' ', '_')}"
-    
-    # Prüfe ob ein Drucker mit dieser IP und diesem Namen bereits existiert
-    for existing_id, existing_printer in stored_printers.items():
-        if (existing_printer['ip'] == printer_data['ip'] and 
-            existing_printer['name'] == printer_data['name']):
-            return existing_printer
-    
-    # Füge neuen Drucker hinzu
-    stored_printers[printer_id] = {
-        "id": printer_id,
-        "name": printer_data['name'],
-        "ip": printer_data['ip'],
-        "type": "bambulab",
-        "status": "online",
-        "streamUrl": printer_data.get('streamUrl'),
-        "accessCode": printer_data['accessCode'],
-        "wsPort": printer_data.get('wsPort', 9000)
-    }
-    return stored_printers[printer_id]
 
 def getPrinters():
     """Gibt alle gespeicherten Drucker zurück"""

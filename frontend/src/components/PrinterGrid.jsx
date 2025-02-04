@@ -88,21 +88,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
       setIsAdding(true);
       console.log('Füge Drucker hinzu:', selectedPrinter);
       
-      // Erstelle die Stream-URL
-      const streamUrl = selectedPrinter.streamUrl || (
-        `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
-      );
-
-      console.log('Stream URL:', streamUrl);
-
-      // Angepasstes Drucker-Objekt für die API
       const printerData = {
-        name: selectedPrinter.name,
-        ip: selectedPrinter.ip,
-        accessCode: selectedPrinter.accessCode,
-        streamUrl: streamUrl
+        ...selectedPrinter,
+        type: 'BAMBULAB'
       };
-
+      
       const response = await fetch(`${API_URL}/printers`, {
         method: 'POST',
         headers: {
@@ -114,10 +104,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
       const data = await response.json();
       console.log('Server Response:', data);
 
-      if (!response.ok) {
-        throw new Error(data.details || data.error || 'Unknown error');
+      if (!data.success) {
+        throw new Error(data.error || 'Unknown error');
       }
 
+      // Drucker wurde erfolgreich hinzugefügt
       if (data.success && data.printer) {
         setPrinters(prev => [...prev, data.printer]);
         setOpen(false);
@@ -229,6 +220,24 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
     setNewPrinter({ name: '', ip: '', accessCode: '' });
   };
 
+  // Sichere Status-Anzeige
+  const getTemperature = (printer, type) => {
+    try {
+      return printerStatus[printer.id]?.temperatures[type]?.toFixed(1) || '-.--';
+    } catch (e) {
+      return '-.--';
+    }
+  };
+
+  const getRemainingTime = (printer) => {
+    try {
+      const remaining = printerStatus[printer.id]?.printTime?.remaining;
+      return remaining > 0 ? Math.floor(remaining / 60) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ 
@@ -266,105 +275,117 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="printers" direction="horizontal">
+        <Droppable droppableId="printers">
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
-              {printers.map((printer, index) => (
-                <Draggable key={printer.id} draggableId={printer.id.toString()} index={index}>
-                  {(provided) => (
-                    <Grid item xs={12} md={6} xl={4} 
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                    >
-                      <Paper 
-                        sx={{ 
-                          position: 'relative',
-                          height: 0,
-                          paddingBottom: 'calc(56.25% + 80px)', // Reduziert von 120px auf 80px
-                          borderRadius: '15px',
-                          overflow: 'hidden',
-                          background: '#000',
-                          boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-                          minHeight: '300px',
-                          '@media (min-width: 1200px)': {
-                            minHeight: '400px'
-                          }
-                        }}
+              {printers.map((printer, index) => {
+                // Stelle sicher, dass wir eine gültige ID haben
+                const dragId = (printer.id || `printer-${index}`).toString();
+                
+                return (
+                  <Draggable
+                    key={dragId}
+                    draggableId={dragId}
+                    index={index}
+                  >
+                    {(provided) => (
+                      <Grid item xs={12} sm={6} md={4} lg={3}
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
                       >
-                        {/* Header-Bereich */}
-                        <Box sx={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: '40px', // Reduziert von 60px auf 40px
-                          padding: '8px', // Reduziert von 10px auf 8px
-                          background: 'rgba(0,0,0,0.7)',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          color: 'white',
-                          zIndex: 2
-                        }}>
-                          <Typography variant="subtitle1">{printer.name}</Typography>
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreen(printer)}>
-                              <FullscreenIcon />
-                            </IconButton>
-                            <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printer.id)}>
-                              <DeleteIcon />
-                            </IconButton>
+                        <Paper 
+                          sx={{ 
+                            position: 'relative',
+                            height: 0,
+                            paddingBottom: '56.25%', // 16:9 Verhältnis
+                            borderRadius: '15px',
+                            overflow: 'hidden',
+                            background: '#000',
+                            boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+                            '& > *': {
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%'
+                            }
+                          }}
+                        >
+                          {/* Header-Bereich */}
+                          <Box sx={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: '40px', // Reduziert von 60px auf 40px
+                            padding: '8px', // Reduziert von 10px auf 8px
+                            background: 'rgba(0,0,0,0.7)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            color: 'white',
+                            zIndex: 2
+                          }}>
+                            <Typography variant="subtitle1">{printer.name}</Typography>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreen(printer)}>
+                                <FullscreenIcon />
+                              </IconButton>
+                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printer.id)}>
+                                <DeleteIcon />
+                              </IconButton>
+                            </Box>
                           </Box>
-                        </Box>
 
-                        {/* Video-Stream im mittleren Bereich */}
-                        <Box sx={{
-                          position: 'absolute',
-                          top: '40px', // Angepasst
-                          left: 0,
-                          right: 0,
-                          bottom: '40px', // Angepasst
-                          background: '#000'
-                        }}>
-                          <RTSPStream 
-                            url={printer.streamUrl} 
-                            wsPort={printer.wsPort}
-                          />
-                        </Box>
+                          {/* Video-Stream im mittleren Bereich */}
+                          <Box sx={{
+                            position: 'absolute',
+                            top: '40px', // Angepasst
+                            left: 0,
+                            right: 0,
+                            bottom: '40px', // Angepasst
+                            background: '#000'
+                          }}>
+                            <RTSPStream 
+                              url={printer.streamUrl} 
+                              wsPort={printer.wsPort}
+                            />
+                          </Box>
 
-                        {/* Footer-Bereich */}
-                        <Box sx={{
-                          position: 'absolute',
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          height: '40px', // Reduziert von 60px auf 40px
-                          padding: '8px', // Reduziert von 10px auf 8px
-                          background: 'rgba(0,0,0,0.7)',
-                          color: 'white',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          zIndex: 2
-                        }}>
-                          <Typography variant="body2">
-                            Hotend: {printerStatus[printer.id]?.temperatures.nozzle.toFixed(1)}°C
-                          </Typography>
-                          <Typography variant="body2">
-                            Bed: {printerStatus[printer.id]?.temperatures.bed.toFixed(1)}°C
-                          </Typography>
-                          {printerStatus[printer.id]?.printTime.remaining > 0 && (
+                          {/* Footer-Bereich */}
+                          <Box sx={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            height: '40px', // Reduziert von 60px auf 40px
+                            padding: '8px', // Reduziert von 10px auf 8px
+                            background: 'rgba(0,0,0,0.7)',
+                            color: 'white',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            zIndex: 2
+                          }}>
                             <Typography variant="body2">
-                              {Math.floor(printerStatus[printer.id].printTime.remaining / 60)}min
+                              Hotend: {getTemperature(printer, 'nozzle')}°C
                             </Typography>
-                          )}
-                        </Box>
-                      </Paper>
-                    </Grid>
-                  )}
-                </Draggable>
-              ))}
+                            <Typography variant="body2">
+                              Bed: {getTemperature(printer, 'bed')}°C
+                            </Typography>
+                            {getRemainingTime(printer) && (
+                              <Typography variant="body2">
+                                {getRemainingTime(printer)}min
+                              </Typography>
+                            )}
+                          </Box>
+                        </Paper>
+                      </Grid>
+                    )}
+                  </Draggable>
+                );
+              })}
               {provided.placeholder}
             </Grid>
           )}
@@ -658,14 +679,14 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
               <Typography variant="h6">{fullscreenPrinter.name}</Typography>
               <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>
                 <Typography>
-                  Hotend: {printerStatus[fullscreenPrinter.id]?.temperatures.nozzle.toFixed(1)}°C
+                  Hotend: {getTemperature(fullscreenPrinter, 'nozzle')}°C
                 </Typography>
                 <Typography>
-                  Bed: {printerStatus[fullscreenPrinter.id]?.temperatures.bed.toFixed(1)}°C
+                  Bed: {getTemperature(fullscreenPrinter, 'bed')}°C
                 </Typography>
-                {printerStatus[fullscreenPrinter.id]?.printTime.remaining > 0 && (
+                {getRemainingTime(fullscreenPrinter) && (
                   <Typography>
-                    Verbleibend: {Math.floor(printerStatus[fullscreenPrinter.id].printTime.remaining / 60)}min
+                    Verbleibend: {getRemainingTime(fullscreenPrinter)}min
                   </Typography>
                 )}
               </Box>

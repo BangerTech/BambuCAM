@@ -56,26 +56,32 @@ class StreamManager:
                 if retries == 0:
                     raise Exception("Could not find available port")
 
-    def start_ffmpeg_stream(self, url, path):
+    def start_ffmpeg_stream(self, url, path, ssl_verify=True):
         """Startet FFmpeg für RTSP zu WebSocket Konvertierung"""
         if path not in self.streams:
             self.streams[path] = Queue()
             
-            # FFmpeg Kommando für RTSP zu MPEG1
+            # FFmpeg Kommando für RTSP zu MPEG1 mit angepassten Parametern für Bambulab
             command = [
                 'ffmpeg',
-                '-i', url,
-                '-f', 'mpegts',
-                '-codec:v', 'mpeg1video',
-                '-s', '800x600',
-                '-b:v', '1000k',
-                '-r', '30',
-                '-bf', '0',
-                '-codec:a', 'mp2',
-                '-ar', '44100',
-                '-ac', '1',
-                '-b:a', '128k',
-                '-'
+                '-fflags', 'nobuffer',        # Kein Buffering
+                '-flags', 'low_delay',        # Minimale Latenz
+                '-rtsp_transport', 'tcp',     # TCP für RTSP
+                '-i', url,                    # Input URL
+                '-f', 'mpegts',              # Output Format
+                '-codec:v', 'mpeg1video',     # Video Codec
+                '-b:v', '1000k',             # Bitrate
+                '-r', '30',                  # 30 FPS
+                '-s', '800x600',             # Auflösung
+                '-bf', '0',                  # Keine B-Frames
+                '-an',                       # Kein Audio
+                '-rtsp_flags', 'prefer_tcp', # Bevorzuge TCP
+                '-stimeout', '5000000',      # Socket Timeout
+                '-use_wallclock_as_timestamps', '1',  # Korrekte Timestamps
+                '-tune', 'zerolatency',      # Minimale Latenz
+                '-preset', 'ultrafast',      # Schnellste Encoding
+                '-ssl_verify', '0',          # SSL-Verifizierung deaktivieren
+                '-'                          # Output to pipe
             ]
             
             process = subprocess.Popen(
@@ -112,22 +118,17 @@ def startStream(printer_id):
         if not printer:
             raise Exception(f"Printer {printer_id} not found")
             
-        # Extrahiere Nummer aus ID
-        printer_number = printer_id.split('_')[-1]
-        
-        # Prüfe ob es ein Mock-Printer ist
-        is_mock = "mock" in printer_id.lower()
-        is_normal = printer_number == "4"
-        
-        if is_mock:
-            port = f"855{printer_number}"
-            # Verwende TCP statt RTSP
-            url = f"tcp://{printer['ip']}:{port}"
-        else:
-            url = f"rtsps://bblp:{printer['accessCode']}@{printer['ip']}:322/streaming/live/1"
-            
+        url = printer['streamUrl']
         print(f"Starting stream from URL: {url}")
-        stream_manager.start_ffmpeg_stream(url, path)
+        
+        # Prüfe ob es eine RTSPS URL ist
+        if url.startswith('rtsps://'):
+            # Füge zusätzliche Parameter für RTSPS hinzu
+            stream_manager.start_ffmpeg_stream(url, path, ssl_verify=False)
+        else:
+            # Standard RTSP Stream
+            stream_manager.start_ffmpeg_stream(url, path)
+            
         return stream_manager.ws_port
     except Exception as e:
         print(f"Error starting stream: {e}")
