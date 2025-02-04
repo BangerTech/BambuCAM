@@ -19,9 +19,9 @@ const RTSPStream = ({ printer }) => {
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
-            // MPEG-TS mit H.264 Video
+            // MPEG-TS mit H.264 Video (Baseline Profile)
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
-              'video/mp2t; codecs="avc1.42E01E"'
+              'video/mp2t; codecs="avc1.42001E"'  // Baseline Profile Level 3.0
             );
             
             const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
@@ -32,6 +32,16 @@ const RTSPStream = ({ printer }) => {
             
             wsRef.current.onopen = () => {
               console.log('WebSocket connected');
+            };
+
+            wsRef.current.onerror = (error) => {
+              console.error('WebSocket error:', error);
+            };
+
+            wsRef.current.onclose = (event) => {
+              console.log('WebSocket closed:', event.code, event.reason);
+              // Versuche Reconnect nach 5 Sekunden
+              setTimeout(setupMediaSource, 5000);
             };
             
             wsRef.current.onmessage = (event) => {
@@ -70,6 +80,11 @@ const RTSPStream = ({ printer }) => {
 
     setupMediaSource();
 
+    // Füge ein Video-Error-Event hinzu
+    videoRef.current.onerror = (error) => {
+      console.error('Video error:', error);
+    };
+
     return () => {
       try {
         if (wsRef.current) {
@@ -97,10 +112,12 @@ const RTSPStream = ({ printer }) => {
       autoPlay 
       playsInline 
       muted
+      controls
       style={{ 
         width: '100%', 
         height: '100%',
-        objectFit: 'contain'
+        objectFit: 'contain',
+        backgroundColor: '#000'
       }}
     />
   );

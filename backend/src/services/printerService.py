@@ -126,38 +126,44 @@ def getPrinterStatus(printer_id):
         # Erstelle eine neue Instanz der BambuLab API
         bambu_printer = bl.Printer(
             printer['ip'],
-            printer['accessCode'],
-            printer.get('serial', 'unknown')  # Serial aus SSDP Discovery
+            printer['accessCode']
         )
         
-        # Verbinde zum Drucker
-        bambu_printer.connect()
-        
         try:
+            # Verbinde zum Drucker mit Timeout
+            connected = bambu_printer.connect(timeout=5)
+            if not connected:
+                logger.error("Could not connect to printer")
+                return {
+                    "temperatures": {"bed": 0, "nozzle": 0},
+                    "status": "offline",
+                    "progress": 0
+                }
+            
             # Hole den Drucker-Status
-            state = bambu_printer.get_state()
+            status = bambu_printer.get_print_status()
+            temps = bambu_printer.get_temperatures()
             
             return {
                 "temperatures": {
-                    "bed": float(state.get('bed_temp', 0)),
-                    "nozzle": float(state.get('nozzle_temp', 0))
+                    "bed": float(temps.get('bed', 0)),
+                    "nozzle": float(temps.get('nozzle', 0))
                 },
-                "printTime": {
-                    "remaining": int(state.get('remaining_time', 0))
-                },
-                "status": state.get('status', 'unknown'),
-                "progress": float(state.get('progress', 0))
+                "status": status.get('status', 'unknown'),
+                "progress": float(status.get('progress', 0))
             }
             
         finally:
             # Wichtig: Verbindung trennen
-            bambu_printer.disconnect()
+            try:
+                bambu_printer.disconnect()
+            except:
+                pass
             
     except Exception as e:
         logger.error(f"Fehler beim Abrufen des Drucker-Status: {str(e)}")
         return {
             "temperatures": {"bed": 0, "nozzle": 0},
-            "printTime": {"remaining": 0},
             "status": "offline",
             "progress": 0
         }

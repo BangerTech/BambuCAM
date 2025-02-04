@@ -6,6 +6,7 @@ services:
       - "4000:4000"  # HTTP API
       - "9000:9000"  # WebSocket Stream
       - "8883:8883"  # MQTT
+      - "8884:8884"  # MQTT over WebSocket
     network_mode: "host"  # Wichtig für RTSP und lokale Netzwerkkommunikation
     volumes:
       - ./backend:/app

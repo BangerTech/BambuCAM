@@ -89,20 +89,15 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
-            # FFmpeg Befehl basierend auf dem funktionierenden Test
+            # Einfacherer FFmpeg Befehl basierend auf dem funktionierenden Test
             command = [
                 'ffmpeg',
-                '-fflags', 'nobuffer',
-                '-flags', 'low_delay',
                 '-rtsp_transport', 'tcp',
                 '-i', stream_url,
-                '-vsync', '0',
-                '-copyts',
-                '-vcodec', 'copy',        # Behalte H.264 bei
-                '-an',                    # Kein Audio
-                '-f', 'mpegts',          # MPEG-TS Format
-                '-flush_packets', '1',    # Sofortiges Flushing
-                'pipe:1'                  # Ausgabe an stdout
+                '-c:v', 'copy',     # Direkte Kopie des H.264 Streams
+                '-an',              # Kein Audio
+                '-f', 'mpegts',     # MPEG-TS Format
+                'pipe:1'            # Ausgabe an stdout
             ]
             
             logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
