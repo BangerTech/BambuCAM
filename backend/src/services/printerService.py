@@ -111,23 +111,48 @@ def removePrinter(printer_id):
         return False
 
 def getPrinterStatus(printer_id):
-    """Holt den Status eines Druckers"""
-    printer = getPrinterById(printer_id)
-    if not printer:
-        raise Exception("Drucker nicht gefunden")
+    """Holt den Status eines Druckers über die Bambu Lab API"""
+    try:
+        printer = getPrinterById(printer_id)
+        if not printer:
+            raise Exception("Drucker nicht gefunden")
+            
+        # Bambu Lab API Endpoint
+        url = f"http://{printer['ip']}:8989/api/info"
         
-    # TODO: Implementiere echte Status-Abfrage
-    return {
-        "temperatures": {
-            "bed": 60.0,
-            "nozzle": 200.0
-        },
-        "printTime": {
-            "remaining": 1800
-        },
-        "status": "printing",
-        "progress": 45
-    }
+        response = requests.get(
+            url, 
+            headers={
+                "Authorization": f"Bearer {printer['accessCode']}"
+            },
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "temperatures": {
+                    "bed": float(data.get('bed_temp', 0)),
+                    "nozzle": float(data.get('nozzle_temp', 0))
+                },
+                "printTime": {
+                    "remaining": int(data.get('remaining_time', 0))
+                },
+                "status": data.get('status', 'unknown'),
+                "progress": float(data.get('progress', 0))
+            }
+        else:
+            raise Exception(f"API Error: {response.status_code}")
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Abrufen des Drucker-Status: {str(e)}")
+        # Fallback-Werte
+        return {
+            "temperatures": {"bed": 0, "nozzle": 0},
+            "printTime": {"remaining": 0},
+            "status": "offline",
+            "progress": 0
+        }
 
 def scanNetwork():
     """Scannt nach neuen Druckern"""
