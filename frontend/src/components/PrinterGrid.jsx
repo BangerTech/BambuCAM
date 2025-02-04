@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert } from '@mui/material';
+import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress } from '@mui/material';
 import RTSPStream from './RTSPStream';
 import DeleteIcon from '@mui/icons-material/Delete';
 import '../styles/NeonButton.css';
@@ -175,20 +175,25 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
 
   const handleDelete = async (id) => {
     try {
+      console.log('Lösche Drucker mit ID:', id); // Debug-Log
+
+      if (!id) {
+        throw new Error('Keine gültige Drucker-ID');
+      }
+
       const response = await fetch(`${API_URL}/printers/${id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include'  // Wichtig für CORS
+        }
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      setPrinters(printers.filter(printer => printer.id !== id));
+      // Aktualisiere die Drucker-Liste
+      setPrinters(prev => prev.filter(printer => printer.id !== id));
       
       setSnackbar({
         open: true,
@@ -220,19 +225,75 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
     setNewPrinter({ name: '', ip: '', accessCode: '' });
   };
 
-  // Sichere Status-Anzeige
+  // Status-Anzeige Funktionen
   const getTemperature = (printer, type) => {
     try {
-      return printerStatus[printer.id]?.temperatures[type]?.toFixed(1) || '-.--';
+      const temps = printerStatus[printer.id]?.temperatures;
+      if (!temps) return '-.--';
+      
+      switch(type) {
+        case 'nozzle':
+          return temps.nozzle?.toFixed(1) || '-.--';
+        case 'bed':
+          return temps.bed?.toFixed(1) || '-.--';
+        default:
+          return '-.--';
+      }
     } catch (e) {
       return '-.--';
+    }
+  };
+
+  const getPrintStatus = (printer) => {
+    try {
+      const status = printerStatus[printer.id]?.status;
+      switch(status) {
+        case 'printing':
+          return {
+            text: 'Druckt',
+            color: '#4caf50' // Grün
+          };
+        case 'idle':
+          return {
+            text: 'Bereit',
+            color: '#2196f3' // Blau
+          };
+        case 'standby':
+          return {
+            text: 'Standby',
+            color: '#ff9800' // Orange
+          };
+        default:
+          return {
+            text: 'Offline',
+            color: '#9e9e9e' // Grau
+          };
+      }
+    } catch (e) {
+      return { text: 'Unbekannt', color: '#9e9e9e' };
+    }
+  };
+
+  const getPrintProgress = (printer) => {
+    try {
+      return printerStatus[printer.id]?.progress || 0;
+    } catch (e) {
+      return 0;
     }
   };
 
   const getRemainingTime = (printer) => {
     try {
       const remaining = printerStatus[printer.id]?.printTime?.remaining;
-      return remaining > 0 ? Math.floor(remaining / 60) : null;
+      if (!remaining || remaining <= 0) return null;
+      
+      const hours = Math.floor(remaining / 3600);
+      const minutes = Math.floor((remaining % 3600) / 60);
+      
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      return `${minutes}m`;
     } catch (e) {
       return null;
     }
@@ -289,7 +350,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                     index={index}
                   >
                     {(provided) => (
-                      <Grid item xs={12} sm={6} md={4} lg={3}
+                      <Grid item xs={12} sm={6} md={4} lg={4}
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
@@ -298,18 +359,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                           sx={{ 
                             position: 'relative',
                             height: 0,
-                            paddingBottom: 'calc(56.25% + 80px)', // 16:9 plus 40px oben und 40px unten
+                            paddingBottom: 'calc(73.125% + 80px)', // 16:9 * 1.3 plus Header/Footer
                             borderRadius: '15px',
                             overflow: 'hidden',
                             background: '#000',
                             boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-                            '& > *': {
-                              position: 'absolute',
-                              top: '40px',  // Header-Höhe
-                              left: 0,
-                              width: '100%',
-                              height: 'calc(100% - 80px)'  // Gesamthöhe minus Header und Footer
-                            }
                           }}
                         >
                           {/* Header */}
@@ -321,6 +375,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                             height: '40px',
                             padding: '8px',
                             background: 'rgba(0,0,0,0.7)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            color: 'white',
                             zIndex: 2
                           }}>
                             <Typography variant="subtitle1">{printer.name}</Typography>
@@ -352,21 +410,42 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                             bottom: 0,
                             left: 0,
                             right: 0,
-                            height: '40px',
                             padding: '8px',
                             background: 'rgba(0,0,0,0.7)',
+                            color: 'white',
                             zIndex: 2
                           }}>
-                            <Typography variant="body2">
-                              Hotend: {getTemperature(printer, 'nozzle')}°C
-                            </Typography>
-                            <Typography variant="body2">
-                              Bed: {getTemperature(printer, 'bed')}°C
-                            </Typography>
-                            {getRemainingTime(printer) && (
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                               <Typography variant="body2">
-                                {getRemainingTime(printer)}min
+                                Hotend: {getTemperature(printer, 'nozzle')}°C
                               </Typography>
+                              <Typography variant="body2">
+                                Bed: {getTemperature(printer, 'bed')}°C
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: getPrintStatus(printer).color }}>
+                                {getPrintStatus(printer).text}
+                              </Typography>
+                            </Box>
+                            {getPrintStatus(printer).text === 'Druckt' && (
+                              <Box sx={{ mt: 1 }}>
+                                <LinearProgress 
+                                  variant="determinate" 
+                                  value={getPrintProgress(printer)}
+                                  sx={{
+                                    height: 4,
+                                    borderRadius: 2,
+                                    backgroundColor: 'rgba(255,255,255,0.1)',
+                                    '& .MuiLinearProgress-bar': {
+                                      backgroundColor: '#4caf50'
+                                    }
+                                  }}
+                                />
+                                {getRemainingTime(printer) && (
+                                  <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
+                                    Verbleibend: {getRemainingTime(printer)}
+                                  </Typography>
+                                )}
+                              </Box>
                             )}
                           </Box>
                         </Paper>
