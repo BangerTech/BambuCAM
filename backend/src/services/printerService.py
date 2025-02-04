@@ -121,8 +121,8 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Drucker nicht gefunden")
             
-        # Bambu Lab API Endpoint (HTTPS)
-        url = f"https://{printer['ip']}:8989/api/info"
+        # Bambu Lab API Endpoint (HTTP)
+        url = f"http://{printer['ip']}:8989/api/info"
         logger.info(f"Requesting printer status from: {url}")
         
         response = requests.get(
@@ -130,12 +130,12 @@ def getPrinterStatus(printer_id):
             headers={
                 "Authorization": f"Bearer {printer['accessCode']}"
             },
-            verify=False,  # Self-signed Zertifikate erlauben
             timeout=5
         )
         
         if response.status_code == 200:
             data = response.json()
+            logger.info(f"Printer data: {data}")
             return {
                 "temperatures": {
                     "bed": float(data.get('bed_temp', 0)),

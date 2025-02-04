@@ -89,7 +89,7 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
-            # FFmpeg Befehl für RTSP zu MPEG-TS Konvertierung
+            # FFmpeg Befehl für RTSP zu fMP4 Konvertierung
             command = [
                 'ffmpeg',
                 '-fflags', 'nobuffer',
@@ -98,9 +98,13 @@ class StreamService:
                 '-i', stream_url,
                 '-vsync', '0',
                 '-copyts',
-                '-vcodec', 'copy',
-                '-an',  # Kein Audio
-                '-f', 'mpegts',
+                '-vcodec', 'libx264',  # Recodiere zu H.264
+                '-preset', 'ultrafast',
+                '-tune', 'zerolatency',
+                '-movflags', '+frag_keyframe+empty_moov+default_base_moof',
+                '-an',
+                '-f', 'mp4',
+                '-movflags', 'frag_keyframe+empty_moov+omit_tfhd_offset+faststart+separate_moof+default_base_moof+isomoof+dash',
                 'pipe:1'
             ]
             

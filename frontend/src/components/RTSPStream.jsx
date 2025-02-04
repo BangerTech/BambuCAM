@@ -18,15 +18,16 @@ const RTSPStream = ({ printer }) => {
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
-            // SourceBuffer für MPEG-TS erstellen
-            sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer('video/mp2t');
+            // SourceBuffer für MP4 erstellen
+            sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
+              'video/mp4; codecs="avc1.42E01E"'
+            );
             
             // WebSocket verbinden
-            const wsUrl = `wss://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
+            const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
             
             wsRef.current = new WebSocket(wsUrl);
-            
             wsRef.current.binaryType = 'arraybuffer';
             
             wsRef.current.onopen = () => {
@@ -39,14 +40,14 @@ const RTSPStream = ({ printer }) => {
                   sourceBufferRef.current.appendBuffer(event.data);
                 } catch (e) {
                   console.error('Error appending buffer:', e);
+                  // Bei Fehler Buffer zurücksetzen
+                  if (e.name === 'QuotaExceededError') {
+                    sourceBufferRef.current.remove(0, videoRef.current.currentTime - 1);
+                  }
                 }
               } else {
                 queueRef.current.push(event.data);
               }
-            };
-            
-            wsRef.current.onerror = (error) => {
-              console.error('WebSocket error:', error);
             };
             
             // Queue processing
@@ -68,7 +69,6 @@ const RTSPStream = ({ printer }) => {
 
     setupMediaSource();
 
-    // Cleanup
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
