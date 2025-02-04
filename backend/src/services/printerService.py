@@ -67,17 +67,32 @@ def addPrinter(printer_data):
             if not access_code:
                 return {"success": False, "error": "Access code is required for Bambulab printers"}
 
-            # Verwende die alte, funktionierende URL
-            stream_url = f"rtsp://bblp:{access_code}@{ip}:8554/live"
+            # Beide Stream-URLs testen
+            stream_urls = [
+                f"rtsp://bblp:{access_code}@{ip}:8554/live",         # Original URL
+                f"rtsps://bblp:{access_code}@{ip}:322/streaming/live/1"  # Neue URL (firmware >= 01.06.00.00)
+            ]
+
+            # Teste URLs und verwende die erste funktionierende
+            working_url = None
+            for url in stream_urls:
+                if asyncio.run(test_stream_url(url)):
+                    working_url = url
+                    logger.info(f"Found working stream URL: {url}")
+                    break
+
+            if not working_url:
+                logger.warning("No working stream URL found, using original URL")
+                working_url = stream_urls[0]  # Fallback zur Original-URL
 
             printer = {
                 'id': printer_id,
                 'name': name,
                 'ip': ip,
                 'type': 'BAMBULAB',
-                'streamUrl': stream_url,
+                'streamUrl': working_url,
                 'accessCode': access_code,
-                'wsPort': printer_data.get('wsPort', 9000),
+                'wsPort': 9100,  # Fester Port wie in den Logs
                 'status': 'online',
                 'added': datetime.now().isoformat()
             }

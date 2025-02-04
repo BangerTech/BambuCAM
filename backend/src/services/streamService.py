@@ -61,26 +61,24 @@ class StreamManager:
         if path not in self.streams:
             self.streams[path] = Queue()
             
-            # Optimierte FFmpeg Parameter für Bambulab Streams
+            # Optimierte FFmpeg Parameter basierend auf der Dokumentation
             command = [
                 'ffmpeg',
                 '-fflags', 'nobuffer',
                 '-flags', 'low_delay',
-                '-strict', 'experimental',
                 '-rtsp_transport', 'tcp',
                 '-rtsp_flags', 'prefer_tcp',
-                '-allowed_media_types', 'video',  # Nur Video erlauben
+                '-allowed_media_types', 'video',
                 '-i', url,
-                '-c:v', 'mpeg1video',    # Wichtig: MPEG1 für JSMpeg
-                '-f', 'mpegts',          # MPEG-TS Format
-                '-b:v', '800k',          # Bitrate auf 800k
-                '-maxrate', '1000k',     # Maximale Bitrate
-                '-bufsize', '2000k',     # Buffer
-                '-an',                   # Kein Audio
+                '-c:v', 'mpeg1video',     # Wichtig: MPEG1 für JSMpeg
+                '-f', 'mpegts',           # MPEG-TS Format
+                '-b:v', '800k',           # Bitrate wie in den Logs
+                '-maxrate', '1000k',
+                '-bufsize', '2000k',
+                '-an',                    # Kein Audio
                 '-tune', 'zerolatency',
                 '-preset', 'ultrafast',
-                '-pix_fmt', 'yuv420p',   # Pixel Format
-                'pipe:1'                 # Output to pipe
+                'pipe:1'
             ]
             
             process = subprocess.Popen(
