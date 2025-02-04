@@ -1,24 +1,21 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
-# FFmpeg installieren
-RUN apt-get update && \
-    apt-get install -y ffmpeg && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# System-Pakete für OpenCV
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install -r requirements.txt
 
+# Copy the rest of the application
 COPY . .
 
-EXPOSE 4000
-
-CMD ["python", "app.py"] 
+# Command to run the application
+CMD ["flask", "run", "--host=0.0.0.0", "--port=4000"] 
