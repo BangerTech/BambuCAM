@@ -98,9 +98,13 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       setIsAdding(true);
       console.log('Füge Drucker hinzu:', selectedPrinter);
       
+      // Konstruiere Stream-URL
+      const streamUrl = `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`;
+      
       const printerData = {
         ...selectedPrinter,
-        type: 'BAMBULAB'
+        type: 'BAMBULAB',
+        streamUrl: streamUrl // Wichtig: Stream-URL mitgeben
       };
       
       const response = await fetch(`${API_URL}/printers`, {
@@ -166,39 +170,40 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     setFullscreenPrinter(printer);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (printerId) => {
     try {
-      console.log('Lösche Drucker mit ID:', id); // Debug-Log
-
-      if (!id) {
-        throw new Error('Keine gültige Drucker-ID');
-      }
-
-      const response = await fetch(`${API_URL}/printers/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      // Aktualisiere die Drucker-Liste
-      setLocalPrinters(prev => prev.filter(printer => printer.id !== id));
+      console.log('Lösche Drucker mit ID:', printerId);
       
-      setSnackbar({
-        open: true,
-        message: "Drucker erfolgreich gelöscht",
-        severity: "success"
+      // Erst den Stream stoppen
+      try {
+        await fetch(`${API_URL}/stream/${printerId}/stop`, {
+          method: 'POST'
+        });
+      } catch (e) {
+        console.warn('Error stopping stream:', e);
+      }
+      
+      // Dann den Drucker löschen
+      const response = await fetch(`${API_URL}/printers/${printerId}`, {
+        method: 'DELETE'
       });
+      
+      if (response.ok) {
+        setLocalPrinters(printers => printers.filter(p => p.id !== printerId));
+        setSnackbar({
+          open: true,
+          message: 'Drucker erfolgreich gelöscht',
+          severity: 'success'
+        });
+      } else {
+        throw new Error('Failed to delete printer');
+      }
     } catch (error) {
-      console.error("Fehler beim Löschen:", error);
+      console.error('Error deleting printer:', error);
       setSnackbar({
         open: true,
-        message: `Fehler beim Löschen: ${error.message}`,
-        severity: "error"
+        message: 'Fehler beim Löschen des Druckers',
+        severity: 'error'
       });
     }
   };

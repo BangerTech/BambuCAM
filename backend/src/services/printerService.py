@@ -121,39 +121,51 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Drucker nicht gefunden")
             
-        # Bambu Lab API Endpoint (HTTP)
-        url = f"http://{printer['ip']}:8989/api/info"
-        logger.info(f"Requesting printer status from: {url}")
+        # Bambu Lab API Endpoints
+        info_url = f"http://{printer['ip']}:8883/api/info"
+        status_url = f"http://{printer['ip']}:8883/api/status"
         
-        response = requests.get(
-            url, 
-            headers={
-                "Authorization": f"Bearer {printer['accessCode']}"
-            },
-            timeout=5
-        )
+        headers = {
+            "Authorization": f"Bearer {printer['accessCode']}",
+            "Connection": "keep-alive",
+            "Accept": "application/json"
+        }
         
-        if response.status_code == 200:
-            data = response.json()
-            logger.info(f"Printer data: {data}")
+        # Hole Basis-Informationen
+        info_response = requests.get(info_url, headers=headers, timeout=5)
+        status_response = requests.get(status_url, headers=headers, timeout=5)
+        
+        if info_response.status_code == 200 and status_response.status_code == 200:
+            info_data = info_response.json()
+            status_data = status_response.json()
+            
             return {
                 "temperatures": {
-                    "bed": float(data.get('bed_temp', 0)),
-                    "nozzle": float(data.get('nozzle_temp', 0))
+                    "bed": float(status_data.get('bed_temp', 0)),
+                    "nozzle": float(status_data.get('nozzle_temp', 0))
                 },
                 "printTime": {
-                    "remaining": int(data.get('remaining_time', 0))
+                    "remaining": int(status_data.get('remaining_time', 0))
                 },
-                "status": data.get('status', 'unknown'),
-                "progress": float(data.get('progress', 0))
+                "status": status_data.get('status', 'unknown'),
+                "progress": float(status_data.get('progress', 0))
             }
         else:
-            logger.error(f"Error getting printer status: {response.status_code}")
-            return None
+            return {
+                "temperatures": {"bed": 0, "nozzle": 0},
+                "printTime": {"remaining": 0},
+                "status": "offline",
+                "progress": 0
+            }
             
     except Exception as e:
         logger.error(f"Fehler beim Abrufen des Drucker-Status: {str(e)}")
-        return None
+        return {
+            "temperatures": {"bed": 0, "nozzle": 0},
+            "printTime": {"remaining": 0},
+            "status": "offline",
+            "progress": 0
+        }
 
 def scanNetwork():
     """Scannt nach neuen Druckern im Netzwerk via SSDP"""

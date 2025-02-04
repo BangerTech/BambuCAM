@@ -98,13 +98,9 @@ class StreamService:
                 '-i', stream_url,
                 '-vsync', '0',
                 '-copyts',
-                '-vcodec', 'libx264',  # Recodiere zu H.264
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                '-movflags', '+frag_keyframe+empty_moov+default_base_moof',
+                '-vcodec', 'copy',  # Verwende copy statt libx264 für bessere Performance
                 '-an',
-                '-f', 'mp4',
-                '-movflags', 'frag_keyframe+empty_moov+omit_tfhd_offset+faststart+separate_moof+default_base_moof+isomoof+dash',
+                '-f', 'mpegts',
                 'pipe:1'
             ]
             

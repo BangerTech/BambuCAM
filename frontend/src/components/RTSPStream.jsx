@@ -14,7 +14,9 @@ const RTSPStream = ({ printer }) => {
       try {
         // MediaSource erstellen
         mediaSourceRef.current = new MediaSource();
-        videoRef.current.src = URL.createObjectURL(mediaSourceRef.current);
+        if (videoRef.current) {
+          videoRef.current.src = URL.createObjectURL(mediaSourceRef.current);
+        }
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
@@ -69,12 +71,24 @@ const RTSPStream = ({ printer }) => {
 
     setupMediaSource();
 
+    // Cleanup
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (mediaSourceRef.current) {
-        URL.revokeObjectURL(videoRef.current.src);
+      try {
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+        if (videoRef.current && videoRef.current.src) {
+          URL.revokeObjectURL(videoRef.current.src);
+        }
+        if (sourceBufferRef.current && mediaSourceRef.current) {
+          try {
+            mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+          } catch (e) {
+            console.warn('Error removing source buffer:', e);
+          }
+        }
+      } catch (e) {
+        console.warn('Error during cleanup:', e);
       }
     };
   }, [printer]);
