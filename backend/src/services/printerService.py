@@ -5,6 +5,7 @@ import asyncio
 import os
 from datetime import datetime
 import requests
+from pathlib import Path
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -15,6 +16,9 @@ DISCOVERY_PORT = 8991
 
 # Globale Variable für gespeicherte Drucker
 stored_printers = {}
+
+# Pfad zur JSON-Datei
+PRINTERS_FILE = Path(os.getenv('PRINTERS_FILE', 'printers.json'))
 
 async def test_stream_url(url):
     """Testet ob eine Stream-URL erreichbar ist"""
@@ -45,117 +49,66 @@ async def test_stream_url(url):
         logger.debug(f"Error testing stream URL {url}: {e}")
         return False
 
-def addPrinter(printer_data):
-    """Fügt einen neuen Drucker hinzu"""
-    try:
-        printer_type = printer_data.get('type', 'BAMBULAB').upper()
-        ip = printer_data.get('ip', '')
-        name = printer_data.get('name', '')
-        
-        if not ip:
-            return {"success": False, "error": "IP address is required"}
-        if not name:
-            return {"success": False, "error": "Name is required"}
-
-        printer_id = f"printer_{ip.replace('.', '_')}_{name.replace(' ', '_')}"
-        
-        if printer_id in stored_printers:
-            return {"success": False, "error": "A printer with this IP and name already exists"}
-
-        if printer_type == 'BAMBULAB':
-            access_code = printer_data.get('accessCode')
-            if not access_code:
-                return {"success": False, "error": "Access code is required for Bambulab printers"}
-
-            # Beide Stream-URLs testen
-            stream_urls = [
-                f"rtsp://bblp:{access_code}@{ip}:8554/live",         # Original URL
-                f"rtsps://bblp:{access_code}@{ip}:322/streaming/live/1"  # Neue URL (firmware >= 01.06.00.00)
-            ]
-
-            # Teste URLs und verwende die erste funktionierende
-            working_url = None
-            for url in stream_urls:
-                if asyncio.run(test_stream_url(url)):
-                    working_url = url
-                    logger.info(f"Found working stream URL: {url}")
-                    break
-
-            if not working_url:
-                logger.warning("No working stream URL found, using original URL")
-                working_url = stream_urls[0]  # Fallback zur Original-URL
-
-            printer = {
-                'id': printer_id,
-                'name': name,
-                'ip': ip,
-                'type': 'BAMBULAB',
-                'streamUrl': working_url,
-                'accessCode': access_code,
-                'wsPort': 9100,  # Fester Port wie in den Logs
-                'status': 'online',
-                'added': datetime.now().isoformat()
-            }
-
-        elif printer_type == 'CREALITY_K1':
-            printer = {
-                'id': printer_id,
-                'name': printer_data.get('name', f'K1 ({ip})'),
-                'ip': ip,
-                'type': 'CREALITY_K1',
-                'streamUrl': f"http://{ip}:4408/webcam/?action=stream",
-                'apiUrl': f"http://{ip}:7125/printer/objects/query",
-                'wsPort': printer_data.get('wsPort', 9000),
-                'status': 'online',
-                'added': datetime.now().isoformat()
-            }
-        else:
-            return {"success": False, "error": "Invalid printer type"}
-
-        # Speichere Drucker
-        stored_printers[printer_id] = printer
-        savePrinters()
-        
-        return {
-            "success": True,
-            "printer": printer  # Enthält die ID
-        }
-
-    except Exception as e:
-        logger.error(f"Error adding printer: {e}")
-        return {"success": False, "error": str(e)}
-
-def savePrinters():
-    """Speichert die Drucker in einer JSON-Datei"""
-    try:
-        with open('printers.json', 'w') as f:
-            json.dump(stored_printers, f)
-        return True
-    except Exception as e:
-        logger.error(f"Error saving printers: {e}")
-        return False
-
-def loadPrinters():
-    """Lädt die Drucker aus der JSON-Datei"""
-    global stored_printers
-    try:
-        if os.path.exists('printers.json'):
-            with open('printers.json', 'r') as f:
-                stored_printers = json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading printers: {e}")
-        stored_printers = {}
-
-# MQTT Callbacks
-def on_connect(client, userdata, flags, rc):
-    print(f"Connected with result code {rc}")
-
-def on_message(client, userdata, msg):
-    print(f"Message received on {msg.topic}: {msg.payload}")
-
 def getPrinters():
-    """Gibt alle gespeicherten Drucker zurück"""
-    return list(stored_printers.values())
+    """Lädt die gespeicherten Drucker"""
+    try:
+        if PRINTERS_FILE.exists():
+            with open(PRINTERS_FILE, 'r') as f:
+                return json.load(f)
+        return []
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der Drucker: {str(e)}")
+        return []
+
+def savePrinters(printers):
+    """Speichert die Drucker-Liste"""
+    try:
+        with open(PRINTERS_FILE, 'w') as f:
+            json.dump(printers, f)
+    except Exception as e:
+        logger.error(f"Fehler beim Speichern der Drucker: {str(e)}")
+        raise e
+
+def getPrinterById(printer_id):
+    """Findet einen Drucker anhand seiner ID"""
+    printers = getPrinters()
+    for printer in printers:
+        if printer['id'] == printer_id:
+            return printer
+    return None
+
+def addPrinter(data):
+    """Fügt einen neuen Drucker hinzu"""
+    printers = getPrinters()
+    printers.append(data)
+    savePrinters(printers)
+    return data
+
+def removePrinter(printer_id):
+    """Entfernt einen Drucker anhand seiner ID"""
+    printers = getPrinters()
+    printers = [p for p in printers if p['id'] != printer_id]
+    savePrinters(printers)
+    return True
+
+def getPrinterStatus(printer_id):
+    """Holt den Status eines Druckers"""
+    printer = getPrinterById(printer_id)
+    if not printer:
+        raise Exception("Drucker nicht gefunden")
+        
+    # TODO: Implementiere echte Status-Abfrage
+    return {
+        "temperatures": {
+            "bed": 60.0,
+            "nozzle": 200.0
+        },
+        "printTime": {
+            "remaining": 1800
+        },
+        "status": "printing",
+        "progress": 45
+    }
 
 def scanNetwork():
     """Scannt nach neuen Druckern"""
@@ -205,43 +158,10 @@ def scanNetwork():
     finally:
         sock.close()
 
-def getPrinterStatus(printer_id):
-    """Holt den Status eines Druckers via Bambulab API"""
-    try:
-        printer = stored_printers.get(printer_id)
-        if not printer:
-            return None
-            
-        # Basis-URL und Headers
-        base_url = f"http://{printer['ip']}/api/v1"
-        headers = {
-            "Authorization": f"Bearer {printer['accessCode']}"
-        }
-        
-        # Hole Print-Job Status
-        response = requests.get(f"{base_url}/print-job", headers=headers, timeout=5)
-        data = response.json()
-        
-        # Nur die wichtigsten Daten zurückgeben
-        return {
-            "temperatures": {
-                "bed": data.get("bed_temp", 0),
-                "nozzle": data.get("nozzle_temp", 0)
-            },
-            "printTime": {
-                "remaining": data.get("remaining_time", 0)
-            },
-            "status": data.get("status", "offline"),
-            "progress": data.get("progress", 0)
-        }
-    except Exception as e:
-        logger.error(f"Error getting printer status: {e}")
-        return None
-
 def startPrint(printer_id, file_path):
     """Startet einen Druck"""
     try:
-        printer = stored_printers.get(printer_id)
+        printer = getPrinterById(printer_id)
         if not printer:
             return False
             
@@ -263,7 +183,7 @@ def startPrint(printer_id, file_path):
 def stopPrint(printer_id):
     """Stoppt den aktuellen Druck"""
     try:
-        printer = stored_printers.get(printer_id)
+        printer = getPrinterById(printer_id)
         if not printer:
             return False
             
@@ -279,17 +199,12 @@ def stopPrint(printer_id):
         logger.error(f"Error stopping print: {e}")
         return False
 
-def removePrinter(printer_id):
-    """Entfernt einen Drucker"""
-    try:
-        if printer_id in stored_printers:
-            del stored_printers[printer_id]
-            savePrinters()  # Speichere die aktualisierte Liste
-            return True
-        return False
-    except Exception as e:
-        logger.error(f"Error removing printer: {e}")
-        return False
+# MQTT Callbacks
+def on_connect(client, userdata, flags, rc):
+    print(f"Connected with result code {rc}")
+
+def on_message(client, userdata, msg):
+    print(f"Message received on {msg.topic}: {msg.payload}")
 
 # Lade gespeicherte Drucker beim Start
-loadPrinters() 
+stored_printers = getPrinters() 
