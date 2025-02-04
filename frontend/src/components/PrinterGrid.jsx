@@ -298,33 +298,29 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                           sx={{ 
                             position: 'relative',
                             height: 0,
-                            paddingBottom: '56.25%', // 16:9 Verhältnis
+                            paddingBottom: 'calc(56.25% + 80px)', // 16:9 plus 40px oben und 40px unten
                             borderRadius: '15px',
                             overflow: 'hidden',
                             background: '#000',
                             boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
                             '& > *': {
                               position: 'absolute',
-                              top: 0,
+                              top: '40px',  // Header-Höhe
                               left: 0,
                               width: '100%',
-                              height: '100%'
+                              height: 'calc(100% - 80px)'  // Gesamthöhe minus Header und Footer
                             }
                           }}
                         >
-                          {/* Header-Bereich */}
+                          {/* Header */}
                           <Box sx={{
                             position: 'absolute',
                             top: 0,
                             left: 0,
                             right: 0,
-                            height: '40px', // Reduziert von 60px auf 40px
-                            padding: '8px', // Reduziert von 10px auf 8px
+                            height: '40px',
+                            padding: '8px',
                             background: 'rgba(0,0,0,0.7)',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            color: 'white',
                             zIndex: 2
                           }}>
                             <Typography variant="subtitle1">{printer.name}</Typography>
@@ -338,34 +334,27 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                             </Box>
                           </Box>
 
-                          {/* Video-Stream im mittleren Bereich */}
+                          {/* Video Stream */}
                           <Box sx={{
                             position: 'absolute',
-                            top: '40px', // Angepasst
+                            top: '40px',
                             left: 0,
                             right: 0,
-                            bottom: '40px', // Angepasst
+                            bottom: '40px',
                             background: '#000'
                           }}>
-                            <RTSPStream 
-                              url={printer.streamUrl} 
-                              wsPort={printer.wsPort}
-                            />
+                            <RTSPStream url={printer.streamUrl} wsPort={printer.wsPort} />
                           </Box>
 
-                          {/* Footer-Bereich */}
+                          {/* Footer */}
                           <Box sx={{
                             position: 'absolute',
                             bottom: 0,
                             left: 0,
                             right: 0,
-                            height: '40px', // Reduziert von 60px auf 40px
-                            padding: '8px', // Reduziert von 10px auf 8px
+                            height: '40px',
+                            padding: '8px',
                             background: 'rgba(0,0,0,0.7)',
-                            color: 'white',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
                             zIndex: 2
                           }}>
                             <Typography variant="body2">

@@ -22,23 +22,30 @@ async def test_stream_url(url):
             'ffmpeg',
             '-rtsp_transport', 'tcp',
             '-i', url,
-            '-t', '1',  # Nur 1 Sekunde testen
+            '-t', '1',
             '-f', 'null',
             '-'
         ]
         
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        # Neue Event Loop für jeden Test
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
         try:
-            await asyncio.wait_for(process.communicate(), timeout=2.0)
-            return process.returncode == 0
-        except asyncio.TimeoutError:
-            process.kill()
-            return False
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            try:
+                await asyncio.wait_for(process.communicate(), timeout=2.0)
+                return process.returncode == 0
+            except asyncio.TimeoutError:
+                process.kill()
+                return False
+        finally:
+            loop.close()
             
     except Exception as e:
         logger.debug(f"Error testing stream URL {url}: {e}")
@@ -47,14 +54,21 @@ async def test_stream_url(url):
 def addPrinter(printer_data):
     """Fügt einen neuen Drucker hinzu"""
     try:
-        printer_type = printer_data.get('type', 'BAMBULAB').upper()  # Default zu BAMBULAB
+        printer_type = printer_data.get('type', 'BAMBULAB').upper()
         ip = printer_data.get('ip', '')
+        name = printer_data.get('name', '')
         
         if not ip:
             return {"success": False, "error": "IP address is required"}
+        if not name:
+            return {"success": False, "error": "Name is required"}
 
-        # Generiere eine eindeutige ID basierend auf IP und Name
-        printer_id = f"printer_{printer_data['ip'].replace('.', '_')}_{printer_data['name'].replace(' ', '_')}"
+        # Generiere eine eindeutige ID
+        printer_id = f"printer_{ip.replace('.', '_')}_{name.replace(' ', '_')}"
+        
+        # Prüfe ob ein Drucker mit dieser ID bereits existiert
+        if printer_id in stored_printers:
+            return {"success": False, "error": "A printer with this IP and name already exists"}
 
         if printer_type == 'BAMBULAB':
             access_code = printer_data.get('accessCode')
@@ -112,7 +126,7 @@ def addPrinter(printer_data):
         
         return {
             "success": True,
-            "printer": printer  # Drucker als Objekt, nicht als Array
+            "printer": printer  # Enthält die ID
         }
 
     except Exception as e:
