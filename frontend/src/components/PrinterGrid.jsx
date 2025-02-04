@@ -16,8 +16,11 @@ const API_URL = `http://${window.location.hostname}:4000`;
 
 console.log('Using API URL:', API_URL);  // Debug log
 
-const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
-  const [printers, setPrinters] = useState(() => {
+const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [] }) => {
+  // Stelle sicher, dass printers immer ein Array ist
+  const printerList = Array.isArray(printers) ? printers : [];
+
+  const [localPrinters, setLocalPrinters] = useState(() => {
     // Versuche gespeicherte Drucker beim Start zu laden
     const savedPrinters = localStorage.getItem('printers');
     return savedPrinters ? JSON.parse(savedPrinters) : [];
@@ -25,8 +28,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
 
   // Speichere Drucker bei Änderungen
   useEffect(() => {
-    localStorage.setItem('printers', JSON.stringify(printers));
-  }, [printers]);
+    localStorage.setItem('printers', JSON.stringify(localPrinters));
+  }, [localPrinters]);
 
   // Lade Drucker beim Start und alle 30 Sekunden neu
   useEffect(() => {
@@ -38,7 +41,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         const response = await fetch(`${API_URL}/printers`);
         const data = await response.json();
         if (isMounted) {
-          setPrinters(data);
+          setLocalPrinters(data);
         }
       } catch (error) {
         console.error('Error loading printers:', error);
@@ -48,7 +51,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
     loadPrinters();
 
     return () => {
-      isMounted = false;  // Cleanup when component unmounts
+      isMounted = false;
     };
   }, []);
 
@@ -69,7 +72,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
   useEffect(() => {
     const fetchStatus = async () => {
       const newStatus = {};
-      for (const printer of printers) {
+      for (const printer of localPrinters) {
         try {
           const response = await fetch(`${API_URL}/printers/${printer.id}/status`);
           if (response.ok) {
@@ -83,12 +86,12 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
       setPrinterStatus(newStatus);
     };
 
-    if (printers.length > 0) {
+    if (localPrinters.length > 0) {
       fetchStatus();
       const interval = setInterval(fetchStatus, 5000);
       return () => clearInterval(interval);
     }
-  }, [printers]);
+  }, [localPrinters]);
 
   const handleAddPrinter = async (selectedPrinter) => {
     try {
@@ -117,7 +120,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
 
       // Drucker wurde erfolgreich hinzugefügt
       if (data.success && data.printer) {
-        setPrinters(prev => [...prev, data.printer]);
+        setLocalPrinters(prev => [...prev, data.printer]);
         setOpen(false);
         setNewPrinter({ name: '', ip: '', accessCode: '' });
         
@@ -200,7 +203,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
       }
 
       // Aktualisiere die Drucker-Liste
-      setPrinters(prev => prev.filter(printer => printer.id !== id));
+      setLocalPrinters(prev => prev.filter(printer => printer.id !== id));
       
       setSnackbar({
         open: true,
@@ -220,11 +223,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
   const onDragEnd = (result) => {
     if (!result.destination) return;
     
-    const items = Array.from(printers);
+    const items = Array.from(localPrinters);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
     
-    setPrinters(items);
+    setLocalPrinters(items);
   };
 
   const handleClose = () => {
@@ -357,8 +360,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         <Droppable droppableId="printers">
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
-              {printers.map((printer, index) => {
-                // Stelle sicher, dass wir eine gültige ID haben
+              {(mode === 'cloud' ? printerList : localPrinters).map((printer, index) => {
                 const dragId = (printer.id || `printer-${index}`).toString();
                 
                 return (
