@@ -109,6 +109,31 @@ ws_thread = threading.Thread(target=stream_manager.start_stream_server)
 ws_thread.daemon = True
 ws_thread.start()
 
+def start_stream(printer_id, stream_url):
+    try:
+        args = [
+            "-rtsp_transport", "tcp",
+            "-rtsp_flags", "prefer_tcp",
+            "-allowed_media_types", "video",
+            "-i", stream_url,
+            "-c:v", "mpeg1video",
+            "-f", "mpegts",
+            "-b:v", "800k",
+            "pipe:1"
+        ]
+        
+        process = subprocess.Popen(
+            ["ffmpeg"] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        return process
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Starten des Streams: {e}")
+        return None
+
 def startStream(printer_id):
     try:
         path = f"/stream/{printer_id}"

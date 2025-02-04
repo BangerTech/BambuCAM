@@ -4,6 +4,7 @@ import logging
 import asyncio
 import os
 from datetime import datetime
+import requests
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -213,17 +214,86 @@ def scanNetwork():
     finally:
         sock.close()
 
-def getPrinterStatus(printer_id):
-    """Holt den Status eines Druckers"""
+def get_printer_status(printer):
+    """Holt den aktuellen Status eines Bambu Lab Druckers"""
     try:
-        printers = scanNetwork()
-        for printer in printers:
-            if printer["id"] == printer_id:
-                return printer
-        return None
+        # API URL zusammenbauen
+        api_url = f"http://{printer['ip']}/api/v1/info"
+        headers = {
+            "Authorization": f"Bearer {printer['accessCode']}"
+        }
+        
+        # API Request
+        response = requests.get(api_url, headers=headers, timeout=5)
+        if not response.ok:
+            return {
+                "status": "offline",
+                "temperatures": {"bed": 0, "nozzle": 0},
+                "progress": 0,
+                "printTime": {"remaining": 0}
+            }
+
+        data = response.json()
+        
+        # Extrahiere die relevanten Daten
+        status_data = {
+            "status": data.get("print", {}).get("status", "offline"),
+            "temperatures": {
+                "bed": float(data.get("bed_temp", 0)),
+                "nozzle": float(data.get("nozzle_temp", 0))
+            },
+            "progress": float(data.get("print", {}).get("progress", 0)),
+            "printTime": {
+                "remaining": int(data.get("print", {}).get("remaining_time", 0))
+            }
+        }
+
+        # Status-Mapping
+        status_mapping = {
+            "RUNNING": "printing",
+            "IDLE": "idle",
+            "STANDBY": "standby",
+            "FINISH": "idle"
+        }
+        status_data["status"] = status_mapping.get(status_data["status"], "offline")
+
+        return status_data
+
     except Exception as e:
-        print(f"Error getting printer status: {str(e)}")
-        return None
+        logger.error(f"Fehler beim Abrufen des Drucker-Status: {e}")
+        return {
+            "status": "error",
+            "temperatures": {"bed": 0, "nozzle": 0},
+            "progress": 0,
+            "printTime": {"remaining": 0}
+        }
+
+def getPrinterStatus(printer_id):
+    """Gibt den Status eines bestimmten Druckers zurück"""
+    try:
+        printer = stored_printers.get(printer_id)
+        if not printer:
+            raise Exception(f"Printer {printer_id} not found")
+
+        # Hole Live-Status vom Drucker
+        status = get_printer_status(printer)
+        
+        # Aktualisiere den gespeicherten Status
+        printer['status'] = status['status']
+        printer['temperatures'] = status['temperatures']
+        printer['progress'] = status['progress']
+        printer['printTime'] = status['printTime']
+        
+        return status
+
+    except Exception as e:
+        logger.error(f"Error getting printer status: {e}")
+        return {
+            "status": "error",
+            "temperatures": {"bed": 0, "nozzle": 0},
+            "progress": 0,
+            "printTime": {"remaining": 0}
+        }
 
 def removePrinter(printer_id):
     """Entfernt einen Drucker"""
