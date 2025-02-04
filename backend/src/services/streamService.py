@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 class StreamService:
     def __init__(self):
         self.active_streams = {}
+        self.ws_servers = {}  # Speichere WebSocket-Server pro Port
         
     async def stream_handler(self, websocket, path):
         """Behandelt WebSocket-Verbindungen"""
@@ -49,6 +50,9 @@ class StreamService:
             
     def start_websocket_server(self, port):
         """Startet den WebSocket-Server"""
+        if port in self.ws_servers:
+            return  # Server läuft bereits
+            
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
@@ -58,6 +62,11 @@ class StreamService:
             port,
             ping_interval=None
         )
+        
+        self.ws_servers[port] = {
+            'server': start_server,
+            'loop': loop
+        }
         
         loop.run_until_complete(start_server)
         loop.run_forever()
@@ -106,17 +115,19 @@ class StreamService:
             try:
                 stream = self.active_streams[printer_id]
                 stream['process'].terminate()
+                
+                # Stoppe auch den WebSocket-Server
+                port = stream['port']
+                if port in self.ws_servers:
+                    self.ws_servers[port]['loop'].stop()
+                    del self.ws_servers[port]
+                    
                 del self.active_streams[printer_id]
             except Exception as e:
                 logger.error(f"Error stopping stream: {e}")
 
 # Globale Stream-Service Instanz
 stream_service = StreamService()
-
-# Starte WebSocket-Server in einem separaten Thread
-ws_thread = threading.Thread(target=stream_service.start_websocket_server)
-ws_thread.daemon = True
-ws_thread.start()
 
 # Aktive Streams und deren Prozesse
 active_streams = {}
