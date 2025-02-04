@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Bambu Lab Ports
 MQTT_PORT = 8883
-DISCOVERY_PORT = 8991
+DISCOVERY_PORT = 2023
 
 # Globale Variable für gespeicherte Drucker
 stored_printers = {}
@@ -167,14 +167,9 @@ def scanNetwork():
         
         # Bambu Lab Discovery Message
         discovery_msg = {
-            "command": "discover",
+            "command": "info",
             "sequence_id": 0,
-            "parameters": {
-                "filter": {
-                    "device_type": "3dp",
-                    "sub_type": ["3dp"]
-                }
-            }
+            "parameters": {}
         }
         
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

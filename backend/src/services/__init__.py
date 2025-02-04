@@ -43,6 +43,10 @@ def addPrinter(data):
 def startStream(printer_id, stream_url=None):
     """Startet einen neuen RTSP zu WebSocket Stream"""
     try:
+        # Stoppe existierenden Stream falls vorhanden
+        stopStream(printer_id)
+        
+        # Finde freien Port
         port = getNextPort()
         
         if not stream_url:
@@ -51,9 +55,6 @@ def startStream(printer_id, stream_url=None):
                 raise Exception("Drucker nicht gefunden")
             stream_url = printer['streamUrl']
         
-        # Stoppe existierenden Stream falls vorhanden
-        stopStream(printer_id)
-        
         # Exakt die gleichen Parameter wie im funktionierenden Test
         command = [
             'ffmpeg',
@@ -61,8 +62,7 @@ def startStream(printer_id, stream_url=None):
             '-i', stream_url,
             '-c:v', 'copy',
             '-f', 'mpegts',
-            '-listen', '1',  # Wichtig für HTTP-Server
-            f'http://0.0.0.0:{port}'
+            f'pipe:1'  # Stream zur stdout statt HTTP
         ]
         
         logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
@@ -71,15 +71,15 @@ def startStream(printer_id, stream_url=None):
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            universal_newlines=True
+            universal_newlines=False  # Binary mode für Video
         )
         
         # Warte kurz und prüfe ob der Prozess noch läuft
-        time.sleep(2)
+        time.sleep(1)
         if process.poll() is not None:
             # Prozess ist bereits beendet - hole Fehlerausgabe
             _, stderr = process.communicate()
-            logger.error(f"FFmpeg process failed: {stderr}")
+            logger.error(f"FFmpeg process failed: {stderr.decode()}")
             raise Exception("FFmpeg process failed to start")
             
         # Speichere Prozess-ID
