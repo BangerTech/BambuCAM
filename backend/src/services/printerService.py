@@ -121,8 +121,8 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Drucker nicht gefunden")
             
-        # Bambu Lab API Endpoint (HTTPS)
-        url = f"https://{printer['ip']}:8989/api/info"
+        # Bambu Lab API Endpoint (HTTP)
+        url = f"http://{printer['ip']}:8989/api/info"
         logger.info(f"Requesting printer status from: {url}")
         
         response = requests.get(
@@ -130,11 +130,9 @@ def getPrinterStatus(printer_id):
             headers={
                 "Authorization": f"Bearer {printer['accessCode']}"
             },
-            verify=False,  # Selbst-signierte Zertifikate erlauben
             timeout=5
         )
         
-        logger.info(f"Printer API Response: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             logger.info(f"Printer data: {data}")
@@ -150,17 +148,12 @@ def getPrinterStatus(printer_id):
                 "progress": float(data.get('progress', 0))
             }
         else:
-            raise Exception(f"API Error: {response.status_code}")
+            logger.error(f"Error getting printer status: {response.status_code}")
+            return None
             
     except Exception as e:
         logger.error(f"Fehler beim Abrufen des Drucker-Status: {str(e)}")
-        # Fallback-Werte
-        return {
-            "temperatures": {"bed": 0, "nozzle": 0},
-            "printTime": {"remaining": 0},
-            "status": "offline",
-            "progress": 0
-        }
+        return None
 
 def scanNetwork():
     """Scannt nach neuen Druckern im Netzwerk via SSDP"""
@@ -218,10 +211,12 @@ def scanNetwork():
                         
                         # Suche nach Namen und anderen Details
                         for line in lines:
-                            if 'LOCATION:' in line:
-                                printer_info['location'] = line.split(':', 1)[1].strip()
-                            elif 'SERVER:' in line:
+                            if 'DevName.bambu.com:' in line:
                                 printer_info['name'] = line.split(':', 1)[1].strip()
+                            elif 'DevModel.bambu.com:' in line:
+                                printer_info['model'] = line.split(':', 1)[1].strip()
+                            elif 'DevVersion.bambu.com:' in line:
+                                printer_info['version'] = line.split(':', 1)[1].strip()
                         
                         if not printer_info.get('name'):
                             printer_info['name'] = f"Bambu Lab Printer {addr[0]}"

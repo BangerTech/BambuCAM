@@ -14,6 +14,7 @@ from .printerService import stored_printers
 import logging
 from pathlib import Path
 from threading import Thread
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +35,33 @@ class StreamService:
             stream = self.active_streams[printer_id]
             process = stream['process']
             
+            logger.info(f"Client connected to stream {printer_id}")
+            
             # Lese FFMPEG Output und sende an WebSocket
             while True:
-                data = await asyncio.get_event_loop().run_in_executor(
-                    None, process.stdout.read, 4096
-                )
-                if not data:
+                try:
+                    # Lese Chunks von 4KB
+                    data = await asyncio.get_event_loop().run_in_executor(
+                        None, process.stdout.read, 4096
+                    )
+                    
+                    if not data:
+                        logger.warning("FFmpeg stream ended")
+                        break
+                        
+                    await websocket.send(data)
+                    
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info("Client disconnected")
                     break
-                await websocket.send(data)
+                except Exception as e:
+                    logger.error(f"Error in stream handler: {e}")
+                    break
                 
-        except websockets.exceptions.ConnectionClosed:
-            logger.info("WebSocket connection closed")
         except Exception as e:
             logger.error(f"Error in stream handler: {e}")
+        finally:
+            logger.info("Stream handler finished")
             
     def start_websocket_server(self, port):
         """Startet den WebSocket-Server"""
@@ -74,14 +89,23 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
+            # FFmpeg Befehl für RTSP zu MPEG-TS Konvertierung
             command = [
                 'ffmpeg',
+                '-fflags', 'nobuffer',
+                '-flags', 'low_delay',
                 '-rtsp_transport', 'tcp',
                 '-i', stream_url,
-                '-c:v', 'copy',
+                '-vsync', '0',
+                '-copyts',
+                '-vcodec', 'copy',
+                '-movflags', 'frag_keyframe+empty_moov',
+                '-an',
                 '-f', 'mpegts',
                 'pipe:1'
             ]
+            
+            logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
             
             process = subprocess.Popen(
                 command,
@@ -90,18 +114,26 @@ class StreamService:
                 bufsize=10**8
             )
             
+            # Warte kurz und prüfe ob der Prozess läuft
+            time.sleep(1)
+            if process.poll() is not None:
+                _, stderr = process.communicate()
+                logger.error(f"FFmpeg process failed: {stderr.decode()}")
+                raise Exception("FFmpeg process failed to start")
+            
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port
             }
             
-            # Starte WebSocket-Server in separatem Thread
-            ws_thread = Thread(
-                target=self.start_websocket_server,
-                args=(port,)
-            )
-            ws_thread.daemon = True
-            ws_thread.start()
+            # Starte WebSocket-Server wenn noch nicht gestartet
+            if port not in self.ws_servers:
+                ws_thread = Thread(
+                    target=self.start_websocket_server,
+                    args=(port,)
+                )
+                ws_thread.daemon = True
+                ws_thread.start()
             
             return port
             
