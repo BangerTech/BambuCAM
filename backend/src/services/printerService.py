@@ -7,6 +7,7 @@ from datetime import datetime
 import requests
 from pathlib import Path
 import time
+import uuid
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -118,8 +119,8 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Drucker nicht gefunden")
             
-        # Bambu Lab API Endpoint
-        url = f"http://{printer['ip']}:8989/api/info"
+        # Bambu Lab API Endpoint (HTTPS)
+        url = f"https://{printer['ip']}:8989/api/info"
         logger.info(f"Requesting printer status from: {url}")
         
         response = requests.get(
@@ -127,6 +128,7 @@ def getPrinterStatus(printer_id):
             headers={
                 "Authorization": f"Bearer {printer['accessCode']}"
             },
+            verify=False,  # Selbst-signierte Zertifikate erlauben
             timeout=5
         )
         
@@ -163,43 +165,36 @@ def scanNetwork():
     try:
         logger.info("Starting network scan for printers...")
         
-        # Broadcast Message für BambuLab Discovery
+        # Bambu Lab Discovery Message
         discovery_msg = {
-            "sequence_id": "1",
-            "command": "get_version",
-            "parameters": "{\"dev_type\":\"printer\"}"
+            "command": "discover",
+            "sequence_id": 0,
+            "parameters": {
+                "filter": {
+                    "device_type": "3dp",
+                    "sub_type": ["3dp"]
+                }
+            }
         }
         
-        # UDP Socket für Discovery
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(2.0)
-        
-        # Bind to specific port
         sock.bind(('0.0.0.0', 0))
         
         message = json.dumps(discovery_msg)
         logger.info(f"Sending discovery message: {message}")
         
-        # Sende mehrmals an verschiedene Ports
-        discovery_ports = [DISCOVERY_PORT, 8989, 8990, 8988]
-        for port in discovery_ports:
-            for _ in range(3):  # Sende 3 Mal pro Port
-                try:
-                    sock.sendto(message.encode(), ('255.255.255.255', port))
-                    logger.info(f"Sent discovery message to port {port}")
-                except Exception as e:
-                    logger.error(f"Error sending to port {port}: {e}")
-                time.sleep(0.1)  # Kleine Pause zwischen den Versuchen
+        # Sende an den Discovery-Port
+        sock.sendto(message.encode(), ('255.255.255.255', DISCOVERY_PORT))
         
         # Sammle Antworten
         printers = []
-        start_time = time.time()
+        sock.settimeout(5.0)
         
-        while time.time() - start_time < 10:  # 10 Sekunden Scan-Zeit
-            try:
-                data, addr = sock.recvfrom(2048)  # Größerer Buffer
+        try:
+            while True:
+                data, addr = sock.recvfrom(2048)
                 logger.info(f"Received response from {addr}: {data}")
                 
                 try:
@@ -207,24 +202,21 @@ def scanNetwork():
                     logger.info(f"Parsed response: {response}")
                     
                     printer_info = {
-                        "id": response.get("dev_id", f"printer_{len(printers) + 1}"),
-                        "name": response.get("dev_name", f"Bambu Lab Printer {addr[0]}"),
+                        "id": str(uuid.uuid4()),
+                        "name": response.get("name", f"Bambu Lab Printer {addr[0]}"),
                         "ip": addr[0],
                         "type": "bambulab",
                         "status": "online"
                     }
                     
-                    if not any(p['ip'] == addr[0] for p in printers):
-                        printers.append(printer_info)
-                        logger.info(f"Found printer: {printer_info}")
+                    printers.append(printer_info)
                     
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Received invalid JSON from {addr}: {e}")
-                    continue
+                    logger.warning(f"Invalid JSON from {addr}: {e}")
                     
-            except socket.timeout:
-                continue
-        
+        except socket.timeout:
+            pass
+            
         logger.info(f"Scan complete. Found {len(printers)} printers")
         return printers
         

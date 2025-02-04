@@ -61,7 +61,8 @@ def startStream(printer_id, stream_url=None):
             '-i', stream_url,
             '-c:v', 'copy',
             '-f', 'mpegts',
-            f'http://0.0.0.0:{port}'  # Wichtig: 0.0.0.0 statt localhost
+            '-listen', '1',  # Wichtig für HTTP-Server
+            f'http://0.0.0.0:{port}'
         ]
         
         logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
