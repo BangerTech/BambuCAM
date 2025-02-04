@@ -19,13 +19,11 @@ console.log('Using API URL:', API_URL);  // Debug log
 const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [] }) => {
   // Stelle sicher, dass printers immer ein Array ist
   const printerList = Array.isArray(printers) ? printers : [];
+  const [localPrinters, setLocalPrinters] = useState([]);
 
-  const [localPrinters, setLocalPrinters] = useState(() => {
-    // Versuche gespeicherte Drucker beim Start zu laden
-    const savedPrinters = localStorage.getItem('printers');
-    return savedPrinters ? JSON.parse(savedPrinters) : [];
-  });
-
+  // Bestimme welche Drucker angezeigt werden sollen
+  const displayPrinters = mode === 'cloud' ? printerList : localPrinters;
+  
   // Speichere Drucker bei Änderungen
   useEffect(() => {
     localStorage.setItem('printers', JSON.stringify(localPrinters));
@@ -360,7 +358,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         <Droppable droppableId="printers">
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
-              {(mode === 'cloud' ? printerList : localPrinters).map((printer, index) => {
+              {Array.isArray(displayPrinters) && displayPrinters.map((printer, index) => {
                 const dragId = (printer.id || `printer-${index}`).toString();
                 
                 return (

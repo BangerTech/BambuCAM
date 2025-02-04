@@ -1,1 +1,10 @@
-{}
+[
+  {
+    "id": "4136fb38-d66d-4595-8c94-8c7e609281c4",
+    "name": "Bambu",
+    "ip": "192.168.2.83",
+    "accessCode": "eaf7b7c4",
+    "streamUrl": "rtsps://bblp:eaf7b7c4@192.168.2.83:322/streaming/live/1",
+    "wsPort": 9000
+  }
+]

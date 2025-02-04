@@ -1,4 +1,4 @@
-from .printerService import scanNetwork, getPrinterStatus, addPrinter, getPrinters, removePrinter, getPrinterById
+from .printerService import scanNetwork, getPrinterStatus, getPrinters, removePrinter, getPrinterById, savePrinters
 from .streamService import startStream, stopStream, getNextPort
 import uuid
 import subprocess
@@ -6,9 +6,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Globale Variable für aktive Streams
+active_streams = {}
+
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
     try:
+        # Erstelle Drucker-Objekt mit allen nötigen Daten
         printer = {
             'id': str(uuid.uuid4()),  # Eindeutige ID
             'name': data['name'],
@@ -23,9 +27,10 @@ def addPrinter(data):
         if not testStream:
             raise Exception("Konnte keine Verbindung zum Drucker herstellen")
             
-        printers = getPrinters()
-        printers.append(printer)
-        savePrinters(printers)
+        # Hole aktuelle Drucker-Liste und füge neuen Drucker hinzu
+        current_printers = getPrinters()
+        current_printers.append(printer)
+        savePrinters(current_printers)
         
         return printer
         
@@ -36,13 +41,13 @@ def addPrinter(data):
 def startStream(printer_id, stream_url=None):
     """Startet einen neuen RTSP zu WebSocket Stream"""
     try:
+        port = getNextPort()  # Hole Port zuerst
+        
         if not stream_url:
             printer = getPrinterById(printer_id)
             if not printer:
                 raise Exception("Drucker nicht gefunden")
             stream_url = printer['streamUrl']
-            
-        port = printer.get('wsPort', getNextPort())
         
         # Stoppe existierenden Stream falls vorhanden
         stopStream(printer_id)

@@ -54,7 +54,9 @@ def getPrinters():
     try:
         if PRINTERS_FILE.exists():
             with open(PRINTERS_FILE, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Stelle sicher, dass wir eine Liste zurückgeben
+                return data if isinstance(data, list) else []
         return []
     except Exception as e:
         logger.error(f"Fehler beim Laden der Drucker: {str(e)}")
@@ -63,8 +65,12 @@ def getPrinters():
 def savePrinters(printers):
     """Speichert die Drucker-Liste"""
     try:
+        # Stelle sicher, dass wir eine Liste speichern
+        if not isinstance(printers, list):
+            printers = list(printers.values()) if isinstance(printers, dict) else []
+            
         with open(PRINTERS_FILE, 'w') as f:
-            json.dump(printers, f)
+            json.dump(printers, f, indent=2)
     except Exception as e:
         logger.error(f"Fehler beim Speichern der Drucker: {str(e)}")
         raise e
@@ -72,24 +78,37 @@ def savePrinters(printers):
 def getPrinterById(printer_id):
     """Findet einen Drucker anhand seiner ID"""
     printers = getPrinters()
-    for printer in printers:
-        if printer['id'] == printer_id:
-            return printer
+    if isinstance(printers, list):
+        for printer in printers:
+            if printer.get('id') == printer_id:
+                return printer
     return None
 
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
-    printers = getPrinters()
-    printers.append(data)
-    savePrinters(printers)
-    return data
+    try:
+        printers = getPrinters()
+        if not isinstance(printers, list):
+            printers = []
+        printers.append(data)
+        savePrinters(printers)
+        return data
+    except Exception as e:
+        logger.error(f"Fehler beim Hinzufügen des Druckers: {str(e)}")
+        raise e
 
 def removePrinter(printer_id):
     """Entfernt einen Drucker anhand seiner ID"""
-    printers = getPrinters()
-    printers = [p for p in printers if p['id'] != printer_id]
-    savePrinters(printers)
-    return True
+    try:
+        printers = getPrinters()
+        if isinstance(printers, list):
+            printers = [p for p in printers if p.get('id') != printer_id]
+            savePrinters(printers)
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Fehler beim Entfernen des Druckers: {str(e)}")
+        return False
 
 def getPrinterStatus(printer_id):
     """Holt den Status eines Druckers"""
