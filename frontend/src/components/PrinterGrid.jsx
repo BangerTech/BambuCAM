@@ -66,6 +66,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     message: '',
     severity: 'success' // oder 'error'
   });
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [scannedPrinters, setScannedPrinters] = useState([]);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -142,36 +144,19 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   const handleScan = async () => {
     try {
-      console.log('Starte Scan...');
       setIsScanning(true);
+      console.log('Starte Scan...');
       const response = await fetch(`${API_URL}/scan`);
       console.log('Scan Response:', response);
-      
-      if (!response.ok) {
-        throw new Error(`Scan failed with status ${response.status}`);
-      }
       
       const data = await response.json();
       console.log('Gefundene Drucker:', data);
       
-      if (Array.isArray(data)) {
-        setFoundPrinters(data);
-      } else if (data.mockPrinters) {
-        // Fallback zu Mock-Printern wenn der Scan fehlschlägt
-        setFoundPrinters(data.mockPrinters);
-        setSnackbar({
-          open: true,
-          message: 'Scan fehlgeschlagen, zeige Mock-Drucker',
-          severity: 'warning'
-        });
+      if (data && Array.isArray(data.printers)) {
+        setScannedPrinters(data.printers);
       }
     } catch (error) {
       console.error('Fehler beim Scannen:', error);
-      setSnackbar({
-        open: true,
-        message: `Scan-Fehler: ${error.message}`,
-        severity: 'error'
-      });
     } finally {
       setIsScanning(false);
     }
@@ -307,6 +292,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   };
 
+  const handleAddScannedPrinter = async (printer) => {
+    try {
+      const printerData = {
+        name: printer.name,
+        ip: printer.ip,
+        accessCode: '', // Muss vom Benutzer eingegeben werden
+      };
+      
+      // Öffne Dialog für Access Code
+      const accessCode = window.prompt('Bitte geben Sie den Access Code ein:');
+      if (!accessCode) return;
+      
+      printerData.accessCode = accessCode;
+      
+      await handleAddPrinter(printerData);
+    } catch (error) {
+      console.error('Fehler beim Hinzufügen des gescannten Druckers:', error);
+    }
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ 
@@ -419,11 +424,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                             bottom: '40px',
                             background: '#000'
                           }}>
-                            <RTSPStream 
-                              url={printer.streamUrl} 
-                              wsPort={printer.wsPort}
-                              printerId={printer.id}
-                            />
+                            <RTSPStream printer={printer} />
                           </Box>
 
                           {/* Footer */}
@@ -600,15 +601,15 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           </button>
 
           {/* Gefundene Drucker */}
-          {foundPrinters.length > 0 && (
+          {scannedPrinters.length > 0 && (
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
                 Gefundene Drucker:
               </Typography>
               <List>
-                {foundPrinters.map((printer) => (
+                {scannedPrinters.map((printer) => (
                   <ListItem 
-                    key={printer.ip}
+                    key={printer.id}
                     button
                     sx={{
                       border: '1px solid #e0e0e0',
@@ -619,7 +620,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                       setNewPrinter({
                         name: printer.name,
                         ip: printer.ip,
-                        accessCode: printer.isMockPrinter ? '12345678' : ''
+                        accessCode: ''
                       });
                     }}
                   >
@@ -627,13 +628,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                       primary={printer.name}
                       secondary={`${printer.ip} (${printer.model})`}
                     />
-                    {printer.isMockPrinter && (
-                      <Chip 
-                        label="Mock Printer"
-                        size="small"
-                        color="secondary"
-                      />
-                    )}
                   </ListItem>
                 ))}
               </List>
