@@ -5,6 +5,7 @@ import { lightTheme, darkTheme } from './theme';
 import { Box } from '@mui/material';
 import styled from '@emotion/styled';
 import CloudLoginDialog from './components/CloudLoginDialog';
+import CloudPrinterDialog from './components/CloudPrinterDialog';
 
 const PageBackground = styled(Box)(({ theme }) => ({
   position: 'relative',
@@ -56,6 +57,9 @@ function App() {
   const [cloudPrinters, setCloudPrinters] = useState([]);
   const [lanPrinters, setLanPrinters] = useState([]);
   const [addPrinterDialogOpen, setAddPrinterDialogOpen] = useState(false);
+  const [cloudPrinterDialogOpen, setCloudPrinterDialogOpen] = useState(false);
+  const [availableCloudPrinters, setAvailableCloudPrinters] = useState([]);
+  const [selectedCloudPrinters, setSelectedCloudPrinters] = useState([]);
 
   // Lade LAN Drucker
   useEffect(() => {
@@ -83,21 +87,49 @@ function App() {
   };
 
   // Mode-Änderung mit localStorage
-  const handleModeChange = (newMode) => {
+  const handleModeChange = async (newMode) => {
     if (newMode === 'cloud') {
       const token = localStorage.getItem('cloudToken');
       if (token) {
+        // Wenn Token existiert, Cloud-Drucker laden
         setMode('cloud');
         localStorage.setItem('mode', 'cloud');
-        // Cloud-Drucker laden
         loadCloudPrinters(token);
       } else {
+        // Login-Dialog öffnen, aber noch nicht auf Cloud wechseln
         setLoginOpen(true);
+        
+        // Wenn Login fehlschlägt, bleibt der Switch auf LAN
+        try {
+          await new Promise((resolve, reject) => {
+            const cleanup = () => {
+              window.removeEventListener('cloud-login-success', handleSuccess);
+              window.removeEventListener('cloud-login-failed', handleFailure);
+            };
+            
+            const handleSuccess = () => {
+              cleanup();
+              setMode('cloud'); // Erst nach erfolgreichem Login auf Cloud setzen
+              resolve();
+            };
+            
+            const handleFailure = () => {
+              cleanup();
+              reject();
+            };
+            
+            window.addEventListener('cloud-login-success', handleSuccess);
+            window.addEventListener('cloud-login-failed', handleFailure);
+          });
+        } catch (error) {
+          // Bei Login-Fehler bleibt es bei LAN
+          setMode('lan');
+          localStorage.setItem('mode', 'lan');
+        }
       }
     } else {
       setMode('lan');
       localStorage.setItem('mode', 'lan');
-      // Optional: Cloud-Token löschen beim Wechsel zu LAN
       localStorage.removeItem('cloudToken');
     }
   };
@@ -135,29 +167,31 @@ function App() {
   const handleCloudLogin = async (loginData) => {
     try {
       if (loginData.success && loginData.token) {
-        // Token speichern
         localStorage.setItem('cloudToken', loginData.token);
         
-        // Hole Cloud-Drucker
+        // Hole verfügbare Cloud-Drucker
         const response = await fetch(`${API_URL}/api/cloud/printers`, {
           headers: {
             'Authorization': `Bearer ${loginData.token}`
           }
         });
+        
         if (response.ok) {
           const printers = await response.json();
-          setCloudPrinters(printers);
-          setMode('cloud');
-          localStorage.setItem('mode', 'cloud'); // Mode speichern
+          setAvailableCloudPrinters(printers);
+          localStorage.setItem('mode', 'cloud');
           setLoginOpen(false);
+          setCloudPrinterDialogOpen(true);
+          // Login erfolgreich Event
+          window.dispatchEvent(new Event('cloud-login-success'));
         } else {
           throw new Error('Fehler beim Laden der Cloud-Drucker');
         }
-      } else {
-        throw new Error(loginData.error || 'Login fehlgeschlagen');
       }
     } catch (error) {
       console.error('Cloud login error:', error);
+      // Login fehlgeschlagen Event
+      window.dispatchEvent(new Event('cloud-login-failed'));
       throw error;
     }
   };
@@ -165,6 +199,11 @@ function App() {
   const handleAddPrinter = () => {
     // Öffne den AddPrinterDialog
     setAddPrinterDialogOpen(true);
+  };
+
+  const handleAddCloudPrinter = (printer) => {
+    setSelectedCloudPrinters(prev => [...prev, printer]);
+    setCloudPrinters(prev => [...prev, printer]);
   };
 
   return (
@@ -178,6 +217,8 @@ function App() {
             isDarkMode={isDarkMode}
             mode={mode}
             onModeChange={handleModeChange}
+            printers={mode === 'cloud' ? cloudPrinters : lanPrinters}
+            onAddPrinter={handleAddPrinter}
           />
         </ContentWrapper>
       </PageBackground>
@@ -186,6 +227,17 @@ function App() {
         open={isLoginOpen}
         onClose={() => setLoginOpen(false)}
         onLogin={handleCloudLogin}
+      />
+
+      {/* Cloud Drucker Auswahl Dialog */}
+      <CloudPrinterDialog
+        open={cloudPrinterDialogOpen}
+        onClose={() => setCloudPrinterDialogOpen(false)}
+        printers={availableCloudPrinters}
+        onAddPrinter={(printer) => {
+          handleAddCloudPrinter(printer);
+          setCloudPrinterDialogOpen(false);
+        }}
       />
     </ThemeProvider>
   );

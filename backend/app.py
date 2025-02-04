@@ -142,7 +142,6 @@ def cloud_login():
     try:
         data = request.get_json()
         logger.info(f"Login attempt for email: {data.get('email')}")
-        logger.info(f"Request data: {data}")
         
         result = cloud_service.login(
             email=data.get('email'),
@@ -153,6 +152,10 @@ def cloud_login():
         
         if result.get('success'):
             return jsonify(result), 200
+            
+        if result.get('needs_verification'):
+            # 2FA wird benötigt - kein Fehler, sondern erwartetes Verhalten
+            return jsonify(result), 200  # Ändern von 401 auf 200
             
         logger.error(f"Login failed with error: {result.get('error')}")
         return jsonify(result), 401

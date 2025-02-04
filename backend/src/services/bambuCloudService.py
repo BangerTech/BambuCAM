@@ -90,26 +90,27 @@ class BambuCloudService:
             return {"success": False, "error": error_msg}
 
     def get_cloud_printers(self):
-        """Get a list of devices associated with the account."""
+        """Get a list of available cloud devices."""
         if not self.token:
             return []
-            
+        
         try:
             response = self.session.get(
-                "https://cloud.bambulab.com/api/user-printers"  # <-- Geändert
+                f"{self.base_url}/v1/iot-service/api/user/bind"
             )
             
             logger.info(f"Get cloud printers response: {response.status_code} - {response.text}")
             
             if response.status_code == 200:
-                devices = response.json()
+                devices = response.json().get("devices", [])
                 return [{
-                    "name": device["name"],
-                    "online": device["online"],
-                    "id": device["dev_id"],
-                    "status": device["print_status"],
-                    "model": device["dev_model_name"],
-                    "streamUrl": f"https://api.bambulab.com/{self.region.value}/devices/{device['dev_id']}/stream"
+                    "id": device["id"],
+                    "name": device.get("name", "Unnamed Printer"),
+                    "model": device.get("dev_model", "Unknown Model"),
+                    "status": device.get("print_status", "unknown"),
+                    "online": device.get("status") == "online",
+                    "streamUrl": f"rtsps://bblp:{device.get('dev_access_code')}@{device.get('dev_ip')}:322/streaming/live/1",
+                    "isCloud": True  # Markierung für Cloud-Drucker
                 } for device in devices]
                 
             return []

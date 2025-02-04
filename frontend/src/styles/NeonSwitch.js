@@ -5,6 +5,8 @@ const ToggleContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-content: center;
+  width: 200px;
 `;
 
 const Label = styled.span`
@@ -50,22 +52,6 @@ const Toggle = styled.div`
   position: relative;
   overflow: hidden;
   cursor: pointer;
-
-  &.active {
-    background: ${({ theme }) => 
-      theme.palette.mode === 'dark' ? 'black' : 'white'
-    };
-    
-    .knob {
-      transform: translateX(25px);
-      box-shadow: ${({ theme }) => 
-        theme.palette.mode === 'dark'
-          ? '0 0 10px #00ffff'
-          : '0 0 10px rgba(0, 128, 128, 0.5)'
-      };
-      animation: bounce 0.3s ease-in-out;
-    }
-  }
 `;
 
 const Knob = styled.div`
@@ -77,24 +63,27 @@ const Knob = styled.div`
   border-radius: 50%;
   position: relative;
   z-index: 1;
+  transform: translateX(${props => props.checked ? '25px' : '0'});
   transition: transform 0.5s ease, box-shadow 0.3s ease;
+  box-shadow: ${({ theme, checked }) => 
+    checked && theme.palette.mode === 'dark'
+      ? '0 0 10px #00ffff'
+      : 'none'
+  };
 
   @keyframes bounce {
     50% {
-      transform: translateX(25px) scale(1.1);
+      transform: translateX(${props => props.checked ? '25px' : '0'}) scale(1.1);
     }
   }
 `;
 
-export const NeonSwitch = ({ checked, onChange, theme }) => {
+export const NeonSwitch = ({ checked, onChange }) => {
   return (
     <ToggleContainer>
       <Label active={!checked}>LAN</Label>
-      <Toggle 
-        className={checked ? 'active' : ''} 
-        onClick={() => onChange({ target: { checked: !checked }})}
-      >
-        <Knob />
+      <Toggle onClick={() => onChange({ target: { checked: !checked }})}>
+        <Knob checked={checked} />
       </Toggle>
       <Label active={checked}>CLOUD</Label>
     </ToggleContainer>

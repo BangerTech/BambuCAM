@@ -331,20 +331,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         />
 
         {/* Cloud/LAN Switch in der Mitte */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center',  // Zentriert den Switch-Container
+          flex: 1  // Nimmt den verfügbaren Platz ein
+        }}>
           <NeonSwitch
             checked={mode === 'cloud'}
             onChange={(e) => onModeChange(e.target.checked ? 'cloud' : 'lan')}
           />
         </div>
         
-        {/* Neon Button */}
-        <button 
-          className="neon-pulse-button"
-          onClick={() => setOpen(true)}
-        >
-          +<span>Drucker hinzufügen</span>
-        </button>
+        {/* Neon Button nur im LAN-Mode anzeigen */}
+        {mode === 'lan' && (
+          <button 
+            className="neon-pulse-button"
+            onClick={() => setOpen(true)}
+          >
+            +<span>Drucker hinzufügen</span>
+          </button>
+        )}
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
