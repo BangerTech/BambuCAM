@@ -54,19 +54,12 @@ def startStream(printer_id, stream_url=None):
         # Stoppe existierenden Stream falls vorhanden
         stopStream(printer_id)
         
-        # FFmpeg Parameter für BambuLab RTSPS Stream
+        # Vereinfachte FFmpeg Parameter, die nachweislich funktionieren
         command = [
             'ffmpeg',
-            '-fflags', 'nobuffer',
-            '-flags', 'low_delay',
-            '-strict', 'experimental',
             '-rtsp_transport', 'tcp',
             '-i', stream_url,
-            '-vsync', '0',
-            '-copyts',
-            '-vcodec', 'copy',
-            '-movflags', 'frag_keyframe+empty_moov',
-            '-an',
+            '-c:v', 'copy',  # Kopiere Video ohne Neucodierung
             '-f', 'mpegts',
             f'http://localhost:{port}'
         ]

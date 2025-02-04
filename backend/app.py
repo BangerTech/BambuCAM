@@ -174,5 +174,37 @@ def cloud_printers():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/debug/stream/<printer_id>', methods=['GET'])
+def debug_stream(printer_id):
+    """Debug-Endpunkt für Stream-Informationen"""
+    try:
+        printer = getPrinterById(printer_id)
+        if not printer:
+            return jsonify({"error": "Printer not found"}), 404
+            
+        # Teste RTSP-Verbindung
+        stream_url = printer['streamUrl']
+        result = {
+            "printer_id": printer_id,
+            "stream_url": stream_url,
+            "ffmpeg_running": False,
+            "port": None
+        }
+        
+        if printer_id in active_streams:
+            stream_info = active_streams[printer_id]
+            result["ffmpeg_running"] = stream_info['process'].poll() is None
+            result["port"] = stream_info['port']
+            
+            if result["ffmpeg_running"]:
+                # Hole FFmpeg Output
+                _, stderr = stream_info['process'].communicate(timeout=0.1)
+                result["ffmpeg_output"] = stderr
+                
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 

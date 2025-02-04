@@ -174,71 +174,65 @@ def scanNetwork():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(2.0)  # 2 Sekunden Timeout
+        sock.settimeout(2.0)
         
-        # Bind to all interfaces
-        sock.bind(('', 0))
+        # Bind to specific port
+        sock.bind(('0.0.0.0', 0))
         
-        # Sende Discovery-Nachricht
         message = json.dumps(discovery_msg)
         logger.info(f"Sending discovery message: {message}")
         
-        # Sende an beide bekannten Ports
-        for port in [DISCOVERY_PORT, 8989]:
-            try:
-                sock.sendto(message.encode(), ('255.255.255.255', port))
-                logger.info(f"Sent discovery message to port {port}")
-            except Exception as e:
-                logger.error(f"Error sending to port {port}: {e}")
+        # Sende mehrmals an verschiedene Ports
+        discovery_ports = [DISCOVERY_PORT, 8989, 8990, 8988]
+        for port in discovery_ports:
+            for _ in range(3):  # Sende 3 Mal pro Port
+                try:
+                    sock.sendto(message.encode(), ('255.255.255.255', port))
+                    logger.info(f"Sent discovery message to port {port}")
+                except Exception as e:
+                    logger.error(f"Error sending to port {port}: {e}")
+                time.sleep(0.1)  # Kleine Pause zwischen den Versuchen
         
         # Sammle Antworten
         printers = []
         start_time = time.time()
         
-        while time.time() - start_time < 5:  # 5 Sekunden Scan-Zeit
+        while time.time() - start_time < 10:  # 10 Sekunden Scan-Zeit
             try:
-                data, addr = sock.recvfrom(1024)
+                data, addr = sock.recvfrom(2048)  # Größerer Buffer
                 logger.info(f"Received response from {addr}: {data}")
                 
                 try:
                     response = json.loads(data.decode())
+                    logger.info(f"Parsed response: {response}")
                     
-                    # Drucker zur Liste hinzufügen
                     printer_info = {
                         "id": response.get("dev_id", f"printer_{len(printers) + 1}"),
                         "name": response.get("dev_name", f"Bambu Lab Printer {addr[0]}"),
                         "ip": addr[0],
                         "type": "bambulab",
-                        "status": "online",
-                        "serial": response.get("dev_sn", "unknown"),
-                        "model": response.get("dev_model", "unknown"),
-                        "version": response.get("sw_ver", "unknown")
+                        "status": "online"
                     }
                     
-                    # Prüfe ob der Drucker bereits in der Liste ist
                     if not any(p['ip'] == addr[0] for p in printers):
                         printers.append(printer_info)
                         logger.info(f"Found printer: {printer_info}")
                     
-                except json.JSONDecodeError:
-                    logger.warning(f"Received invalid JSON from {addr}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Received invalid JSON from {addr}: {e}")
                     continue
                     
             except socket.timeout:
                 continue
-                
+        
         logger.info(f"Scan complete. Found {len(printers)} printers")
         return printers
         
     except Exception as e:
         logger.error(f"Error during network scan: {str(e)}")
         return []
-        
     finally:
-        try:
-            sock.close()
-        except:
-            pass
+        sock.close()
 
 def startPrint(printer_id, file_path):
     """Startet einen Druck"""
