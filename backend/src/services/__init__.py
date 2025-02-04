@@ -1,5 +1,5 @@
 from .printerService import scanNetwork, getPrinterStatus, getPrinters, removePrinter, getPrinterById, savePrinters
-from .streamService import startStream, stopStream, getNextPort
+from .streamService import startStream, stopStream, getNextPort, stream_service
 import uuid
 import subprocess
 import logging
@@ -43,10 +43,6 @@ def addPrinter(data):
 def startStream(printer_id, stream_url=None):
     """Startet einen neuen RTSP zu WebSocket Stream"""
     try:
-        # Stoppe existierenden Stream falls vorhanden
-        stopStream(printer_id)
-        
-        # Finde freien Port
         port = getNextPort()
         
         if not stream_url:
@@ -55,42 +51,16 @@ def startStream(printer_id, stream_url=None):
                 raise Exception("Drucker nicht gefunden")
             stream_url = printer['streamUrl']
         
-        # Exakt die gleichen Parameter wie im funktionierenden Test
-        command = [
-            'ffmpeg',
-            '-rtsp_transport', 'tcp',
-            '-i', stream_url,
-            '-c:v', 'copy',
-            '-f', 'mpegts',
-            f'pipe:1'  # Stream zur stdout statt HTTP
-        ]
+        # Stoppe existierenden Stream falls vorhanden
+        stopStream(printer_id)
         
-        logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
-        
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=False  # Binary mode für Video
-        )
-        
-        # Warte kurz und prüfe ob der Prozess noch läuft
-        time.sleep(1)
-        if process.poll() is not None:
-            # Prozess ist bereits beendet - hole Fehlerausgabe
-            _, stderr = process.communicate()
-            logger.error(f"FFmpeg process failed: {stderr.decode()}")
-            raise Exception("FFmpeg process failed to start")
-            
-        # Speichere Prozess-ID
-        active_streams[printer_id] = {
-            'process': process,
-            'port': port
-        }
-        
-        logger.info(f"Stream started successfully on port {port}")
-        return port
+        # Starte Stream über StreamService
+        return stream_service.start_stream(printer_id, stream_url, port)
         
     except Exception as e:
         logger.error(f"Fehler beim Starten des Streams: {str(e)}")
-        raise e 
+        raise e
+
+def stopStream(printer_id):
+    """Stoppt einen Stream"""
+    stream_service.stop_stream(printer_id) 

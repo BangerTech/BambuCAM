@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 # Bambu Lab Ports
 MQTT_PORT = 8883
-DISCOVERY_PORT = 2023
+DISCOVERY_PORT = 1990
+SSDP_PORT = 2021
+RTSP_PORT = 322
 
 # Globale Variable für gespeicherte Drucker
 stored_printers = {}
@@ -161,56 +163,79 @@ def getPrinterStatus(printer_id):
         }
 
 def scanNetwork():
-    """Scannt nach neuen Druckern im Netzwerk"""
+    """Scannt nach neuen Druckern im Netzwerk via SSDP"""
     try:
         logger.info("Starting network scan for printers...")
         
-        # Bambu Lab Discovery Message
-        discovery_msg = {
-            "command": "info",
-            "sequence_id": 0,
-            "parameters": {}
-        }
+        # SSDP M-SEARCH Message für Bambu Lab Drucker
+        ssdp_request = (
+            'M-SEARCH * HTTP/1.1\r\n'
+            'HOST: 239.255.255.250:1990\r\n'
+            'MAN: "ssdp:discover"\r\n'
+            'MX: 3\r\n'
+            'ST: urn:bambulab-com:device:3dprinter:1\r\n'
+            '\r\n'
+        )
         
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        # Erstelle UDP Socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(('0.0.0.0', 0))
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         
-        message = json.dumps(discovery_msg)
-        logger.info(f"Sending discovery message: {message}")
+        # Bind to all interfaces
+        sock.bind(('', 0))
         
-        # Sende an den Discovery-Port
-        sock.sendto(message.encode(), ('255.255.255.255', DISCOVERY_PORT))
+        # Sende an beide SSDP Ports
+        discovery_ports = [DISCOVERY_PORT, SSDP_PORT]
+        for port in discovery_ports:
+            try:
+                logger.info(f"Sending SSDP discovery to port {port}")
+                sock.sendto(ssdp_request.encode(), ('239.255.255.250', port))
+            except Exception as e:
+                logger.error(f"Error sending to port {port}: {e}")
         
         # Sammle Antworten
         printers = []
-        sock.settimeout(5.0)
+        sock.settimeout(3.0)
         
         try:
             while True:
-                data, addr = sock.recvfrom(2048)
-                logger.info(f"Received response from {addr}: {data}")
-                
                 try:
-                    response = json.loads(data.decode())
-                    logger.info(f"Parsed response: {response}")
+                    data, addr = sock.recvfrom(2048)
+                    response = data.decode()
+                    logger.info(f"Received from {addr}: {response}")
                     
-                    printer_info = {
-                        "id": str(uuid.uuid4()),
-                        "name": response.get("name", f"Bambu Lab Printer {addr[0]}"),
-                        "ip": addr[0],
-                        "type": "bambulab",
-                        "status": "online"
-                    }
+                    # Parse SSDP Response
+                    if 'bambulab' in response.lower():
+                        # Extrahiere Informationen aus der SSDP Antwort
+                        lines = response.split('\r\n')
+                        printer_info = {
+                            'id': str(uuid.uuid4()),
+                            'ip': addr[0],
+                            'type': 'bambulab',
+                            'status': 'online'
+                        }
+                        
+                        # Suche nach Namen und anderen Details
+                        for line in lines:
+                            if 'LOCATION:' in line:
+                                printer_info['location'] = line.split(':', 1)[1].strip()
+                            elif 'SERVER:' in line:
+                                printer_info['name'] = line.split(':', 1)[1].strip()
+                        
+                        if not printer_info.get('name'):
+                            printer_info['name'] = f"Bambu Lab Printer {addr[0]}"
+                            
+                        # Prüfe ob der Drucker bereits gefunden wurde
+                        if not any(p['ip'] == addr[0] for p in printers):
+                            printers.append(printer_info)
+                            logger.info(f"Found printer: {printer_info}")
+                            
+                except socket.timeout:
+                    break
                     
-                    printers.append(printer_info)
-                    
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Invalid JSON from {addr}: {e}")
-                    
-        except socket.timeout:
-            pass
+        except Exception as e:
+            logger.error(f"Error receiving responses: {e}")
             
         logger.info(f"Scan complete. Found {len(printers)} printers")
         return printers
