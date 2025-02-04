@@ -11,6 +11,10 @@ import threading
 from queue import Queue
 import os
 from .printerService import stored_printers
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 class StreamManager:
     def __init__(self):
@@ -106,27 +110,85 @@ ws_thread = threading.Thread(target=stream_manager.start_stream_server)
 ws_thread.daemon = True
 ws_thread.start()
 
-def startStream(printer_id):
+# Aktive Streams und deren Prozesse
+active_streams = {}
+# Start-Port für WebSocket-Verbindungen
+BASE_PORT = 9000
+# Maximale Anzahl an gleichzeitigen Streams
+MAX_STREAMS = 100
+
+def getNextPort():
+    """Findet den nächsten freien Port für einen Stream"""
+    used_ports = set(stream['port'] for stream in active_streams.values())
+    
+    for port in range(BASE_PORT, BASE_PORT + MAX_STREAMS):
+        if port not in used_ports:
+            return port
+            
+    raise Exception("Keine freien Ports verfügbar")
+
+def stopStream(printer_id):
+    """Stoppt einen laufenden Stream"""
+    if printer_id in active_streams:
+        try:
+            process = active_streams[printer_id]['process']
+            process.terminate()
+            process.wait(timeout=5)
+        except:
+            # Falls der Prozess nicht reagiert, hart beenden
+            try:
+                process.kill()
+            except:
+                pass
+        finally:
+            del active_streams[printer_id]
+
+def startStream(printer_id, stream_url=None):
+    """Startet einen neuen RTSP zu WebSocket Stream"""
     try:
-        path = f"/stream/{printer_id}"
-        
-        # Hole Drucker-Daten
-        printer = stored_printers.get(printer_id)
-        if not printer:
-            raise Exception(f"Printer {printer_id} not found")
+        if not stream_url:
+            printer = getPrinterById(printer_id)
+            if not printer:
+                raise Exception("Drucker nicht gefunden")
+            stream_url = printer['streamUrl']
             
-        url = printer['streamUrl']
-        print(f"Starting stream from URL: {url}")
+        port = getNextPort()
         
-        # Prüfe ob es eine RTSPS URL ist
-        if url.startswith('rtsps://'):
-            # Füge zusätzliche Parameter für RTSPS hinzu
-            stream_manager.start_ffmpeg_stream(url, path, ssl_verify=False)
-        else:
-            # Standard RTSP Stream
-            stream_manager.start_ffmpeg_stream(url, path)
-            
-        return stream_manager.ws_port
+        # Stoppe existierenden Stream falls vorhanden
+        stopStream(printer_id)
+        
+        # Starte FFmpeg Prozess
+        command = [
+            'ffmpeg',
+            '-fflags', 'nobuffer',
+            '-flags', 'low_delay',
+            '-strict', 'experimental',
+            '-rtsp_transport', 'tcp',  # TCP für stabilere Verbindung
+            '-i', stream_url,
+            '-vsync', '0',
+            '-copyts',
+            '-vcodec', 'copy',
+            '-movflags', 'frag_keyframe+empty_moov',
+            '-an',
+            '-hls_flags', 'delete_segments+append_list',
+            '-f', 'mpegts',
+            f'http://localhost:{port}'
+        ]
+        
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        
+        # Speichere Prozess-ID
+        active_streams[printer_id] = {
+            'process': process,
+            'port': port
+        }
+        
+        return port
+        
     except Exception as e:
-        print(f"Error starting stream: {e}")
-        return None 
+        logger.error(f"Fehler beim Starten des Streams: {str(e)}")
+        raise e 

@@ -1,5 +1,5 @@
-from .printerService import scanNetwork, getPrinterStatus, addPrinter, getPrinters, removePrinter
-from .streamService import startStream 
+from .printerService import scanNetwork, getPrinterStatus, addPrinter, getPrinters, removePrinter, getPrinterById
+from .streamService import startStream, stopStream, getNextPort
 import uuid
 import subprocess
 import logging
