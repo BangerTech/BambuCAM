@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
+from src.services.bambuCloudService import BambuCloudService
 import os
+import logging
 
 app = Flask(__name__)
 
@@ -15,6 +17,10 @@ CORS(app,
          "supports_credentials": True,
          "max_age": 600
      }})
+
+cloud_service = BambuCloudService()
+
+logger = logging.getLogger(__name__)
 
 @app.route('/printers', methods=['GET'])
 def get_printers():
@@ -125,6 +131,41 @@ def delete_printer(printer_id):
             return jsonify({"message": f"Printer {printer_id} removed"}), 200
         else:
             return jsonify({"error": "Printer not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/cloud/login', methods=['POST', 'OPTIONS'])
+def cloud_login():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        data = request.get_json()
+        logger.info(f"Login attempt for email: {data.get('email')}")
+        logger.info(f"Request data: {data}")
+        
+        result = cloud_service.login(
+            email=data.get('email'),
+            password=data.get('password'),
+            verification_code=data.get('verification_code')
+        )
+        logger.info(f"Login result: {result}")
+        
+        if result.get('success'):
+            return jsonify(result), 200
+            
+        logger.error(f"Login failed with error: {result.get('error')}")
+        return jsonify(result), 401
+        
+    except Exception as e:
+        logger.error(f"Login exception: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/cloud/printers', methods=['GET'])
+def cloud_printers():
+    try:
+        printers = cloud_service.get_cloud_printers()
+        return jsonify(printers)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

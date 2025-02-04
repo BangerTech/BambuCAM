@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress } from '@mui/material';
+import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress, FormControlLabel } from '@mui/material';
 import RTSPStream from './RTSPStream';
 import DeleteIcon from '@mui/icons-material/Delete';
 import '../styles/NeonButton.css';
@@ -7,13 +7,16 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import InfoIcon from '@mui/icons-material/Info';
 import CloseIcon from '@mui/icons-material/Close';
+import { NeonSwitch } from '../styles/NeonSwitch.js';
+import RouterIcon from '@mui/icons-material/Router';
+import CloudIcon from '@mui/icons-material/Cloud';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
 
 console.log('Using API URL:', API_URL);  // Debug log
 
-const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
+const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
   const [printers, setPrinters] = useState(() => {
     // Versuche gespeicherte Drucker beim Start zu laden
     const savedPrinters = localStorage.getItem('printers');
@@ -27,22 +30,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
 
   // Lade Drucker beim Start und alle 30 Sekunden neu
   useEffect(() => {
+    let isMounted = true;
+
     const loadPrinters = async () => {
       try {
         console.log('Lade Drucker...');
         const response = await fetch(`${API_URL}/printers`);
-        if (!response.ok) throw new Error('Netzwerk-Antwort war nicht ok');
         const data = await response.json();
-        setPrinters(data);
+        if (isMounted) {
+          setPrinters(data);
+        }
       } catch (error) {
-        console.error('Fehler beim Laden der Drucker:', error);
+        console.error('Error loading printers:', error);
       }
     };
 
     loadPrinters();
-    const interval = setInterval(loadPrinters, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;  // Cleanup when component unmounts
+    };
   }, []);
 
   const [open, setOpen] = useState(false);
@@ -315,16 +322,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
             height: '40px',
             cursor: 'pointer',
             transition: 'transform 0.3s ease',
-            transform: 'scale(1)',
-            '&:hover': {
-              transform: 'scale(1.05)'
-            }
+            transform: 'scale(1)'
           }}
           onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
           onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
           onClick={onThemeToggle}
           title={`Klicken um zu ${isDarkMode ? 'Light' : 'Dark'} Mode zu wechseln`}
         />
+
+        {/* Cloud/LAN Switch in der Mitte */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <NeonSwitch
+            checked={mode === 'cloud'}
+            onChange={(e) => onModeChange(e.target.checked ? 'cloud' : 'lan')}
+          />
+        </div>
         
         {/* Neon Button */}
         <button 
