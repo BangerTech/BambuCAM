@@ -5,6 +5,8 @@ from src.services.bambuCloudService import BambuCloudService
 import os
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 app = Flask(__name__)
 
 # Erlaube CORS für alle Ursprünge (einfachste Lösung)

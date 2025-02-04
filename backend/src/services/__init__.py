@@ -3,6 +3,7 @@ from .streamService import startStream, stopStream, getNextPort
 import uuid
 import subprocess
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -70,18 +71,30 @@ def startStream(printer_id, stream_url=None):
             f'http://localhost:{port}'
         ]
         
+        logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
+        
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            universal_newlines=True
         )
         
+        # Warte kurz und prüfe ob der Prozess noch läuft
+        time.sleep(2)
+        if process.poll() is not None:
+            # Prozess ist bereits beendet - hole Fehlerausgabe
+            _, stderr = process.communicate()
+            logger.error(f"FFmpeg process failed: {stderr}")
+            raise Exception("FFmpeg process failed to start")
+            
         # Speichere Prozess-ID
         active_streams[printer_id] = {
             'process': process,
             'port': port
         }
         
+        logger.info(f"Stream started successfully on port {port}")
         return port
         
     except Exception as e:

@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 import requests
 from pathlib import Path
+import time
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ def getPrinterStatus(printer_id):
             
         # Bambu Lab API Endpoint
         url = f"http://{printer['ip']}:8989/api/info"
+        logger.info(f"Requesting printer status from: {url}")
         
         response = requests.get(
             url, 
@@ -128,8 +130,10 @@ def getPrinterStatus(printer_id):
             timeout=5
         )
         
+        logger.info(f"Printer API Response: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
+            logger.info(f"Printer data: {data}")
             return {
                 "temperatures": {
                     "bed": float(data.get('bed_temp', 0)),
@@ -155,52 +159,86 @@ def getPrinterStatus(printer_id):
         }
 
 def scanNetwork():
-    """Scannt nach neuen Druckern"""
+    """Scannt nach neuen Druckern im Netzwerk"""
     try:
+        logger.info("Starting network scan for printers...")
+        
+        # Broadcast Message für BambuLab Discovery
+        discovery_msg = {
+            "sequence_id": "1",
+            "command": "get_version",
+            "parameters": "{\"dev_type\":\"printer\"}"
+        }
+        
         # UDP Socket für Discovery
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(1)
-
-        # Bambu Lab spezifische Discovery Message
-        discovery_msg = {
-            "sequence_id": "0",
-            "command": "get_version",
-            "parameters": ""
-        }
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.settimeout(2.0)  # 2 Sekunden Timeout
+        
+        # Bind to all interfaces
+        sock.bind(('', 0))
+        
+        # Sende Discovery-Nachricht
         message = json.dumps(discovery_msg)
-        sock.sendto(message.encode(), ('255.255.255.255', DISCOVERY_PORT))
-
-        # Auf Antworten warten
+        logger.info(f"Sending discovery message: {message}")
+        
+        # Sende an beide bekannten Ports
+        for port in [DISCOVERY_PORT, 8989]:
+            try:
+                sock.sendto(message.encode(), ('255.255.255.255', port))
+                logger.info(f"Sent discovery message to port {port}")
+            except Exception as e:
+                logger.error(f"Error sending to port {port}: {e}")
+        
+        # Sammle Antworten
         printers = []
-        while True:
+        start_time = time.time()
+        
+        while time.time() - start_time < 5:  # 5 Sekunden Scan-Zeit
             try:
                 data, addr = sock.recvfrom(1024)
-                response = json.loads(data.decode())
+                logger.info(f"Received response from {addr}: {data}")
                 
-                # Drucker zur Liste hinzufügen
-                printer_info = {
-                    "id": response.get("dev_id", f"printer_{len(printers) + 1}"),
-                    "name": response.get("dev_name", f"Bambu Lab Printer {addr[0]}"),
-                    "ip": addr[0],
-                    "type": "bambulab",
-                    "status": "online",
-                    "serial": response.get("dev_sn", "unknown")
-                }
-                printers.append(printer_info)
+                try:
+                    response = json.loads(data.decode())
+                    
+                    # Drucker zur Liste hinzufügen
+                    printer_info = {
+                        "id": response.get("dev_id", f"printer_{len(printers) + 1}"),
+                        "name": response.get("dev_name", f"Bambu Lab Printer {addr[0]}"),
+                        "ip": addr[0],
+                        "type": "bambulab",
+                        "status": "online",
+                        "serial": response.get("dev_sn", "unknown"),
+                        "model": response.get("dev_model", "unknown"),
+                        "version": response.get("sw_ver", "unknown")
+                    }
+                    
+                    # Prüfe ob der Drucker bereits in der Liste ist
+                    if not any(p['ip'] == addr[0] for p in printers):
+                        printers.append(printer_info)
+                        logger.info(f"Found printer: {printer_info}")
+                    
+                except json.JSONDecodeError:
+                    logger.warning(f"Received invalid JSON from {addr}")
+                    continue
+                    
             except socket.timeout:
-                break
-            except json.JSONDecodeError:
                 continue
-
-        # Kombiniere gescannte und gespeicherte Drucker
-        all_printers = printers + getPrinters()
-        return all_printers
+                
+        logger.info(f"Scan complete. Found {len(printers)} printers")
+        return printers
+        
     except Exception as e:
-        print(f"Error scanning network: {str(e)}")
+        logger.error(f"Error during network scan: {str(e)}")
         return []
+        
     finally:
-        sock.close()
+        try:
+            sock.close()
+        except:
+            pass
 
 def startPrint(printer_id, file_path):
     """Startet einen Druck"""
