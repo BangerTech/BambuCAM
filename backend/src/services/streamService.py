@@ -99,8 +99,7 @@ class StreamService:
                 '-vsync', '0',
                 '-copyts',
                 '-vcodec', 'copy',
-                '-movflags', 'frag_keyframe+empty_moov',
-                '-an',
+                '-an',  # Kein Audio
                 '-f', 'mpegts',
                 'pipe:1'
             ]

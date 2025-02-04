@@ -22,7 +22,7 @@ const RTSPStream = ({ printer }) => {
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer('video/mp2t');
             
             // WebSocket verbinden
-            const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
+            const wsUrl = `wss://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
             
             wsRef.current = new WebSocket(wsUrl);
