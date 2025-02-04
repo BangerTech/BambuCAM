@@ -28,25 +28,18 @@ async def test_stream_url(url):
             '-'
         ]
         
-        # Neue Event Loop für jeden Test
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
         
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            try:
-                await asyncio.wait_for(process.communicate(), timeout=2.0)
-                return process.returncode == 0
-            except asyncio.TimeoutError:
-                process.kill()
-                return False
-        finally:
-            loop.close()
+            await asyncio.wait_for(process.communicate(), timeout=2.0)
+            return process.returncode == 0
+        except asyncio.TimeoutError:
+            process.kill()
+            return False
             
     except Exception as e:
         logger.debug(f"Error testing stream URL {url}: {e}")
@@ -64,10 +57,8 @@ def addPrinter(printer_data):
         if not name:
             return {"success": False, "error": "Name is required"}
 
-        # Generiere eine eindeutige ID
         printer_id = f"printer_{ip.replace('.', '_')}_{name.replace(' ', '_')}"
         
-        # Prüfe ob ein Drucker mit dieser ID bereits existiert
         if printer_id in stored_printers:
             return {"success": False, "error": "A printer with this IP and name already exists"}
 
@@ -76,31 +67,16 @@ def addPrinter(printer_data):
             if not access_code:
                 return {"success": False, "error": "Access code is required for Bambulab printers"}
 
-            # Teste beide möglichen Stream-URLs
-            stream_urls = [
-                f"rtsp://bblp:{access_code}@{ip}:8554/live",  # Alt (ungesichert)
-                f"rtsps://bblp:{access_code}@{ip}:322/streaming/live/1"  # Neu (SSL)
-            ]
-            
-            working_url = None
-            for url in stream_urls:
-                if asyncio.run(test_stream_url(url)):
-                    working_url = url
-                    logger.info(f"Found working stream URL: {url}")
-                    break
-            
-            if not working_url:
-                logger.warning("No working stream URL found, using default")
-                working_url = stream_urls[1]  # Fallback zur neuen URL
-                
+            # Verwende die alte, funktionierende URL
+            stream_url = f"rtsp://bblp:{access_code}@{ip}:8554/live"
+
             printer = {
                 'id': printer_id,
-                'name': printer_data.get('name', f'Bambulab ({ip})'),
+                'name': name,
                 'ip': ip,
-                'type': 'BAMBULAB',  # Wichtig: Konsistenter Typ
-                'streamUrl': working_url,
+                'type': 'BAMBULAB',
+                'streamUrl': stream_url,
                 'accessCode': access_code,
-                'apiUrl': f"http://{ip}:80/api/v1",
                 'wsPort': printer_data.get('wsPort', 9000),
                 'status': 'online',
                 'added': datetime.now().isoformat()
