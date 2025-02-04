@@ -5,10 +5,10 @@ import os
 
 app = Flask(__name__)
 
-# Konfiguriere CORS korrekt
+# Erlaube CORS für alle Ursprünge (einfachste Lösung)
 CORS(app, 
      resources={r"/*": {
-         "origins": ["http://localhost:3000", "http://192.168.188.114:3000"],  # Erlaube Frontend Origins
+         "origins": "*",  # Erlaubt alle Ursprünge
          "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
          "allow_headers": ["Content-Type", "Authorization", "Accept"],
          "expose_headers": ["Content-Type"],

@@ -61,27 +61,26 @@ class StreamManager:
         if path not in self.streams:
             self.streams[path] = Queue()
             
-            # FFmpeg Kommando für RTSP zu MPEG1 mit angepassten Parametern für Bambulab
+            # Optimierte FFmpeg Parameter für Bambulab Streams
             command = [
                 'ffmpeg',
-                '-fflags', 'nobuffer',        # Kein Buffering
-                '-flags', 'low_delay',        # Minimale Latenz
-                '-rtsp_transport', 'tcp',     # TCP für RTSP
-                '-i', url,                    # Input URL
-                '-f', 'mpegts',              # Output Format
-                '-codec:v', 'mpeg1video',     # Video Codec
-                '-b:v', '1000k',             # Bitrate
-                '-r', '30',                  # 30 FPS
-                '-s', '800x600',             # Auflösung
-                '-bf', '0',                  # Keine B-Frames
-                '-an',                       # Kein Audio
-                '-rtsp_flags', 'prefer_tcp', # Bevorzuge TCP
-                '-stimeout', '5000000',      # Socket Timeout
-                '-use_wallclock_as_timestamps', '1',  # Korrekte Timestamps
-                '-tune', 'zerolatency',      # Minimale Latenz
-                '-preset', 'ultrafast',      # Schnellste Encoding
-                '-ssl_verify', '0',          # SSL-Verifizierung deaktivieren
-                '-'                          # Output to pipe
+                '-fflags', 'nobuffer',
+                '-flags', 'low_delay',
+                '-strict', 'experimental',
+                '-rtsp_transport', 'tcp',
+                '-rtsp_flags', 'prefer_tcp',
+                '-allowed_media_types', 'video',  # Nur Video erlauben
+                '-i', url,
+                '-c:v', 'mpeg1video',    # Wichtig: MPEG1 für JSMpeg
+                '-f', 'mpegts',          # MPEG-TS Format
+                '-b:v', '800k',          # Bitrate auf 800k
+                '-maxrate', '1000k',     # Maximale Bitrate
+                '-bufsize', '2000k',     # Buffer
+                '-an',                   # Kein Audio
+                '-tune', 'zerolatency',
+                '-preset', 'ultrafast',
+                '-pix_fmt', 'yuv420p',   # Pixel Format
+                'pipe:1'                 # Output to pipe
             ]
             
             process = subprocess.Popen(
@@ -108,31 +107,6 @@ stream_manager = StreamManager()
 ws_thread = threading.Thread(target=stream_manager.start_stream_server)
 ws_thread.daemon = True
 ws_thread.start()
-
-def start_stream(printer_id, stream_url):
-    try:
-        args = [
-            "-rtsp_transport", "tcp",
-            "-rtsp_flags", "prefer_tcp",
-            "-allowed_media_types", "video",
-            "-i", stream_url,
-            "-c:v", "mpeg1video",
-            "-f", "mpegts",
-            "-b:v", "800k",
-            "pipe:1"
-        ]
-        
-        process = subprocess.Popen(
-            ["ffmpeg"] + args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        return process
-        
-    except Exception as e:
-        logger.error(f"Fehler beim Starten des Streams: {e}")
-        return None
 
 def startStream(printer_id):
     try:

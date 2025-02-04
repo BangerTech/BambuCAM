@@ -350,7 +350,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                     index={index}
                   >
                     {(provided) => (
-                      <Grid item xs={12} sm={6} md={4} lg={4}
+                      <Grid item xs={12} sm={12} md={6} lg={6}
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
@@ -359,7 +359,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                           sx={{ 
                             position: 'relative',
                             height: 0,
-                            paddingBottom: 'calc(73.125% + 80px)', // 16:9 * 1.3 plus Header/Footer
+                            paddingBottom: 'calc(78.75% + 80px)',
                             borderRadius: '15px',
                             overflow: 'hidden',
                             background: '#000',
@@ -401,7 +401,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode }) => {
                             bottom: '40px',
                             background: '#000'
                           }}>
-                            <RTSPStream url={printer.streamUrl} wsPort={printer.wsPort} />
+                            <RTSPStream 
+                              url={printer.streamUrl} 
+                              wsPort={printer.wsPort}
+                              printerId={printer.id}
+                            />
                           </Box>
 
                           {/* Footer */}

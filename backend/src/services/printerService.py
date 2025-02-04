@@ -214,86 +214,79 @@ def scanNetwork():
     finally:
         sock.close()
 
-def get_printer_status(printer):
-    """Holt den aktuellen Status eines Bambu Lab Druckers"""
+def getPrinterStatus(printer_id):
+    """Holt den Status eines Druckers via Bambulab API"""
     try:
-        # API URL zusammenbauen
-        api_url = f"http://{printer['ip']}/api/v1/info"
+        printer = stored_printers.get(printer_id)
+        if not printer:
+            return None
+            
+        # Basis-URL und Headers
+        base_url = f"http://{printer['ip']}/api/v1"
         headers = {
             "Authorization": f"Bearer {printer['accessCode']}"
         }
         
-        # API Request
-        response = requests.get(api_url, headers=headers, timeout=5)
-        if not response.ok:
-            return {
-                "status": "offline",
-                "temperatures": {"bed": 0, "nozzle": 0},
-                "progress": 0,
-                "printTime": {"remaining": 0}
-            }
-
+        # Hole Print-Job Status
+        response = requests.get(f"{base_url}/print-job", headers=headers, timeout=5)
         data = response.json()
         
-        # Extrahiere die relevanten Daten
-        status_data = {
-            "status": data.get("print", {}).get("status", "offline"),
-            "temperatures": {
-                "bed": float(data.get("bed_temp", 0)),
-                "nozzle": float(data.get("nozzle_temp", 0))
-            },
-            "progress": float(data.get("print", {}).get("progress", 0)),
-            "printTime": {
-                "remaining": int(data.get("print", {}).get("remaining_time", 0))
-            }
-        }
-
-        # Status-Mapping
-        status_mapping = {
-            "RUNNING": "printing",
-            "IDLE": "idle",
-            "STANDBY": "standby",
-            "FINISH": "idle"
-        }
-        status_data["status"] = status_mapping.get(status_data["status"], "offline")
-
-        return status_data
-
-    except Exception as e:
-        logger.error(f"Fehler beim Abrufen des Drucker-Status: {e}")
+        # Nur die wichtigsten Daten zurückgeben
         return {
-            "status": "error",
-            "temperatures": {"bed": 0, "nozzle": 0},
-            "progress": 0,
-            "printTime": {"remaining": 0}
+            "temperatures": {
+                "bed": data.get("bed_temp", 0),
+                "nozzle": data.get("nozzle_temp", 0)
+            },
+            "printTime": {
+                "remaining": data.get("remaining_time", 0)
+            },
+            "status": data.get("status", "offline"),
+            "progress": data.get("progress", 0)
         }
+    except Exception as e:
+        logger.error(f"Error getting printer status: {e}")
+        return None
 
-def getPrinterStatus(printer_id):
-    """Gibt den Status eines bestimmten Druckers zurück"""
+def startPrint(printer_id, file_path):
+    """Startet einen Druck"""
     try:
         printer = stored_printers.get(printer_id)
         if not printer:
-            raise Exception(f"Printer {printer_id} not found")
-
-        # Hole Live-Status vom Drucker
-        status = get_printer_status(printer)
-        
-        # Aktualisiere den gespeicherten Status
-        printer['status'] = status['status']
-        printer['temperatures'] = status['temperatures']
-        printer['progress'] = status['progress']
-        printer['printTime'] = status['printTime']
-        
-        return status
-
-    except Exception as e:
-        logger.error(f"Error getting printer status: {e}")
-        return {
-            "status": "error",
-            "temperatures": {"bed": 0, "nozzle": 0},
-            "progress": 0,
-            "printTime": {"remaining": 0}
+            return False
+            
+        url = f"http://{printer['ip']}/api/v1/print"
+        headers = {
+            "Authorization": f"Bearer {printer['accessCode']}"
         }
+        data = {
+            "file": file_path
+        }
+        
+        response = requests.post(url, headers=headers, json=data)
+        return response.status_code == 200
+        
+    except Exception as e:
+        logger.error(f"Error starting print: {e}")
+        return False
+
+def stopPrint(printer_id):
+    """Stoppt den aktuellen Druck"""
+    try:
+        printer = stored_printers.get(printer_id)
+        if not printer:
+            return False
+            
+        url = f"http://{printer['ip']}/api/v1/print/stop"
+        headers = {
+            "Authorization": f"Bearer {printer['accessCode']}"
+        }
+        
+        response = requests.post(url, headers=headers)
+        return response.status_code == 200
+        
+    except Exception as e:
+        logger.error(f"Error stopping print: {e}")
+        return False
 
 def removePrinter(printer_id):
     """Entfernt einen Drucker"""
