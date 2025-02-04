@@ -1,8 +1,12 @@
+version: '3'
 services:
   backend:
-    build: 
-      context: ./backend
-    network_mode: "host"  # Verwendet das Host-Netzwerk für direkten Zugriff
+    build: ./backend
+    ports:
+      - "4000:4000"  # HTTP API
+      - "9000:9000"  # WebSocket Stream
+      - "8883:8883"  # MQTT
+    network_mode: "host"  # Wichtig für RTSP und lokale Netzwerkkommunikation
     volumes:
       - ./backend:/app
       - /app/__pycache__

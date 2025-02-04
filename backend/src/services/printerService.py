@@ -8,6 +8,8 @@ import requests
 from pathlib import Path
 import time
 import uuid
+import paho.mqtt.client as mqtt
+import bambulabs_api as bl
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -121,42 +123,35 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Drucker nicht gefunden")
             
-        # Bambu Lab API Endpoints
-        info_url = f"http://{printer['ip']}:8883/api/info"
-        status_url = f"http://{printer['ip']}:8883/api/status"
+        # Erstelle eine neue Instanz der BambuLab API
+        bambu_printer = bl.Printer(
+            printer['ip'],
+            printer['accessCode'],
+            printer.get('serial', 'unknown')  # Serial aus SSDP Discovery
+        )
         
-        headers = {
-            "Authorization": f"Bearer {printer['accessCode']}",
-            "Connection": "keep-alive",
-            "Accept": "application/json"
-        }
+        # Verbinde zum Drucker
+        bambu_printer.connect()
         
-        # Hole Basis-Informationen
-        info_response = requests.get(info_url, headers=headers, timeout=5)
-        status_response = requests.get(status_url, headers=headers, timeout=5)
-        
-        if info_response.status_code == 200 and status_response.status_code == 200:
-            info_data = info_response.json()
-            status_data = status_response.json()
+        try:
+            # Hole den Drucker-Status
+            state = bambu_printer.get_state()
             
             return {
                 "temperatures": {
-                    "bed": float(status_data.get('bed_temp', 0)),
-                    "nozzle": float(status_data.get('nozzle_temp', 0))
+                    "bed": float(state.get('bed_temp', 0)),
+                    "nozzle": float(state.get('nozzle_temp', 0))
                 },
                 "printTime": {
-                    "remaining": int(status_data.get('remaining_time', 0))
+                    "remaining": int(state.get('remaining_time', 0))
                 },
-                "status": status_data.get('status', 'unknown'),
-                "progress": float(status_data.get('progress', 0))
+                "status": state.get('status', 'unknown'),
+                "progress": float(state.get('progress', 0))
             }
-        else:
-            return {
-                "temperatures": {"bed": 0, "nozzle": 0},
-                "printTime": {"remaining": 0},
-                "status": "offline",
-                "progress": 0
-            }
+            
+        finally:
+            # Wichtig: Verbindung trennen
+            bambu_printer.disconnect()
             
     except Exception as e:
         logger.error(f"Fehler beim Abrufen des Drucker-Status: {str(e)}")

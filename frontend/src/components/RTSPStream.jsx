@@ -12,7 +12,6 @@ const RTSPStream = ({ printer }) => {
 
     const setupMediaSource = () => {
       try {
-        // MediaSource erstellen
         mediaSourceRef.current = new MediaSource();
         if (videoRef.current) {
           videoRef.current.src = URL.createObjectURL(mediaSourceRef.current);
@@ -20,12 +19,11 @@ const RTSPStream = ({ printer }) => {
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
-            // SourceBuffer für MP4 erstellen
+            // MPEG-TS mit H.264 Video
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
-              'video/mp4; codecs="avc1.42E01E"'
+              'video/mp2t; codecs="avc1.42E01E"'
             );
             
-            // WebSocket verbinden
             const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
             
@@ -42,17 +40,18 @@ const RTSPStream = ({ printer }) => {
                   sourceBufferRef.current.appendBuffer(event.data);
                 } catch (e) {
                   console.error('Error appending buffer:', e);
-                  // Bei Fehler Buffer zurücksetzen
                   if (e.name === 'QuotaExceededError') {
-                    sourceBufferRef.current.remove(0, videoRef.current.currentTime - 1);
+                    // Entferne alte Daten bei Buffer-Überlauf
+                    sourceBufferRef.current.remove(0, videoRef.current.currentTime - 2);
                   }
                 }
               } else {
+                // Queue für späteres Hinzufügen
                 queueRef.current.push(event.data);
               }
             };
             
-            // Queue processing
+            // Buffer-Queue Verarbeitung
             sourceBufferRef.current.addEventListener('updateend', () => {
               if (queueRef.current.length > 0 && !sourceBufferRef.current.updating) {
                 sourceBufferRef.current.appendBuffer(queueRef.current.shift());
@@ -71,7 +70,6 @@ const RTSPStream = ({ printer }) => {
 
     setupMediaSource();
 
-    // Cleanup
     return () => {
       try {
         if (wsRef.current) {
@@ -98,6 +96,7 @@ const RTSPStream = ({ printer }) => {
       ref={videoRef} 
       autoPlay 
       playsInline 
+      muted
       style={{ 
         width: '100%', 
         height: '100%',
