@@ -7,6 +7,8 @@ import RTSPStream from './RTSPStream';
 const API_URL = `http://${window.location.hostname}:4000`;
 
 const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatus }) => {
+  if (!printer) return null;  // Early return wenn kein Drucker
+
   // Starte den Stream wenn der Dialog geöffnet wird
   React.useEffect(() => {
     if (open && printer) {

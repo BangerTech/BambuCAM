@@ -314,6 +314,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Status-Anzeige Funktionen
   const getTemperature = (printer, type) => {
+    if (!printer) return '-.--';  // Early return wenn kein Drucker
+
     if (printer.isCloud) {
       return '-.--';
     }
