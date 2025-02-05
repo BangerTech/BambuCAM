@@ -60,15 +60,20 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             };
 
             wsRef.current.onmessage = (event) => {
+              console.log('Received video data:', event.data.byteLength, 'bytes');
               if (sourceBufferRef.current && !sourceBufferRef.current.updating) {
                 try {
                   sourceBufferRef.current.appendBuffer(event.data);
+                  console.log('Successfully appended buffer');
                 } catch (e) {
                   console.error('Error appending buffer:', e);
                   if (e.name === 'QuotaExceededError') {
+                    console.log('Quota exceeded, removing old data');
                     sourceBufferRef.current.remove(0, videoRef.current.currentTime - 1);
                   }
                 }
+              } else {
+                console.log('Buffer is updating or not ready, skipping frame');
               }
             };
           } catch (e) {

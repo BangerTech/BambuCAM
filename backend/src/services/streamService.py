@@ -27,9 +27,11 @@ class StreamService:
     async def stream_handler(self, websocket, path):
         """Behandelt WebSocket-Verbindungen"""
         try:
-            # Extrahiere printer_id aus dem Pfad
             printer_id = path.split('/')[-1]
+            logger.info(f"New WebSocket connection for printer {printer_id}")
+            
             if printer_id not in self.active_streams:
+                logger.error(f"Stream not found for printer {printer_id}")
                 await websocket.close(1008, "Stream nicht gefunden")
                 return
                 
@@ -38,22 +40,21 @@ class StreamService:
             
             logger.info(f"Client connected to stream {printer_id}")
             
-            # Lese FFMPEG Output und sende an WebSocket
             while True:
                 try:
-                    # Lese Chunks von 4KB
+                    # Größerer Buffer für FFMPEG Output
                     data = await asyncio.get_event_loop().run_in_executor(
-                        None, process.stdout.read, 4096
+                        None, process.stdout.read, 8192  # Größerer Buffer
                     )
                     
                     if not data:
-                        logger.warning("FFmpeg stream ended")
+                        logger.warning(f"Stream {printer_id} ended")
                         break
                         
                     await websocket.send(data)
                     
                 except websockets.exceptions.ConnectionClosed:
-                    logger.info("Client disconnected")
+                    logger.info(f"Client disconnected from stream {printer_id}")
                     break
                 except Exception as e:
                     logger.error(f"Error in stream handler: {e}")
@@ -62,8 +63,15 @@ class StreamService:
         except Exception as e:
             logger.error(f"Error in stream handler: {e}")
         finally:
-            logger.info("Stream handler finished")
-            
+            logger.info(f"Stream handler finished for {printer_id}")
+            # Cleanup falls nötig
+            if printer_id in self.active_streams:
+                try:
+                    process = self.active_streams[printer_id]['process']
+                    process.kill()  # Harter Kill statt terminate
+                except:
+                    pass
+
     def start_websocket_server(self, port):
         """Startet den WebSocket-Server"""
         if self.server_running:  # Prüfe ob Server bereits läuft
@@ -103,7 +111,7 @@ class StreamService:
             if printer_id in self.active_streams:
                 self.stop_stream(printer_id)
 
-            # FFmpeg Befehl bleibt gleich...
+            # FFmpeg Befehl wie in der funktionierenden Version
             command = [
                 'ffmpeg',
                 '-fflags', 'nobuffer',
