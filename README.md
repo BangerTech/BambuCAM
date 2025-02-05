@@ -9,96 +9,104 @@
   <img src="assets/logo.png" alt="BambuCAM Logo" width="400"/>
 </div>
 
-> 🎥 Eine moderne Webanwendung zur Überwachung mehrerer BambuLab X1C 3D-Drucker über deren Kamera-Feeds
+> 🎥 A modern web application for monitoring multiple BambuLab X1C 3D printers through their camera feeds
 
 ## Screenshots
 
 <img src="assets/dashboard-empty.png" width="32%" /> <img src="assets/add-printer.png" width="32%" /> <img src="assets/dashboard-printers.png" width="32%" />
 
-_Von links nach rechts: Startseite, Drucker hinzufügen, Überwachungsansicht mit mehreren Druckern_
+_Left to right: Home screen, Add printer, Monitoring view with multiple printers_
 
 ## Table of Contents
-- [Was ist BambuCAM?](#was-ist-bambucam)
+- [What is BambuCAM?](#what-is-bambucam)
 - [Features](#features)
 - [Installation](#installation)
-- [Voraussetzungen](#voraussetzungen)
-- [Fehlerbehebung](#fehlerbehebung)
+- [Requirements](#requirements)
+- [Troubleshooting](#troubleshooting)
 - [Support](#support)
 
-## Was ist BambuCAM?
-BambuCAM ist eine benutzerfreundliche Webanwendung zur gleichzeitigen Überwachung mehrerer BambuLab X1C 3D-Drucker. Die App ermöglicht es, alle Drucker-Kameras in einer übersichtlichen Oberfläche zu organisieren und zu monitoren.
+## What is BambuCAM?
+BambuCAM is a user-friendly web application for simultaneously monitoring multiple BambuLab X1C 3D printers. The app allows you to organize and monitor all printer cameras in a clean interface.
 
 ### Features
-- 🎥 Live-Kamera-Feeds von mehreren Druckern
-- 🖱️ Drag & Drop Interface zur Anordnung der Kameras
-- 🖥️ Vollbild-Modus für jeden Drucker
-- ➕ Einfaches Hinzufügen und Entfernen von Druckern
-- 🔄 Automatische RTSP-Verbindung
-- 📱 Responsive Design für mobile Geräte
+- 🎥 Live camera feeds from multiple printers
+- 🖱️ Drag & drop interface for camera arrangement
+- 🖥️ Fullscreen mode for each printer
+- ➕ Easy adding and removing of printers
+- 🔄 Automatic RTSP connection
+- 📱 Responsive design for mobile devices
 
 ## Installation
 
-### Für Windows-Benutzer
-1. [Docker Desktop für Windows](https://www.docker.com/products/docker-desktop/) installieren
-2. Die neueste Version von [BambuCAM](https://github.com/BangerTech/BambuCAM/releases) herunterladen
-3. ZIP-Datei an einen beliebigen Ort entpacken
-4. `start.bat` per Rechtsklick als Administrator ausführen
-5. Im Browser öffnen:
+### For Windows Users
+1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
+2. Download the latest version of [BambuCAM](https://github.com/BangerTech/BambuCAM/releases)
+3. Extract ZIP file to any location
+4. Right-click `start.bat` and run as administrator
+5. Open in browser:
    - http://localhost:3000
-   - oder http://IHRE-IP-ADRESSE:3000
+   - or http://YOUR-IP-ADDRESS:3000
 
-### Für Linux-Benutzer
+### For Linux Users
 
 #### Quick Start Installation
-1. Repository klonen:
+1. Clone repository:
 ```bash
 git clone https://github.com/BangerTech/BambuCAM.git
 cd BambuCAM
 ```
 
-2. Docker Compose starten:
+2. Start Docker Compose:
 ```bash
 docker-compose up -d
 ```
 
-3. Im Browser öffnen:
+3. Open in browser:
 ```bash
 http://localhost:3000
 ```
 
-## Drucker Einrichtung
+## Printer Setup
 
-### Voraussetzungen
-- BambuLab X1C Drucker im gleichen Netzwerk
-- Aktivierter "LAN Only Mode" auf den Druckern
-- Aktivierte Kamera in den Druckereinstellungen
+### Requirements
+- BambuLab X1C printer on the same network
+- "LAN Only Mode" enabled on the printers
+- Camera enabled in printer settings
 
-### Drucker hinzufügen
-1. In der App auf "Drucker hinzufügen" klicken
-2. Namen für den Drucker eingeben (z.B. "X1C Werkstatt")
-3. IP-Adresse des Druckers eingeben (z.B. "192.168.1.100")
-4. Access Code eingeben (zu finden in den Druckereinstellungen unter "Netzwerk")
-5. Auf "Hinzufügen" klicken
+### Adding a Printer
+1. Click "Add Printer" in the app
+2. Enter a name for the printer (e.g., "X1C Workshop")
+3. Enter the printer's IP address (e.g., "192.168.1.100")
+4. Enter Access Code (found in printer settings under "Network")
+5. Click "Add"
 
-## Technologien
+## Technologies
 - React.js Frontend
 - Node.js Backend
 - Docker & Docker Compose
-- RTSP Stream Verarbeitung
-- WebSocket Verbindung
+- RTSP Stream Processing
+- WebSocket Connection
 
-## Fehlerbehebung
+## Troubleshooting
 
-Falls keine Verbindung zum Drucker möglich ist:
-1. Prüfen Sie, ob der Drucker eingeschaltet und mit dem Netzwerk verbunden ist
-2. Prüfen Sie, ob Sie die korrekte IP-Adresse verwenden
-3. Prüfen Sie, ob der Access Code korrekt ist
-4. Prüfen Sie, ob "LAN Only Mode" aktiviert ist
-5. Starten Sie den Drucker neu
+If you cannot connect to the printer:
+1. Check if the printer is powered on and connected to the network
+2. Verify you are using the correct IP address
+3. Verify the Access Code is correct
+4. Check if "LAN Only Mode" is enabled
+5. Restart the printer
 
 ## Support
 
-Bei Problemen oder Fragen erstellen Sie bitte ein [GitHub Issue](https://github.com/BangerTech/BambuCAM/issues).
+For issues or questions, please create a [GitHub Issue](https://github.com/BangerTech/BambuCAM/issues).
+
+## Sponsorship
+
+<a href="https://www.paypal.com/donate/?hosted_button_id=8MHDYJXQCXE6L" target="_blank">
+  <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal"/>
+</a>
 
 ## Keywords
-`bambulab`
+`bambulab` `3d-printer` `camera-viewer` `monitoring` `docker` `react` `rtsp-stream` 
+`printer-management` `web-interface` `live-stream` `temperature-monitoring` 
+`print-progress` `open-source`

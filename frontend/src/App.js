@@ -6,8 +6,6 @@ import { Box } from '@mui/material';
 import styled from '@emotion/styled';
 import CloudLoginDialog from './components/CloudLoginDialog';
 import CloudPrinterDialog from './components/CloudPrinterDialog';
-import { Tooltip } from '@mui/material';
-import NeonSwitch from './components/NeonSwitch';
 
 const PageBackground = styled(Box)(({ theme }) => ({
   position: 'relative',
@@ -240,18 +238,6 @@ function App() {
           handleAddCloudPrinter(printer);
           setCloudPrinterDialogOpen(false);
         }}
-      />
-
-      {/* Theme toggle tooltip */}
-      <Tooltip title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-        {/* ... */}
-      </Tooltip>
-
-      {/* Mode switch labels */}
-      <NeonSwitch
-        leftLabel="LAN"
-        rightLabel="CLOUD"
-        // ...
       />
     </ThemeProvider>
   );
