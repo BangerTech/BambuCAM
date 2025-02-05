@@ -8,7 +8,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const queueRef = useRef([]);
 
   useEffect(() => {
-    if (!printer) return;
+    if (!printer || !videoRef.current) return;
 
     const setupMediaSource = () => {
       try {
@@ -43,7 +43,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
             // Debug Events
             wsRef.current.onopen = () => console.log('WebSocket Connected');
-            wsRef.current.onerror = (e) => console.error('WebSocket Error:', e);
             wsRef.current.onclose = () => console.log('WebSocket Closed');
             
           } catch (e) {
@@ -56,11 +55,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
     };
 
     setupMediaSource();
-
-    // Füge ein Video-Error-Event hinzu
-    videoRef.current.onerror = (error) => {
-      console.error('Video error:', error);
-    };
 
     return () => {
       try {
@@ -85,6 +79,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
   return (
     <video
+      ref={videoRef}
       {...props}
       autoPlay
       playsInline
@@ -96,9 +91,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
         objectFit: fullscreen ? 'contain' : 'cover',
         ...props.style
       }}
-    >
-      <source src={`ws://${window.location.hostname}:${printer?.wsPort}/stream/${printer?.id}`} type="video/mp4" />
-    </video>
+    />
   );
 };
 
