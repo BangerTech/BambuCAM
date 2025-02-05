@@ -19,18 +19,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
     const maxRetries = 3;
     let isComponentMounted = true;  // Flag für Komponenten-Status
 
-    // Starte den Stream neu
-    const startStream = async () => {
-      try {
-        if (!isComponentMounted) return;
-        await fetch(`${API_URL}/stream/${printer.id}/start`, {
-          method: 'POST'
-        });
-      } catch (e) {
-        console.warn('Error starting stream:', e);
-      }
-    };
-
     const setupMediaSource = () => {
       if (!isComponentMounted || !videoRef.current) return;
       try {
@@ -46,9 +34,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             
             const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
-            
-            // Starte den Stream bevor wir die WebSocket-Verbindung aufbauen
-            startStream();
             
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';

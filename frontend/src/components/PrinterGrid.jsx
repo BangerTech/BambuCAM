@@ -316,10 +316,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       case 'offline':
         return { text: 'Offline', color: '#9e9e9e' };
       case 'unknown':
-        console.log('Unhandled printer status:', status);  // Debug-Log für unbekannte Status
-        return { text: status, color: '#9e9e9e' };  // Zeige den tatsächlichen Status
+        return { text: 'Connecting...', color: '#9e9e9e' };
       default:
-        return { text: 'Unknown', color: '#9e9e9e' };
+        return { text: status, color: '#9e9e9e' };
     }
   };
 
@@ -462,7 +461,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           sx={{ 
                             position: 'relative',
                             height: 0,
-                            paddingBottom: 'calc(56.25% + 40px)',  // 16:9 (56.25%) + Header/Footer
+                            paddingBottom: 'calc(56.25% + 72px)',  // 16:9 (56.25%) + Header(32px) + Footer(40px)
                             borderRadius: '15px',
                             overflow: 'hidden',
                             background: '#000',
@@ -723,6 +722,16 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             fullWidth
             value={newPrinter.name}
             onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '&.Mui-focused fieldset': {
+                  borderColor: '#00ffff',
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: '#00ffff',
+              },
+            }}
           />
           <TextField
             margin="dense"
@@ -730,6 +739,16 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             fullWidth
             value={newPrinter.ip}
             onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '&.Mui-focused fieldset': {
+                  borderColor: '#00ffff',
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: '#00ffff',
+              },
+            }}
           />
           <TextField
             margin="dense"
@@ -737,18 +756,47 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             fullWidth
             value={newPrinter.accessCode}
             onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '&.Mui-focused fieldset': {
+                  borderColor: '#00ffff',
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: '#00ffff',
+              },
+            }}
           />
         </DialogContent>
         <DialogActions sx={{ padding: '16px 24px' }}>
           <Button 
             onClick={handleClose}
             disabled={isAdding}
-            >Cancel</Button>
+            sx={{
+              color: '#00ffff',
+              '&:hover': {
+                background: 'rgba(0, 255, 255, 0.1)',
+              },
+            }}
+          >Cancel</Button>
           <Button 
             onClick={() => handleAddPrinter(newPrinter)}
             disabled={isAdding || !newPrinter.name || !newPrinter.ip || !newPrinter.accessCode}
             variant="contained"
-            >Add</Button>
+            sx={{
+              background: 'rgba(0, 0, 0, 0.8)',
+              color: '#00ffff',
+              border: '1px solid #00ffff',
+              '&:hover': {
+                background: 'rgba(0, 255, 255, 0.1)',
+              },
+              '&.Mui-disabled': {
+                background: 'rgba(0, 0, 0, 0.3)',
+                color: 'rgba(0, 255, 255, 0.3)',
+                border: '1px solid rgba(0, 255, 255, 0.3)',
+              },
+            }}
+          >Add</Button>
         </DialogActions>
       </Dialog>
 
