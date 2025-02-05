@@ -14,27 +14,36 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
     if (open && printer) {
       const startStream = async () => {
         try {
-          const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
-          console.log('Starting fullscreen stream:', wsUrl);
+          // Stream im Backend starten
+          const response = await fetch(`${API_URL}/stream/${printer.id}`);
+          const data = await response.json();
+          
+          if (data.status === 'success') {
+            console.log('Stream started successfully:', data);
+          } else {
+            console.error('Failed to start stream:', data);
+          }
         } catch (e) {
-          console.warn('Error starting fullscreen stream:', e);
+          console.error('Error starting stream:', e);
         }
       };
       startStream();
     }
+    
+    // Cleanup beim Schließen
+    return () => {
+      if (printer) {
+        fetch(`${API_URL}/stream/${printer.id}/stop`, { method: 'POST' })
+          .catch(e => console.warn('Error stopping stream:', e));
+      }
+    };
   }, [open, printer]);
 
   return (
     <Dialog
       fullScreen
       open={open}
-      onClose={() => {
-        // Cleanup beim Schließen
-        if (printer) {
-          console.log('Closing fullscreen stream');
-        }
-        onClose();
-      }}
+      onClose={onClose}
       PaperProps={{
         sx: {
           background: '#1a1a1a',
