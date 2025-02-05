@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress, FormControlLabel } from '@mui/material';
+import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress, FormControlLabel, SpeedDial, SpeedDialIcon, SpeedDialAction } from '@mui/material';
 import RTSPStream from './RTSPStream';
 import DeleteIcon from '@mui/icons-material/Delete';
 import '../styles/NeonButton.css';
@@ -10,6 +10,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { NeonSwitch } from '../styles/NeonSwitch.js';
 import RouterIcon from '@mui/icons-material/Router';
 import CloudIcon from '@mui/icons-material/Cloud';
+import AddIcon from '@mui/icons-material/Add';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -243,32 +244,19 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   const getPrintStatus = (printer) => {
-    try {
-      const status = printerStatus[printer.id]?.status;
-      switch(status) {
-        case 'printing':
-          return {
-            text: 'Druckt',
-            color: '#4caf50' // Grün
-          };
-        case 'idle':
-          return {
-            text: 'Bereit',
-            color: '#2196f3' // Blau
-          };
-        case 'standby':
-          return {
-            text: 'Standby',
-            color: '#ff9800' // Orange
-          };
-        default:
-          return {
-            text: 'Offline',
-            color: '#9e9e9e' // Grau
-          };
-      }
-    } catch (e) {
-      return { text: 'Unbekannt', color: '#9e9e9e' };
+    const status = printerStatus[printer.id]?.status || 'unknown';
+    
+    switch(status.toLowerCase()) {
+      case 'printing':
+        return { text: 'Printing', color: '#4caf50' };
+      case 'idle':
+        return { text: 'Idle', color: '#2196f3' };
+      case 'error':
+        return { text: 'Error', color: '#f44336' };
+      case 'offline':
+        return { text: 'Offline', color: '#9e9e9e' };
+      default:
+        return { text: 'Unknown', color: '#9e9e9e' };
     }
   };
 
@@ -564,7 +552,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           </IconButton>
         </DialogTitle>
         <DialogContent>
-          {/* Anleitung nur anzeigen wenn showGuide true ist */}
+          {/* Only show guide when showGuide is true */}
           <Collapse in={showGuide}>
             <Box sx={{ mb: 3, mt: 2 }}>
               <Typography variant="h6" sx={{ mb: 2 }}>
@@ -605,7 +593,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             )}
           </button>
 
-          {/* Gefundene Drucker */}
+          {/* Found Printers */}
           {scannedPrinters.length > 0 && (
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
@@ -639,7 +627,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             </Box>
           )}
 
-          {/* Manuelle Eingabe */}
+          {/* Manual Input */}
           <TextField
             autoFocus
             margin="dense"
@@ -784,7 +772,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         )}
       </Dialog>
 
-      {/* Stylische Snackbar */}
+      {/* Styled Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
@@ -821,6 +809,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <SpeedDial
+        ariaLabel="Add printer menu"
+        sx={{ position: 'fixed', bottom: 16, right: 16 }}
+        icon={<SpeedDialIcon />}
+      >
+        <SpeedDialAction
+          icon={<AddIcon />}
+          tooltipTitle="ADD PRINTER"
+          onClick={() => setShowAddDialog(true)}
+        />
+        {mode === 'cloud' && (
+          <SpeedDialAction
+            icon={<CloudIcon />}
+            tooltipTitle="CLOUD PRINTERS"
+            tooltipOpen
+            onClick={() => onCloudPrinterClick()}
+          />
+        )}
+      </SpeedDial>
     </div>
   );
 };

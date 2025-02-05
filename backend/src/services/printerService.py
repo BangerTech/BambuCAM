@@ -117,22 +117,22 @@ def removePrinter(printer_id):
         return False
 
 def getPrinterStatus(printer_id):
-    """Holt den Status eines Druckers über die Bambu Lab API"""
+    """Gets the printer status using BambuLab API with MQTT subscription"""
     try:
         printer = getPrinterById(printer_id)
         if not printer:
-            raise Exception("Drucker nicht gefunden")
+            raise Exception("Printer not found")
             
-        # Erstelle eine neue Instanz der BambuLab API
-        # Basierend auf: https://github.com/mchrisgm/bambulabs_api/blob/main/examples/basic.py
+        # Create API instance with MQTT enabled
         bambu_printer = bl.Printer(
-            printer['ip'],           # device_ip
-            printer['accessCode'],   # access_code 
-            "UNKNOWN"               # serial
+            printer['ip'],
+            printer['accessCode'],
+            "UNKNOWN",              
+            push_mqtt=True          # Enable MQTT subscription
         )
         
         try:
-            # Verbinde zum Drucker
+            # Connect to printer
             logger.info(f"Connecting to printer at {printer['ip']}")
             if not bambu_printer.connect():
                 logger.error("Could not connect to printer")
@@ -142,17 +142,31 @@ def getPrinterStatus(printer_id):
                     "progress": 0
                 }
 
-            # Warte kurz bis die Verbindung aufgebaut ist
+            # Wait for MQTT connection
             time.sleep(2)
             
             try:
-                # Hole den Drucker-Status - direkte Methoden aus dem Beispiel
+                # Get data from MQTT dump first
+                mqtt_data = bambu_printer.mqtt_dump()
+                if mqtt_data:
+                    logger.debug(f"MQTT Data: {mqtt_data}")
+                    return {
+                        "temperatures": {
+                            "bed": float(mqtt_data.get("bed_temp", 0)),
+                            "nozzle": float(mqtt_data.get("nozzle_temp", 0))
+                        },
+                        "status": mqtt_data.get("print_status", "unknown"),
+                        "progress": float(mqtt_data.get("progress", 0))
+                    }
+                    
+                # Fallback to direct API calls if MQTT fails
+                logger.warning("No MQTT data available, using direct API calls")
                 status = bambu_printer.get_state()
                 bed_temp = bambu_printer.get_bed_temperature()
                 nozzle_temp = bambu_printer.get_nozzle_temperature()
                 progress = bambu_printer.get_print_progress()
                 
-                logger.debug(f"Status: {status}, Bed: {bed_temp}, Nozzle: {nozzle_temp}, Progress: {progress}")
+                logger.debug(f"API Data - Status: {status}, Bed: {bed_temp}, Nozzle: {nozzle_temp}, Progress: {progress}")
                 
                 return {
                     "temperatures": {
@@ -178,7 +192,7 @@ def getPrinterStatus(printer_id):
                 pass
             
     except Exception as e:
-        logger.error(f"Fehler beim Abrufen des Drucker-Status: {str(e)}")
+        logger.error(f"Error getting printer status: {str(e)}")
         return {
             "temperatures": {"bed": 0, "nozzle": 0},
             "status": "offline",
