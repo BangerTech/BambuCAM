@@ -19,12 +19,11 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
-            // Korrekter MIME-Type für MPEG-TS mit H.264
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
               'video/mp2t; codecs="avc1.640029"'
             );
             
-            const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
+            const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
             
             wsRef.current = new WebSocket(wsUrl);

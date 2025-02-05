@@ -433,124 +433,126 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="printers">
           {(provided) => (
-            <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
-              {Array.isArray(displayPrinters) && displayPrinters.map((printer, index) => {
-                const dragId = printer.id ? printer.id.toString() : `printer-${index}`;
-                
-                return (
-                  <Draggable
-                    key={dragId}
-                    draggableId={dragId}
-                    index={index}
-                  >
-                    {(provided) => (
-                      <Grid item xs={12} sm={12} md={6} lg={6}
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        <Paper 
-                          sx={{ 
-                            position: 'relative',
-                            height: 0,
-                            paddingBottom: 'calc(56.25% + 40px)',  // 16:9 (56.25%) + Header/Footer
-                            borderRadius: '15px',
-                            overflow: 'hidden',
-                            background: '#000',
-                            boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-                          }}
+            <div {...provided.droppableProps} ref={provided.innerRef}>
+              <Grid container spacing={3}>
+                {Array.isArray(displayPrinters) && displayPrinters.map((printer, index) => {
+                  const dragId = printer.id ? printer.id.toString() : `printer-${index}`;
+                  
+                  return (
+                    <Draggable
+                      key={dragId}
+                      draggableId={dragId}
+                      index={index}
+                    >
+                      {(provided) => (
+                        <Grid item xs={12} sm={12} md={6} lg={6}
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
                         >
-                          {/* Header */}
-                          <Box sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '32px',
-                            padding: '8px',
-                            background: 'rgba(0,0,0,0.7)',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            color: 'white',
-                            zIndex: 2
-                          }}>
-                            <Typography variant="subtitle1">{printer.name}</Typography>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreen(printer)}>
-                                <FullscreenIcon />
-                              </IconButton>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printer.id)}>
-                                <DeleteIcon />
-                              </IconButton>
+                          <Paper 
+                            sx={{ 
+                              position: 'relative',
+                              height: 0,
+                              paddingBottom: 'calc(56.25% + 40px)',  // 16:9 (56.25%) + Header/Footer
+                              borderRadius: '15px',
+                              overflow: 'hidden',
+                              background: '#000',
+                              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+                            }}
+                          >
+                            {/* Header */}
+                            <Box sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: '32px',
+                              padding: '8px',
+                              background: 'rgba(0,0,0,0.7)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              color: 'white',
+                              zIndex: 2
+                            }}>
+                              <Typography variant="subtitle1">{printer.name}</Typography>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreen(printer)}>
+                                  <FullscreenIcon />
+                                </IconButton>
+                                <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printer.id)}>
+                                  <DeleteIcon />
+                                </IconButton>
+                              </Box>
                             </Box>
-                          </Box>
 
-                          {/* Video Stream */}
-                          <Box sx={{
-                            position: 'absolute',
-                            top: '32px',
-                            left: 0,
-                            right: 0,
-                            bottom: '40px',
-                            background: '#000'
-                          }}>
-                            <RTSPStream printer={printer} />
-                          </Box>
-
-                          {/* Footer */}
-                          <Box sx={{
-                            position: 'absolute',
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            padding: '8px',
-                            background: 'rgba(0,0,0,0.7)',
-                            color: 'white',
-                            zIndex: 2
-                          }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                              <Typography variant="body2">
-                                Hotend: {getTemperature(printer, 'nozzle')}°C
-                              </Typography>
-                              <Typography variant="body2">
-                                Bed: {getTemperature(printer, 'bed')}°C
-                              </Typography>
-                              <Typography variant="body2">
-                                Chamber: {getTemperature(printer, 'chamber')}°C
-                              </Typography>
-                              <Typography variant="body2" sx={{ color: getPrintStatus(printer).color }}>
-                                {getPrintStatus(printer).text}
-                              </Typography>
+                            {/* Video Stream */}
+                            <Box sx={{
+                              position: 'absolute',
+                              top: '32px',
+                              left: 0,
+                              right: 0,
+                              bottom: '40px',
+                              background: '#000'
+                            }}>
+                              <RTSPStream printer={printer} />
                             </Box>
-                            {getPrintStatus(printer).text === 'Printing' && (
-                              <Box sx={{ mt: 1 }}>
-                                <LinearProgress 
-                                  variant="determinate" 
-                                  value={getPrintProgress(printer)}
-                                  sx={{
-                                    height: 4,
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255,255,255,0.1)',
-                                    '& .MuiLinearProgress-bar': {
-                                      backgroundColor: '#4caf50'
-                                    }
-                                  }}
-                                />
-                                <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
-                                  Remaining: {printerStatus[printer.id]?.remaining_time || 0} min
+
+                            {/* Footer */}
+                            <Box sx={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              padding: '8px',
+                              background: 'rgba(0,0,0,0.7)',
+                              color: 'white',
+                              zIndex: 2
+                            }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                <Typography variant="body2">
+                                  Hotend: {getTemperature(printer, 'nozzle')}°C
+                                </Typography>
+                                <Typography variant="body2">
+                                  Bed: {getTemperature(printer, 'bed')}°C
+                                </Typography>
+                                <Typography variant="body2">
+                                  Chamber: {getTemperature(printer, 'chamber')}°C
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: getPrintStatus(printer).color }}>
+                                  {getPrintStatus(printer).text}
                                 </Typography>
                               </Box>
-                            )}
-                          </Box>
-                        </Paper>
-                      </Grid>
-                    )}
-                  </Draggable>
-                );
-              })}
-              {provided.placeholder}
-            </Grid>
+                              {getPrintStatus(printer).text === 'Printing' && (
+                                <Box sx={{ mt: 1 }}>
+                                  <LinearProgress 
+                                    variant="determinate" 
+                                    value={getPrintProgress(printer)}
+                                    sx={{
+                                      height: 4,
+                                      borderRadius: 2,
+                                      backgroundColor: 'rgba(255,255,255,0.1)',
+                                      '& .MuiLinearProgress-bar': {
+                                        backgroundColor: '#4caf50'
+                                      }
+                                    }}
+                                  />
+                                  <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
+                                    Remaining: {printerStatus[printer.id]?.remaining_time || 0} min
+                                  </Typography>
+                                </Box>
+                              )}
+                            </Box>
+                          </Paper>
+                        </Grid>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+              </Grid>
+            </div>
           )}
         </Droppable>
       </DragDropContext>
