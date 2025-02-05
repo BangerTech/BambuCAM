@@ -1,6 +1,6 @@
 {
   "short_name": "BambuCAM",
-  "name": "BambuCAM - Kamera Viewer für Bambulab Drucker",
+  "name": "BambuCAM - Camera Viewer for Bambulab Printers",
   "icons": [
     {
       "src": "favicon.ico",

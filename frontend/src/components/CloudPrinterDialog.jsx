@@ -29,13 +29,11 @@ const GlassDialog = styled(Dialog)(({ theme }) => ({
 const CloudPrinterDialog = ({ open, onClose, printers, onAddPrinter }) => {
   return (
     <GlassDialog open={open} onClose={onClose}>
-      <DialogTitle sx={{ color: '#00ffff' }}>
-        Verfügbare Cloud-Drucker
-      </DialogTitle>
+      <DialogTitle>Available Cloud Printers</DialogTitle>
       <DialogContent>
         {printers.length === 0 ? (
-          <Typography color="white" align="center" sx={{ py: 2 }}>
-            Keine Cloud-Drucker gefunden
+          <Typography>
+            No cloud printers found
           </Typography>
         ) : (
           <List>

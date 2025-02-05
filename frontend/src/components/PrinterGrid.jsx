@@ -64,7 +64,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
-    severity: 'success' // oder 'error'
+    severity: 'success'
   });
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [scannedPrinters, setScannedPrinters] = useState([]);
@@ -130,7 +130,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         
         setSnackbar({
           open: true,
-          message: `Drucker "${data.printer.name}" wurde erfolgreich hinzugefügt`,
+          message: `Printer "${data.printer.name}" added successfully`,
           severity: 'success'
         });
       }
@@ -138,7 +138,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       console.error('Fehler beim Hinzufügen:', error);
       setSnackbar({
         open: true,
-        message: `Fehler: ${error.message}`,
+        message: `Error: ${error.message}`,
         severity: 'error'
       });
     } finally {
@@ -192,7 +192,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         setLocalPrinters(printers => printers.filter(p => p.id !== printerId));
         setSnackbar({
           open: true,
-          message: 'Drucker erfolgreich gelöscht',
+          message: 'Printer deleted successfully',
           severity: 'success'
         });
       } else {
@@ -202,7 +202,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       console.error('Error deleting printer:', error);
       setSnackbar({
         open: true,
-        message: 'Fehler beim Löschen des Druckers',
+        message: 'Error deleting printer',
         severity: 'error'
       });
     }
@@ -470,7 +470,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                                 />
                                 {getRemainingTime(printer) && (
                                   <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
-                                    Verbleibend: {getRemainingTime(printer)}
+                                    Remaining: {getRemainingTime(printer)}min
                                   </Typography>
                                 )}
                               </Box>
@@ -555,10 +555,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <span>Neuen Drucker hinzufügen</span>
+          <span>Add New Printer</span>
           <IconButton
             onClick={() => setShowGuide(!showGuide)}
-            title="Einrichtungsanleitung"
+            title="Setup Guide"
           >
             <InfoIcon />
           </IconButton>
@@ -568,23 +568,23 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           <Collapse in={showGuide}>
             <Box sx={{ mb: 3, mt: 2 }}>
               <Typography variant="h6" sx={{ mb: 2 }}>
-                Einrichtung eines BambuLab Druckers:
+                BambuLab Printer Setup:
               </Typography>
               <ol style={{ paddingLeft: '20px' }}>
-                <li>Verbinden Sie den Drucker mit Ihrem Netzwerk per LAN-Kabel</li>
-                <li>Aktivieren Sie den LAN Mode Liveview:
+                <li>Connect the printer to your network via LAN cable</li>
+                <li>Enable LAN Mode Liveview:
                   <ul>
-                    <li>Gehen Sie zu "Einstellungen" (Zahnrad) > "Allgemein"</li>
-                    <li>Aktivieren Sie "LAN Mode Liveview"</li>
-                    <li>Notieren Sie sich den Access Code</li>
+                    <li>Go to "Settings" (gear icon) > "General"</li>
+                    <li>Enable "LAN Mode Liveview"</li>
+                    <li>Note down the Access Code</li>
                   </ul>
                 </li>
-                <li>Die IP-Adresse finden Sie unter:
+                <li>Find the IP address under:
                   <ul>
-                    <li>Einstellungen > Netzwerk > IP-Adresse</li>
+                    <li>Settings > Network > IP Address</li>
                   </ul>
                 </li>
-                <li>Klicken Sie auf "Nach Druckern suchen" oder geben Sie die IP manuell ein</li>
+                <li>Click "Scan Network" or enter the IP manually</li>
               </ol>
             </Box>
           </Collapse>
@@ -598,10 +598,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             {isScanning ? (
               <>
                 <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                Scanne...
+                Scanning...
               </>
             ) : (
-              'Nach Druckern suchen'
+              'Scan Network'
             )}
           </button>
 
@@ -609,7 +609,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           {scannedPrinters.length > 0 && (
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                Gefundene Drucker:
+                Found Printers:
               </Typography>
               <List>
                 {scannedPrinters.map((printer) => (
@@ -643,14 +643,14 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           <TextField
             autoFocus
             margin="dense"
-            label="Name"
+            label="Printer Name"
             fullWidth
             value={newPrinter.name}
             onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
           />
           <TextField
             margin="dense"
-            label="IP-Adresse"
+            label="IP Address"
             fullWidth
             value={newPrinter.ip}
             onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
@@ -775,7 +775,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                 </Typography>
                 {getRemainingTime(fullscreenPrinter) && (
                   <Typography>
-                    Verbleibend: {getRemainingTime(fullscreenPrinter)}min
+                    Remaining: {getRemainingTime(fullscreenPrinter)}min
                   </Typography>
                 )}
               </Box>

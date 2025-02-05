@@ -111,9 +111,7 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
 
   return (
     <GlassDialog open={open} onClose={onClose}>
-      <DialogTitle sx={{ color: '#00ffff' }}>
-        Bambulab Cloud Login
-      </DialogTitle>
+      <DialogTitle>Cloud Login</DialogTitle>
       <DialogContent>
         {error && (
           <Alert 
@@ -136,7 +134,7 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
             margin="normal"
           />
           <NeonTextField
-            label="Passwort"
+            label="Password"
             type="password"
             value={credentials.password}
             onChange={(e) => setCredentials(prev => ({...prev, password: e.target.value}))}
@@ -160,14 +158,14 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
           variant="outlined"
           disabled={isLoading}
         >
-          Abbrechen
+          Cancel
         </NeonButton>
         <NeonButton 
           onClick={handleLogin} 
           variant="contained"
           disabled={isLoading}
         >
-          {isLoading ? 'Lädt...' : 'Login'}
+          {isLoading ? 'Loading...' : 'Login'}
         </NeonButton>
       </DialogActions>
     </GlassDialog>

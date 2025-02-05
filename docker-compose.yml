@@ -7,7 +7,9 @@ services:
       - "9000:9000"  # WebSocket Stream
       - "8883:8883"  # MQTT
       - "8884:8884"  # MQTT over WebSocket
-    network_mode: "host"  # Wichtig für RTSP und lokale Netzwerkkommunikation
+      - "1990:1990"  # BambuLab Discovery
+      - "1991:1991"  # BambuLab API
+    network_mode: "host"  # Wichtig für direkte Netzwerkkommunikation
     volumes:
       - ./backend:/app
       - /app/__pycache__
