@@ -169,16 +169,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   const handleFullscreen = (printer) => {
-    // Stoppe existierenden Stream falls vorhanden
-    if (fullscreenPrinter) {
-      try {
-        fetch(`${API_URL}/stream/${fullscreenPrinter.id}/stop`, {
-          method: 'POST'
-        });
-      } catch (e) {
-        console.warn('Error stopping stream:', e);
-      }
-    }
     setFullscreenPrinter(printer);
   };
 

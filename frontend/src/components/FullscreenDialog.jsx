@@ -41,8 +41,6 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
         <RTSPStream 
           printer={printer} 
           fullscreen 
-          url={printer?.streamUrl}
-          wsPort={printer?.wsPort || 9000}
           style={{
             width: '100%',
             height: '100%',
