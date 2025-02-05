@@ -1,16 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Dialog, IconButton, Box, Typography, AppBar, Toolbar, LinearProgress, Paper } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import RTSPStream from './RTSPStream';
 
 const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatus }) => {
-  useEffect(() => {
-    if (open && printer) {
-      // Kein zusätzliches Video-Management nötig
-      // RTSPStream kümmert sich selbst um die Verbindung
-    }
-  }, [open, printer]);
-
   return (
     <Dialog
       fullScreen
@@ -62,13 +55,8 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain',
-              background: '#000'
+              objectFit: 'contain'
             }}
-            autoPlay
-            playsInline
-            muted
-            className="fullscreen-video"
           />
           
           {/* Status Overlay */}

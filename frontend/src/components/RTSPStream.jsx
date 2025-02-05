@@ -71,9 +71,13 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       }
     };
 
-    setupMediaSource();
+    // Verzögerung für die initiale Verbindung
+    const initTimeout = setTimeout(() => {
+      setupMediaSource();
+    }, 1000);
 
     return () => {
+      clearTimeout(initTimeout);
       try {
         if (wsRef.current) {
           wsRef.current.close();

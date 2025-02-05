@@ -58,6 +58,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [open, setOpen] = useState(false);
   const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
   const [isScanning, setIsScanning] = useState(false);
+  const [scanTimer, setScanTimer] = useState(10);
   const [foundPrinters, setFoundPrinters] = useState([]);
   const [printerStatus, setPrinterStatus] = useState({});
   const [fullscreenPrinter, setFullscreenPrinter] = useState(null);
@@ -151,11 +152,20 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const handleScan = async () => {
     try {
       setIsScanning(true);
+      setScanTimer(10);
       console.log('Starte Scan...');
       
+      // Timer UI updaten
+      const timer = setInterval(() => {
+        setScanTimer(prev => prev - 1);
+      }, 1000);
+
       // Timeout nach 10 Sekunden
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Scan timeout')), 10000);
+        setTimeout(() => {
+          clearInterval(timer);
+          reject(new Error('Scan timeout'));
+        }, 10000);
       });
       
       // Race zwischen Scan und Timeout
@@ -241,6 +251,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     items.splice(result.destination.index, 0, reorderedItem);
     
     setLocalPrinters(items);
+    localStorage.setItem('printers', JSON.stringify(items));
   };
 
   // Lade die gespeicherte Reihenfolge beim Start
@@ -251,12 +262,14 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         const parsedPrinters = JSON.parse(savedPrinters);
         // Stelle sicher, dass alle Drucker eine ID haben
         const validPrinters = parsedPrinters.filter(printer => printer.id);
-        setLocalPrinters(validPrinters);
+        if (localPrinters.length === 0) {
+          setLocalPrinters(validPrinters);
+        }
       }
     } catch (error) {
       console.error('Error loading saved printers:', error);
     }
-  }, []);
+  }, [localPrinters.length]);
 
   const handleClose = () => {
     setOpen(false);
@@ -661,7 +674,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             {isScanning ? (
               <>
                 <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                Scanning...
+                Scanning... ({scanTimer}s)
               </>
             ) : (
               'Scan Network'
