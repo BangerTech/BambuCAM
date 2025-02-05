@@ -12,6 +12,9 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   useEffect(() => {
     if (!printer || !videoRef.current) return;
 
+    let retryCount = 0;
+    const maxRetries = 3;
+
     const setupMediaSource = () => {
       try {
         mediaSourceRef.current = new MediaSource();
@@ -29,6 +32,24 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';
             
+            wsRef.current.onopen = () => {
+              console.log('WebSocket Connected');
+              retryCount = 0;
+            };
+
+            wsRef.current.onclose = () => {
+              console.log('WebSocket Closed');
+              if (retryCount < maxRetries) {
+                console.log(`Attempting reconnect (${retryCount + 1}/${maxRetries})...`);
+                retryCount++;
+                setTimeout(setupMediaSource, 1000);
+              }
+            };
+
+            wsRef.current.onerror = (error) => {
+              console.error('WebSocket Error:', error);
+            };
+            
             wsRef.current.onmessage = (event) => {
               if (sourceBufferRef.current && !sourceBufferRef.current.updating) {
                 try {
@@ -41,11 +62,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
                 }
               }
             };
-
-            // Debug Events
-            wsRef.current.onopen = () => console.log('WebSocket Connected');
-            wsRef.current.onclose = () => console.log('WebSocket Closed');
-            
           } catch (e) {
             console.error('Error in sourceopen:', e);
           }

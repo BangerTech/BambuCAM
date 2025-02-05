@@ -267,12 +267,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     switch(status.toLowerCase()) {
       case 'running':  // MQTT sendet "RUNNING" statt "printing"
         return { text: 'Printing', color: '#4caf50' };
+      case 'ready':    // Drucker ist bereit aber inaktiv
+        return { text: 'Ready', color: '#2196f3' };
       case 'idle':
         return { text: 'Idle', color: '#2196f3' };
+      case 'paused':
+        return { text: 'Paused', color: '#ff9800' };
+      case 'finished':
+        return { text: 'Finished', color: '#4caf50' };
       case 'error':
         return { text: 'Error', color: '#f44336' };
       case 'offline':
         return { text: 'Offline', color: '#9e9e9e' };
+      case 'unknown':
+        console.log('Unhandled printer status:', status);  // Debug-Log für unbekannte Status
+        return { text: status, color: '#9e9e9e' };  // Zeige den tatsächlichen Status
       default:
         return { text: 'Unknown', color: '#9e9e9e' };
     }
