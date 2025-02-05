@@ -455,7 +455,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           sx={{ 
                             position: 'relative',
                             height: 0,
-                            paddingBottom: 'calc(78.75% + 80px)',
+                            paddingBottom: 'calc(78.75% + 40px)',
                             borderRadius: '15px',
                             overflow: 'hidden',
                             background: '#000',
@@ -468,7 +468,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                             top: 0,
                             left: 0,
                             right: 0,
-                            height: '40px',
+                            height: '32px',
                             padding: '8px',
                             background: 'rgba(0,0,0,0.7)',
                             display: 'flex',
@@ -491,7 +491,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           {/* Video Stream */}
                           <Box sx={{
                             position: 'absolute',
-                            top: '40px',
+                            top: '32px',
                             left: 0,
                             right: 0,
                             bottom: '40px',
@@ -751,9 +751,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         onClose={() => {
           // Stream stoppen beim Schließen
           if (fullscreenPrinter) {
-            fetch(`${API_URL}/stream/${fullscreenPrinter.id}/stop`, {
-              method: 'POST'
-            }).catch(console.error);
+            // Optional: Cleanup-Code hier
           }
           setFullscreenPrinter(null);
         }}

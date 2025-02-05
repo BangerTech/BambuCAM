@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const RTSPStream = ({ printer }) => {
+const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const videoRef = useRef(null);
   const wsRef = useRef(null);
   const mediaSourceRef = useRef(null);
@@ -84,19 +84,21 @@ const RTSPStream = ({ printer }) => {
   }, [printer]);
 
   return (
-    <video 
-      ref={videoRef} 
-      autoPlay 
-      playsInline 
+    <video
+      {...props}
+      autoPlay
+      playsInline
       muted
-      controls
-      style={{ 
-        width: '100%', 
+      controls={false}
+      style={{
+        width: '100%',
         height: '100%',
-        objectFit: 'contain',
-        backgroundColor: '#000'
+        objectFit: fullscreen ? 'contain' : 'cover',
+        ...props.style
       }}
-    />
+    >
+      <source src={`ws://${window.location.hostname}:${printer?.wsPort}/stream/${printer?.id}`} type="video/mp4" />
+    </video>
   );
 };
 
