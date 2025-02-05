@@ -124,10 +124,11 @@ def getPrinterStatus(printer_id):
             raise Exception("Drucker nicht gefunden")
             
         # Erstelle eine neue Instanz der BambuLab API
+        # Die API erwartet: Printer(device_ip, access_code, serial)
         bambu_printer = bl.Printer(
-            ip=printer['ip'],
-            access_code=printer['accessCode'],
-            serial="UNKNOWN"  # Dummy Serial, da optional für lokale Verbindung
+            printer['ip'],           # device_ip als erstes Argument
+            printer['accessCode'],    # access_code als zweites Argument
+            "UNKNOWN"                # serial als drittes Argument
         )
         
         try:
