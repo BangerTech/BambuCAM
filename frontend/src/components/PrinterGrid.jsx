@@ -416,6 +416,22 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   };
 
+  useEffect(() => {
+    const startStreams = async () => {
+      for (const printer of localPrinters) {
+        try {
+          await fetch(`${API_URL}/stream/${printer.id}`);
+        } catch (e) {
+          console.warn(`Error starting stream for printer ${printer.id}:`, e);
+        }
+      }
+    };
+
+    if (localPrinters.length > 0) {
+      startStreams();
+    }
+  }, [localPrinters]);
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ 

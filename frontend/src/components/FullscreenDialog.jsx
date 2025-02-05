@@ -11,28 +11,31 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
 
   // Starte den Stream wenn der Dialog geöffnet wird
   React.useEffect(() => {
-    if (open && printer) {
-      const startStream = async () => {
+    let isActive = true;
+
+    const startStream = async () => {
+      if (open && printer) {
         try {
-          // Stream im Backend starten
+          // Stream im Backend neu starten
           const response = await fetch(`${API_URL}/stream/${printer.id}`);
           const data = await response.json();
           
           if (data.status === 'success') {
-            console.log('Stream started successfully:', data);
-          } else {
-            console.error('Failed to start stream:', data);
+            console.log('Fullscreen stream started:', data);
           }
         } catch (e) {
-          console.error('Error starting stream:', e);
+          console.error('Error starting fullscreen stream:', e);
         }
-      };
-      startStream();
-    }
-    
-    // Cleanup beim Schließen
+      }
+    };
+
+    startStream();
+
+    // Cleanup
     return () => {
+      isActive = false;
       if (printer) {
+        // Stream stoppen beim Schließen
         fetch(`${API_URL}/stream/${printer.id}/stop`, { method: 'POST' })
           .catch(e => console.warn('Error stopping stream:', e));
       }

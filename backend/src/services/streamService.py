@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 class StreamService:
     def __init__(self):
         self.active_streams = {}
-        self.ws_servers = {}  # Speichere WebSocket-Server pro Port
+        self.ws_servers = {}
+        self.server_running = False  # Neuer Flag für Server-Status
         
     async def stream_handler(self, websocket, path):
         """Behandelt WebSocket-Verbindungen"""
@@ -65,27 +66,36 @@ class StreamService:
             
     def start_websocket_server(self, port):
         """Startet den WebSocket-Server"""
-        if port in self.ws_servers:
-            return  # Server läuft bereits
+        if self.server_running:  # Prüfe ob Server bereits läuft
+            return
+
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        start_server = websockets.serve(
-            self.stream_handler, 
-            "0.0.0.0", 
-            port,
-            ping_interval=None
-        )
-        
-        self.ws_servers[port] = {
-            'server': start_server,
-            'loop': loop
-        }
-        
-        loop.run_until_complete(start_server)
-        loop.run_forever()
-        
+            start_server = websockets.serve(
+                self.stream_handler, 
+                "0.0.0.0", 
+                port,
+                ping_interval=None
+            )
+            
+            self.ws_servers[port] = {
+                'server': start_server,
+                'loop': loop
+            }
+            
+            loop.run_until_complete(start_server)
+            self.server_running = True  # Setze Flag
+            loop.run_forever()
+            
+        except OSError as e:
+            if e.errno == 98:  # Address already in use
+                logger.info("WebSocket server already running")
+                self.server_running = True
+            else:
+                raise e
+
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
@@ -122,7 +132,7 @@ class StreamService:
                 raise Exception("FFmpeg process failed to start")
             
             # Starte WebSocket-Server wenn noch nicht gestartet
-            if port not in self.ws_servers:
+            if not self.server_running:
                 ws_thread = Thread(
                     target=self.start_websocket_server,
                     args=(port,)
