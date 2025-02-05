@@ -343,12 +343,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         
         {/* Neon Button nur im LAN-Mode anzeigen */}
         {mode === 'lan' && (
-          <button 
-            className="neon-pulse-button"
+          <Button
+            variant="contained"
             onClick={() => setOpen(true)}
+            sx={{
+              background: 'rgba(0, 0, 0, 0.8)',
+              color: '#00ffff',
+              borderRadius: '1.5rem',
+              textTransform: 'none',
+              padding: '8px 24px',
+              border: '0.15rem solid #00ffff',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 0 2rem rgba(0, 255, 255, 0.3)',
+              '&:hover': {
+                boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
+                background: 'rgba(0, 0, 0, 0.85)'
+              }
+            }}
           >
-            +<span>Drucker hinzufügen</span>
-          </button>
+            + ADD PRINTER
+          </Button>
         )}
       </div>
 
@@ -654,52 +668,13 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         <DialogActions sx={{ padding: '16px 24px' }}>
           <Button 
             onClick={handleClose}
-            sx={{ 
-              color: isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.8)',
-              borderRadius: '1.5rem',
-              textTransform: 'none',
-              padding: '8px 24px',
-              border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)'}`,
-              '&:hover': {
-                border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}`,
-                background: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'
-              }
-            }}
-          >
-            Abbrechen
-          </Button>
+            disabled={isAdding}
+            >Cancel</Button>
           <Button 
-            onClick={(e) => handleAddPrinter(newPrinter)}
-            disabled={!newPrinter.name || !newPrinter.ip || isAdding}
-            sx={{ 
-              background: 'rgba(0, 0, 0, 0.8)',
-              color: '#ffffff',
-              borderRadius: '1.5rem',
-              textTransform: 'none',
-              padding: '8px 24px',
-              border: '0.15rem solid #00ffff',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 0 2rem rgba(0, 255, 255, 0.3)',
-              '&:hover': {
-                boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
-                background: 'rgba(0, 0, 0, 0.85)',
-                color: '#ffffff'
-              },
-              '&:disabled': {
-                opacity: 0.6,
-                color: 'rgba(255,255,255,0.7)'
-              }
-            }}
-          >
-            {isAdding ? (
-              <>
-                <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                Füge hinzu...
-              </>
-            ) : (
-              'Hinzufügen'
-            )}
-          </Button>
+            onClick={() => handleAddPrinter(newPrinter)}
+            disabled={isAdding || !newPrinter.name || !newPrinter.ip || !newPrinter.accessCode}
+            variant="contained"
+            >Add</Button>
         </DialogActions>
       </Dialog>
 
@@ -744,6 +719,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
               <RTSPStream 
                 url={fullscreenPrinter.streamUrl} 
                 wsPort={fullscreenPrinter.wsPort}
+                fullscreen={true}
               />
             </Box>
             

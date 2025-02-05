@@ -117,24 +117,24 @@ def removePrinter(printer_id):
         return False
 
 def getPrinterStatus(printer_id):
-    """Gets the printer status using BambuLab API with MQTT subscription"""
+    """Gets the printer status using BambuLab API"""
     try:
         printer = getPrinterById(printer_id)
         if not printer:
             raise Exception("Printer not found")
             
-        # Create API instance with MQTT enabled
+        # Create API instance
         bambu_printer = bl.Printer(
-            printer['ip'],
-            printer['accessCode'],
-            "UNKNOWN",              
-            push_mqtt=True          # Enable MQTT subscription
+            printer['ip'],           # device_ip
+            printer['accessCode'],   # access_code 
+            "UNKNOWN",              # serial
+            push_mqtt=False         # Disable MQTT push
         )
         
         try:
-            # Connect to printer
+            # Connect to printer with timeout
             logger.info(f"Connecting to printer at {printer['ip']}")
-            if not bambu_printer.connect():
+            if not bambu_printer.connect(timeout=10):  # Add timeout
                 logger.error("Could not connect to printer")
                 return {
                     "temperatures": {"bed": 0, "nozzle": 0},
@@ -142,39 +142,26 @@ def getPrinterStatus(printer_id):
                     "progress": 0
                 }
 
-            # Wait for MQTT connection
-            time.sleep(2)
-            
             try:
-                # Get data from MQTT dump first
-                mqtt_data = bambu_printer.mqtt_dump()
-                if mqtt_data:
-                    logger.debug(f"MQTT Data: {mqtt_data}")
-                    return {
-                        "temperatures": {
-                            "bed": float(mqtt_data.get("bed_temp", 0)),
-                            "nozzle": float(mqtt_data.get("nozzle_temp", 0))
-                        },
-                        "status": mqtt_data.get("print_status", "unknown"),
-                        "progress": float(mqtt_data.get("progress", 0))
-                    }
-                    
-                # Fallback to direct API calls if MQTT fails
-                logger.warning("No MQTT data available, using direct API calls")
-                status = bambu_printer.get_state()
-                bed_temp = bambu_printer.get_bed_temperature()
-                nozzle_temp = bambu_printer.get_nozzle_temperature()
-                progress = bambu_printer.get_print_progress()
+                # Get printer status using direct API calls
+                logger.debug("Getting printer info...")
+                info = bambu_printer.get_info()  # Get printer info first
+                logger.debug(f"Printer info: {info}")
                 
-                logger.debug(f"API Data - Status: {status}, Bed: {bed_temp}, Nozzle: {nozzle_temp}, Progress: {progress}")
+                logger.debug("Getting printer status...")
+                status = bambu_printer.get_print_status()  # Use get_print_status instead of get_state
+                logger.debug(f"Print status: {status}")
+                
+                temps = bambu_printer.get_temperatures() or {}  # Get all temperatures at once
+                logger.debug(f"Temperatures: {temps}")
                 
                 return {
                     "temperatures": {
-                        "bed": float(bed_temp or 0),
-                        "nozzle": float(nozzle_temp or 0)
+                        "bed": float(temps.get('bed', 0)),
+                        "nozzle": float(temps.get('nozzle', 0))
                     },
-                    "status": status or "unknown",
-                    "progress": float(progress or 0)
+                    "status": status.get('status', 'unknown'),
+                    "progress": float(status.get('progress', 0))
                 }
                 
             except Exception as e:
