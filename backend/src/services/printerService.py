@@ -123,11 +123,11 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Printer not found")
             
-        # Create API instance - only basic parameters according to docs
+        # Create API instance with minimal parameters
         bambu_printer = bl.Printer(
             printer['ip'],
             printer['accessCode'],
-            "UNKNOWN"
+            serial="UNKNOWN"  # Serial parameter name is required
         )
         
         try:
@@ -142,23 +142,18 @@ def getPrinterStatus(printer_id):
                 }
 
             try:
-                # Get printer status using correct API methods
-                status = bambu_printer.get_print_status()  # Returns dict with status info
-                logger.debug(f"Print status: {status}")
+                # Get all info at once using get_all()
+                info = bambu_printer.get_all()
+                logger.debug(f"Printer info: {info}")
                 
-                # Get temperatures using correct method
-                nozzle_temp = bambu_printer.get_nozzle_temp()  # Direct method for nozzle
-                bed_temp = bambu_printer.get_bed_temp()        # Direct method for bed
-                
-                logger.debug(f"Temperatures - Nozzle: {nozzle_temp}, Bed: {bed_temp}")
-                
+                # Extract required data
                 return {
                     "temperatures": {
-                        "bed": float(bed_temp or 0),
-                        "nozzle": float(nozzle_temp or 0)
+                        "bed": float(info.get('bed_temper', 0)),
+                        "nozzle": float(info.get('nozzle_temper', 0))
                     },
-                    "status": status.get("gcode_state", "unknown"),
-                    "progress": float(status.get("mc_percent", 0))
+                    "status": info.get('gcode_state', 'unknown'),
+                    "progress": float(info.get('mc_percent', 0))
                 }
                 
             except Exception as e:

@@ -694,7 +694,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             margin: '20px',
             borderRadius: '15px',
             overflow: 'hidden',
-            background: '#000'
+            background: '#000',
+            height: 'calc(100vh - 40px)'  // Volle Höhe minus Margins
           }
         }}
       >
@@ -724,15 +725,17 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             <Box sx={{ 
               flex: 1, 
               position: 'relative',
-              height: 'calc(100vh - 100px)'  // Volle Höhe minus Status-Bar
+              minHeight: 0  // Wichtig für Flex-Container
             }}>
               <RTSPStream 
                 url={fullscreenPrinter.streamUrl} 
                 wsPort={fullscreenPrinter.wsPort}
+                key={`fullscreen-${fullscreenPrinter.id}`}  // Force re-render
                 style={{
                   width: '100%',
                   height: '100%',
-                  objectFit: 'contain'
+                  objectFit: 'contain',
+                  backgroundColor: '#000'
                 }}
               />
             </Box>
@@ -741,7 +744,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             <Box sx={{
               padding: '20px',
               background: 'rgba(0,0,0,0.7)',
-              color: 'white'
+              color: 'white',
+              minHeight: '100px'  // Feste Höhe für Status-Bar
             }}>
               <Typography variant="h6">{fullscreenPrinter.name}</Typography>
               <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>

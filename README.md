@@ -104,9 +104,7 @@ For issues or questions, please create a [GitHub Issue](https://github.com/Bange
 
 ## Sponsorship
 
-<a href="https://www.paypal.com/donate/?hosted_button_id=8MHDYJXQCXE6L" target="_blank">
-  <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal"/>
-</a>
+<a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=FD26FHKRWS3US" target="_blank"><img src="https://pics.paypal.com/00/s/N2EwMzk4NzUtOTQ4Yy00Yjc4LWIwYmUtMTA3MWExNWIzYzMz/file.PNG" alt="SUPPORT" height="51"></a>
 
 ## Keywords
 `bambulab` `3d-printer` `camera-viewer` `monitoring` `docker` `react` `rtsp-stream` 
