@@ -123,32 +123,41 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Drucker nicht gefunden")
             
-        # Erstelle eine neue Instanz der BambuLab API
-        bambu_printer = bl.Printer(
-            printer['ip'],           # device_ip
-            printer['accessCode'],   # access_code 
-            "UNKNOWN"               # serial
-        )
+        # MQTT Client Setup
+        client = mqtt.Client()
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.username_pw_set("bblp", printer['accessCode'])
         
         try:
-            # Verbinde zum Drucker ohne timeout
-            connected = bambu_printer.connect()
-            if not connected:
-                logger.error("Could not connect to printer")
-                return {
-                    "temperatures": {"bed": 0, "nozzle": 0},
-                    "status": "offline",
-                    "progress": 0
-                }
-
-            # Warte kurz bis die Verbindung aufgebaut ist
-            time.sleep(1)
+            # Verbinde zum MQTT Broker des Druckers
+            client.connect(printer['ip'], 8883, 60)
+            client.loop_start()
             
-            # Hole die Druckerdaten
+            # Warte kurz auf die Verbindung
+            time.sleep(2)
+            
+            # Erstelle BambuLab API Instanz
+            bambu_printer = bl.Printer(
+                printer['ip'],
+                printer['accessCode'],
+                "UNKNOWN"
+            )
+            
             try:
-                # Versuche zuerst den MQTT Status
+                # Versuche die Verbindung
+                if not bambu_printer.connect():
+                    logger.error("Could not connect to printer API")
+                    return {
+                        "temperatures": {"bed": 0, "nozzle": 0},
+                        "status": "offline",
+                        "progress": 0
+                    }
+                
+                # Hole die Druckerdaten über MQTT
                 mqtt_info = bambu_printer.get_mqtt_info()
                 if mqtt_info:
+                    logger.debug(f"MQTT Info: {mqtt_info}")
                     return {
                         "temperatures": {
                             "bed": float(mqtt_info.get('bed_temp', 0)),
@@ -157,24 +166,31 @@ def getPrinterStatus(printer_id):
                         "status": mqtt_info.get('print_status', 'unknown'),
                         "progress": float(mqtt_info.get('progress', 0))
                     }
-            except:
-                # Fallback: Versuche die einzelnen Werte direkt abzufragen
-                temps = bambu_printer.get_temperatures() or {}
-                status = bambu_printer.get_print_status() or {}
+                else:
+                    logger.warning("No MQTT info available, using fallback")
+                    # Fallback auf direkte API Abfragen
+                    temps = bambu_printer.get_temperatures() or {}
+                    status = bambu_printer.get_print_status() or {}
+                    
+                    return {
+                        "temperatures": {
+                            "bed": float(temps.get('bed', 0)),
+                            "nozzle": float(temps.get('nozzle', 0))
+                        },
+                        "status": status.get('status', 'unknown'),
+                        "progress": float(status.get('progress', 0))
+                    }
                 
-                return {
-                    "temperatures": {
-                        "bed": float(temps.get('bed', 0)),
-                        "nozzle": float(temps.get('nozzle', 0))
-                    },
-                    "status": status.get('status', 'unknown'),
-                    "progress": float(status.get('progress', 0))
-                }
-            
+            finally:
+                try:
+                    bambu_printer.disconnect()
+                except:
+                    pass
+                    
         finally:
-            # Wichtig: Verbindung trennen
             try:
-                bambu_printer.disconnect()
+                client.loop_stop()
+                client.disconnect()
             except:
                 pass
             
@@ -315,10 +331,12 @@ def stopPrint(printer_id):
 
 # MQTT Callbacks
 def on_connect(client, userdata, flags, rc):
-    print(f"Connected with result code {rc}")
+    logger.info(f"MQTT Connected with result code: {rc}")
+    if rc == 0:
+        client.subscribe("device/+/report")
 
 def on_message(client, userdata, msg):
-    print(f"Message received on {msg.topic}: {msg.payload}")
+    logger.debug(f"MQTT Message received: {msg.topic} {msg.payload}")
 
 # Lade gespeicherte Drucker beim Start
 stored_printers = getPrinters() 
