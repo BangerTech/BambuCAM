@@ -1,5 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 
+// Dynamische API URL basierend auf dem aktuellen Host
+const API_URL = `http://${window.location.hostname}:4000`;
+
 const RTSPStream = ({ printer, fullscreen, ...props }) => {
   // Filtere nicht-DOM Props
   const { wsPort, ...videoProps } = props;
@@ -14,14 +17,29 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
     let retryCount = 0;
     const maxRetries = 3;
+    let isComponentMounted = true;  // Flag für Komponenten-Status
+
+    // Starte den Stream neu
+    const startStream = async () => {
+      try {
+        if (!isComponentMounted) return;
+        await fetch(`${API_URL}/stream/${printer.id}/start`, {
+          method: 'POST'
+        });
+      } catch (e) {
+        console.warn('Error starting stream:', e);
+      }
+    };
 
     const setupMediaSource = () => {
+      if (!isComponentMounted || !videoRef.current) return;
       try {
         mediaSourceRef.current = new MediaSource();
         videoRef.current.src = URL.createObjectURL(mediaSourceRef.current);
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
+            if (!isComponentMounted) return;
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
               'video/mp2t; codecs="avc1.640029"'
             );
@@ -29,16 +47,21 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
             
+            // Starte den Stream bevor wir die WebSocket-Verbindung aufbauen
+            startStream();
+            
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';
             
             wsRef.current.onopen = () => {
+              if (!isComponentMounted) return;
               console.log('WebSocket Connected');
               retryCount = 0;
             };
 
             wsRef.current.onclose = () => {
               console.log('WebSocket Closed');
+              if (!isComponentMounted) return;
               if (retryCount < maxRetries) {
                 console.log(`Attempting reconnect (${retryCount + 1}/${maxRetries})...`);
                 retryCount++;
@@ -71,27 +94,28 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       }
     };
 
-    // Verzögerung für die initiale Verbindung
-    const initTimeout = setTimeout(() => {
-      setupMediaSource();
-    }, 1000);
+    setupMediaSource();
 
     return () => {
-      clearTimeout(initTimeout);
+      isComponentMounted = false;  // Komponente wird unmounted
       try {
         if (wsRef.current) {
           wsRef.current.close();
+          wsRef.current = null;
         }
         if (videoRef.current && videoRef.current.src) {
           URL.revokeObjectURL(videoRef.current.src);
+          videoRef.current.src = '';
         }
         if (sourceBufferRef.current && mediaSourceRef.current) {
           try {
             mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+            sourceBufferRef.current = null;
           } catch (e) {
             console.warn('Error removing source buffer:', e);
           }
         }
+        mediaSourceRef.current = null;
       } catch (e) {
         console.warn('Error during cleanup:', e);
       }

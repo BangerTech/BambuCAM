@@ -8,7 +8,14 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
     <Dialog
       fullScreen
       open={open}
-      onClose={onClose}
+      onClose={() => {
+        // Stream stoppen beim Schließen
+        if (printer) {
+          fetch(`${API_URL}/stream/${printer.id}/stop`, {
+            method: 'POST'
+          }).catch(e => console.warn('Error stopping stream:', e));
+        }
+      }}
       PaperProps={{
         sx: {
           background: '#1a1a1a',
