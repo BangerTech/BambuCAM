@@ -123,18 +123,17 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Printer not found")
             
-        # Create API instance
+        # Create API instance - only basic parameters according to docs
         bambu_printer = bl.Printer(
-            printer['ip'],           # device_ip
-            printer['accessCode'],   # access_code 
-            "UNKNOWN",              # serial
-            push_mqtt=False         # Disable MQTT push
+            printer['ip'],
+            printer['accessCode'],
+            "UNKNOWN"
         )
         
         try:
-            # Connect to printer with timeout
+            # Connect to printer
             logger.info(f"Connecting to printer at {printer['ip']}")
-            if not bambu_printer.connect(timeout=10):  # Add timeout
+            if not bambu_printer.connect():
                 logger.error("Could not connect to printer")
                 return {
                     "temperatures": {"bed": 0, "nozzle": 0},
@@ -143,25 +142,23 @@ def getPrinterStatus(printer_id):
                 }
 
             try:
-                # Get printer status using direct API calls
-                logger.debug("Getting printer info...")
-                info = bambu_printer.get_info()  # Get printer info first
-                logger.debug(f"Printer info: {info}")
-                
-                logger.debug("Getting printer status...")
-                status = bambu_printer.get_print_status()  # Use get_print_status instead of get_state
+                # Get printer status using correct API methods
+                status = bambu_printer.get_print_status()  # Returns dict with status info
                 logger.debug(f"Print status: {status}")
                 
-                temps = bambu_printer.get_temperatures() or {}  # Get all temperatures at once
-                logger.debug(f"Temperatures: {temps}")
+                # Get temperatures using correct method
+                nozzle_temp = bambu_printer.get_nozzle_temp()  # Direct method for nozzle
+                bed_temp = bambu_printer.get_bed_temp()        # Direct method for bed
+                
+                logger.debug(f"Temperatures - Nozzle: {nozzle_temp}, Bed: {bed_temp}")
                 
                 return {
                     "temperatures": {
-                        "bed": float(temps.get('bed', 0)),
-                        "nozzle": float(temps.get('nozzle', 0))
+                        "bed": float(bed_temp or 0),
+                        "nozzle": float(nozzle_temp or 0)
                     },
-                    "status": status.get('status', 'unknown'),
-                    "progress": float(status.get('progress', 0))
+                    "status": status.get("gcode_state", "unknown"),
+                    "progress": float(status.get("mc_percent", 0))
                 }
                 
             except Exception as e:

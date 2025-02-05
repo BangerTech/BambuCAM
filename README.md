@@ -102,6 +102,8 @@ For issues or questions, please create a [GitHub Issue](https://github.com/Bange
 
 ## Sponsorship
 
+## Sponsorship
+
 <a href="https://www.paypal.com/donate/?hosted_button_id=8MHDYJXQCXE6L" target="_blank">
   <img src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" alt="Donate with PayPal"/>
 </a>

@@ -358,10 +358,16 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
               '&:hover': {
                 boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
                 background: 'rgba(0, 0, 0, 0.85)'
+              },
+              '& .hover-text': {
+                display: 'none'
+              },
+              '&:hover .hover-text': {
+                display: 'inline'
               }
             }}
           >
-            + ADD PRINTER
+            + <span className="hover-text">ADD PRINTER</span>
           </Button>
         )}
       </div>
@@ -715,11 +721,19 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             display: 'flex',
             flexDirection: 'column'
           }}>
-            <Box sx={{ flex: 1, position: 'relative' }}>
+            <Box sx={{ 
+              flex: 1, 
+              position: 'relative',
+              height: 'calc(100vh - 100px)'  // Volle Höhe minus Status-Bar
+            }}>
               <RTSPStream 
                 url={fullscreenPrinter.streamUrl} 
                 wsPort={fullscreenPrinter.wsPort}
-                fullscreen={true}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain'
+                }}
               />
             </Box>
             
@@ -785,26 +799,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           {snackbar.message}
         </Alert>
       </Snackbar>
-
-      <SpeedDial
-        ariaLabel="Add printer menu"
-        sx={{ position: 'fixed', bottom: 16, right: 16 }}
-        icon={<SpeedDialIcon />}
-      >
-        <SpeedDialAction
-          icon={<AddIcon />}
-          tooltipTitle="ADD PRINTER"
-          onClick={() => setShowAddDialog(true)}
-        />
-        {mode === 'cloud' && (
-          <SpeedDialAction
-            icon={<CloudIcon />}
-            tooltipTitle="CLOUD PRINTERS"
-            tooltipOpen
-            onClick={() => onCloudPrinterClick()}
-          />
-        )}
-      </SpeedDial>
     </div>
   );
 };
