@@ -89,14 +89,19 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
-            # Einfacherer FFmpeg Befehl basierend auf dem funktionierenden Test
+            # Optimierter FFmpeg Befehl für Bambulab Kameras
             command = [
                 'ffmpeg',
+                '-fflags', 'nobuffer',
+                '-flags', 'low_delay',
                 '-rtsp_transport', 'tcp',
                 '-i', stream_url,
+                '-vsync', '0',
                 '-c:v', 'copy',     # Direkte Kopie des H.264 Streams
+                '-max_delay', '0',
                 '-an',              # Kein Audio
                 '-f', 'mpegts',     # MPEG-TS Format
+                '-flush_packets', '1',
                 'pipe:1'            # Ausgabe an stdout
             ]
             

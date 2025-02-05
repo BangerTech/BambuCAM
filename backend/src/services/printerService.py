@@ -125,8 +125,9 @@ def getPrinterStatus(printer_id):
             
         # Erstelle eine neue Instanz der BambuLab API
         bambu_printer = bl.Printer(
-            printer['ip'],
-            printer['accessCode']
+            ip=printer['ip'],
+            access_code=printer['accessCode'],
+            serial="UNKNOWN"  # Dummy Serial, da optional für lokale Verbindung
         )
         
         try:

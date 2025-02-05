@@ -13,15 +13,13 @@ const RTSPStream = ({ printer }) => {
     const setupMediaSource = () => {
       try {
         mediaSourceRef.current = new MediaSource();
-        if (videoRef.current) {
-          videoRef.current.src = URL.createObjectURL(mediaSourceRef.current);
-        }
+        videoRef.current.src = URL.createObjectURL(mediaSourceRef.current);
 
         mediaSourceRef.current.addEventListener('sourceopen', () => {
           try {
-            // MPEG-TS mit H.264 Video (Baseline Profile)
+            // Korrekter MIME-Type für MPEG-TS mit H.264
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
-              'video/mp2t; codecs="avc1.42001E"'  // Baseline Profile Level 3.0
+              'video/mp2t; codecs="avc1.640029"'
             );
             
             const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
@@ -30,20 +28,6 @@ const RTSPStream = ({ printer }) => {
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';
             
-            wsRef.current.onopen = () => {
-              console.log('WebSocket connected');
-            };
-
-            wsRef.current.onerror = (error) => {
-              console.error('WebSocket error:', error);
-            };
-
-            wsRef.current.onclose = (event) => {
-              console.log('WebSocket closed:', event.code, event.reason);
-              // Versuche Reconnect nach 5 Sekunden
-              setTimeout(setupMediaSource, 5000);
-            };
-            
             wsRef.current.onmessage = (event) => {
               if (sourceBufferRef.current && !sourceBufferRef.current.updating) {
                 try {
@@ -51,28 +35,21 @@ const RTSPStream = ({ printer }) => {
                 } catch (e) {
                   console.error('Error appending buffer:', e);
                   if (e.name === 'QuotaExceededError') {
-                    // Entferne alte Daten bei Buffer-Überlauf
-                    sourceBufferRef.current.remove(0, videoRef.current.currentTime - 2);
+                    sourceBufferRef.current.remove(0, videoRef.current.currentTime - 1);
                   }
                 }
-              } else {
-                // Queue für späteres Hinzufügen
-                queueRef.current.push(event.data);
               }
             };
-            
-            // Buffer-Queue Verarbeitung
-            sourceBufferRef.current.addEventListener('updateend', () => {
-              if (queueRef.current.length > 0 && !sourceBufferRef.current.updating) {
-                sourceBufferRef.current.appendBuffer(queueRef.current.shift());
-              }
-            });
+
+            // Debug Events
+            wsRef.current.onopen = () => console.log('WebSocket Connected');
+            wsRef.current.onerror = (e) => console.error('WebSocket Error:', e);
+            wsRef.current.onclose = () => console.log('WebSocket Closed');
             
           } catch (e) {
             console.error('Error in sourceopen:', e);
           }
         });
-        
       } catch (e) {
         console.error('Error setting up MediaSource:', e);
       }
