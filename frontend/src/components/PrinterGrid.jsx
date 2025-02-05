@@ -152,7 +152,18 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     try {
       setIsScanning(true);
       console.log('Starte Scan...');
-      const response = await fetch(`${API_URL}/scan`);
+      
+      // Timeout nach 10 Sekunden
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Scan timeout')), 10000);
+      });
+      
+      // Race zwischen Scan und Timeout
+      const response = await Promise.race([
+        fetch(`${API_URL}/scan`),
+        timeoutPromise
+      ]);
+
       console.log('Scan Response:', response);
       
       const data = await response.json();
@@ -160,9 +171,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       
       if (data && Array.isArray(data.printers)) {
         setScannedPrinters(data.printers);
+        setSnackbar({
+          open: true,
+          message: `Found ${data.printers.length} printer(s)`,
+          severity: 'success'
+        });
       }
     } catch (error) {
       console.error('Fehler beim Scannen:', error);
+      setSnackbar({
+        open: true,
+        message: error.message === 'Scan timeout' ? 
+          'Scan timeout after 10 seconds' : 
+          'Error scanning for printers',
+        severity: 'error'
+      });
     } finally {
       setIsScanning(false);
     }
