@@ -10,7 +10,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const wsRef = useRef(null);
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
-  const queueRef = useRef([]);
 
   useEffect(() => {
     if (!printer || !videoRef.current) return;
@@ -19,7 +18,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
     let retryCount = 0;
     const maxRetries = 3;
-    let isComponentMounted = true;  // Flag für Komponenten-Status
+    let isComponentMounted = true;
 
     const setupMediaSource = () => {
       if (!isComponentMounted || !videoRef.current) return;
@@ -59,7 +58,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             wsRef.current.onerror = (error) => {
               console.error('WebSocket Error:', error);
             };
-            
+
             wsRef.current.onmessage = (event) => {
               if (sourceBufferRef.current && !sourceBufferRef.current.updating) {
                 try {
@@ -84,7 +83,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
     setupMediaSource();
 
     return () => {
-      isComponentMounted = false;  // Komponente wird unmounted
+      isComponentMounted = false;
       try {
         if (wsRef.current) {
           wsRef.current.close();

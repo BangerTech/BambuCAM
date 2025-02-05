@@ -99,7 +99,11 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
-            # Optimierter FFmpeg Befehl für Bambulab Kameras
+            # Stoppe existierenden Stream falls vorhanden
+            if printer_id in self.active_streams:
+                self.stop_stream(printer_id)
+
+            # FFmpeg Befehl bleibt gleich...
             command = [
                 'ffmpeg',
                 '-fflags', 'nobuffer',
@@ -107,12 +111,12 @@ class StreamService:
                 '-rtsp_transport', 'tcp',
                 '-i', stream_url,
                 '-vsync', '0',
-                '-c:v', 'copy',     # Direkte Kopie des H.264 Streams
+                '-c:v', 'copy',
                 '-max_delay', '0',
-                '-an',              # Kein Audio
-                '-f', 'mpegts',     # MPEG-TS Format
+                '-an',
+                '-f', 'mpegts',
                 '-flush_packets', '1',
-                'pipe:1'            # Ausgabe an stdout
+                'pipe:1'
             ]
             
             logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
@@ -133,15 +137,20 @@ class StreamService:
             
             # Starte WebSocket-Server wenn noch nicht gestartet
             if not self.server_running:
-                ws_thread = Thread(
-                    target=self.start_websocket_server,
-                    args=(port,)
-                )
-                ws_thread.daemon = True
-                ws_thread.start()
-                
-                # Warte bis der Server läuft
-                time.sleep(0.5)
+                try:
+                    ws_thread = Thread(
+                        target=self.start_websocket_server,
+                        args=(port,)
+                    )
+                    ws_thread.daemon = True
+                    ws_thread.start()
+                    
+                    # Warte bis der Server läuft
+                    time.sleep(0.5)
+                except Exception as e:
+                    logger.error(f"Error starting WebSocket server: {e}")
+                    process.terminate()
+                    raise e
             
             self.active_streams[printer_id] = {
                 'process': process,
