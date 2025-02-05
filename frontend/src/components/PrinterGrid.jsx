@@ -293,6 +293,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           return temps.nozzle?.toFixed(1) || '-.--';
         case 'bed':
           return temps.bed?.toFixed(1) || '-.--';
+        case 'chamber':
+          return temps.chamber?.toFixed(1) || '-.--';
         default:
           return '-.--';
       }
@@ -516,6 +518,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                               <Typography variant="body2">
                                 Bed: {getTemperature(printer, 'bed')}°C
                               </Typography>
+                              <Typography variant="body2">
+                                Chamber: {getTemperature(printer, 'chamber')}°C
+                              </Typography>
                               <Typography variant="body2" sx={{ color: getPrintStatus(printer).color }}>
                                 {getPrintStatus(printer).text}
                               </Typography>
@@ -534,11 +539,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                                     }
                                   }}
                                 />
-                                {getRemainingTime(printer) && (
-                                  <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
-                                    Remaining: {getRemainingTime(printer)}min
-                                  </Typography>
-                                )}
+                                <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
+                                  Remaining: {printerStatus[printer.id]?.remaining_time || 0} min
+                                </Typography>
                               </Box>
                             )}
                           </Box>
@@ -745,7 +748,15 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       <FullscreenDialog
         printer={fullscreenPrinter}
         open={fullscreenPrinter !== null}
-        onClose={() => setFullscreenPrinter(null)}
+        onClose={() => {
+          // Stream stoppen beim Schließen
+          if (fullscreenPrinter) {
+            fetch(`${API_URL}/stream/${fullscreenPrinter.id}/stop`, {
+              method: 'POST'
+            }).catch(console.error);
+          }
+          setFullscreenPrinter(null);
+        }}
         getTemperature={getTemperature}
       />
 

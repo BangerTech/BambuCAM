@@ -10,6 +10,7 @@ import time
 import uuid
 import paho.mqtt.client as mqtt
 import bambulabs_api as bl
+import ssl
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -117,65 +118,103 @@ def removePrinter(printer_id):
         return False
 
 def getPrinterStatus(printer_id):
-    """Gets the printer status using BambuLab HTTP API"""
+    """Gets the printer status using MQTT"""
     try:
         printer = getPrinterById(printer_id)
         if not printer:
             raise Exception("Printer not found")
             
-        # Use HTTP API endpoints
-        base_url = f"http://{printer['ip']}"
-        headers = {
-            "Authorization": f"Bearer {printer['accessCode']}"
-        }
+        # Store received data
+        received_data = {}
+        connection_established = False
+        
+        # MQTT callbacks
+        def on_connect(client, userdata, flags, rc):
+            nonlocal connection_established
+            logger.info(f"MQTT Connected with result code: {rc}")
+            if rc == 0:
+                connection_established = True
+                # Subscribe to printer status topic
+                client.subscribe(f"device/+/report")
+                logger.info(f"Subscribed to topic: device/+/report")
+            else:
+                logger.error(f"Connection failed with code {rc}")
+        
+        def on_message(client, userdata, msg):
+            nonlocal received_data
+            try:
+                logger.debug(f"Received message on topic {msg.topic}")
+                data = json.loads(msg.payload)
+                if 'print' in data:  # Only store print data
+                    received_data = data['print']  # Store print section
+                logger.debug(f"Message data: {data}")
+            except Exception as e:
+                logger.error(f"Error parsing MQTT message: {e}")
+        
+        # Create MQTT client
+        client = mqtt.Client(protocol=mqtt.MQTTv311)  # Use MQTT 3.1.1
+        client.username_pw_set("bblp", printer['accessCode'])
+        
+        # Enable SSL/TLS
+        client.tls_set(cert_reqs=ssl.CERT_NONE)
+        client.tls_insecure_set(True)
+        
+        # Set callbacks
+        client.on_connect = on_connect
+        client.on_message = on_message
         
         try:
-            # Get printer info
-            info_response = requests.get(f"{base_url}/api/info", headers=headers, timeout=5)
-            if not info_response.ok:
-                logger.error(f"Could not get printer info: {info_response.status_code}")
-                return {
-                    "temperatures": {"bed": 0, "nozzle": 0},
-                    "status": "offline",
-                    "progress": 0
-                }
+            # Connect to printer MQTT
+            logger.info(f"Connecting to printer MQTT at {printer['ip']}")
+            client.connect(printer['ip'], 8883, 60)
             
-            info = info_response.json()
-            logger.debug(f"Printer info: {info}")
+            # Start MQTT loop
+            client.loop_start()
             
-            # Get print status
-            status_response = requests.get(f"{base_url}/api/print", headers=headers, timeout=5)
-            status = status_response.json() if status_response.ok else {}
-            logger.debug(f"Print status: {status}")
+            # Wait for connection and data
+            timeout = time.time() + 5  # 5 seconds timeout
+            while not connection_established and time.time() < timeout:
+                time.sleep(0.1)
             
-            # Get temperatures
-            temp_response = requests.get(f"{base_url}/api/temperature", headers=headers, timeout=5)
-            temps = temp_response.json() if temp_response.ok else {}
-            logger.debug(f"Temperatures: {temps}")
+            if not connection_established:
+                raise Exception("Could not connect to printer MQTT")
             
+            # Wait for data
+            time.sleep(3)  # Wait a bit longer for data
+            
+            if not received_data:
+                raise Exception("No data received from printer")
+                
+            # Extract required data
             return {
                 "temperatures": {
-                    "bed": float(temps.get('bed', {}).get('actual', 0)),
-                    "nozzle": float(temps.get('nozzle', {}).get('actual', 0))
+                    "bed": float(received_data.get('bed_temper', 0)),
+                    "nozzle": float(received_data.get('nozzle_temper', 0)),
+                    "chamber": float(received_data.get('chamber_temper', 0))
                 },
-                "status": status.get('status', 'unknown'),
-                "progress": float(status.get('progress', 0))
+                "status": received_data.get('gcode_state', 'unknown'),
+                "progress": float(received_data.get('mc_percent', 0)),
+                "remaining_time": int(received_data.get('mc_remaining_time', 0))
             }
                 
-        except Exception as e:
-            logger.error(f"Error getting printer data: {e}")
-            return {
-                "temperatures": {"bed": 0, "nozzle": 0},
-                "status": "error",
-                "progress": 0
-            }
+        finally:
+            try:
+                client.loop_stop()
+                client.disconnect()
+            except:
+                pass
             
     except Exception as e:
         logger.error(f"Error getting printer status: {str(e)}")
         return {
-            "temperatures": {"bed": 0, "nozzle": 0},
+            "temperatures": {
+                "bed": 0,
+                "nozzle": 0,
+                "chamber": 0
+            },
             "status": "offline",
-            "progress": 0
+            "progress": 0,
+            "remaining_time": 0
         }
 
 def scanNetwork():

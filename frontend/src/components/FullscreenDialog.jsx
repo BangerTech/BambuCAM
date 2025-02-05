@@ -1,9 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Dialog, IconButton, Box, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import RTSPStream from './RTSPStream';
 
 const FullscreenDialog = ({ printer, open, onClose, getTemperature }) => {
+  useEffect(() => {
+    if (open && printer) {
+      const video = document.querySelector('.fullscreen-video');
+      if (video) {
+        video.play();
+      }
+    }
+  }, [open, printer]);
+
   return (
     <Dialog
       fullScreen
@@ -12,7 +21,10 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature }) => {
       PaperProps={{
         sx: {
           backgroundColor: '#000',
-          height: '100vh'
+          height: '100vh',
+          margin: 0,
+          maxWidth: 'none',
+          width: '100%'
         }
       }}
     >
@@ -49,17 +61,16 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature }) => {
               url={printer.streamUrl}
               wsPort={printer.wsPort}
               key={`fullscreen-${printer.id}`}
+              className="fullscreen-video"
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
-                display: 'block',
-                maxWidth: '100%',
-                maxHeight: '100%'
+                display: 'block'
               }}
               autoPlay
               playsInline
-              controls
+              muted
             />
           </Box>
 
@@ -67,7 +78,8 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature }) => {
           <Box sx={{
             padding: '20px',
             background: 'rgba(0,0,0,0.7)',
-            color: 'white'
+            color: 'white',
+            minHeight: '100px'
           }}>
             <Typography variant="h6">{printer.name}</Typography>
             <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>
