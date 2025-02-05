@@ -60,10 +60,15 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     const startStreams = async () => {
       for (const printer of localPrinters) {
         try {
-          // Starte den Stream für jeden Drucker
-          await fetch(`${API_URL}/stream/${printer.id}/start`, {
-            method: 'POST'
-          });
+          // Starte WebSocket-Verbindung neu
+          const wsUrl = `ws://${window.location.hostname}:${printer.wsPort || 9000}/stream/${printer.id}`;
+          const ws = new WebSocket(wsUrl);
+          ws.onopen = () => {
+            console.log(`Stream started for printer ${printer.id}`);
+          };
+          ws.onerror = (error) => {
+            console.error(`Stream error for printer ${printer.id}:`, error);
+          };
         } catch (e) {
           console.warn(`Error starting stream for printer ${printer.id}:`, e);
         }
@@ -76,15 +81,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
     // Cleanup beim Unmount
     return () => {
-      localPrinters.forEach(printer => {
-        try {
-          fetch(`${API_URL}/stream/${printer.id}/stop`, {
-            method: 'POST'
-          });
-        } catch (e) {
-          console.warn(`Error stopping stream for printer ${printer.id}:`, e);
-        }
-      });
+      // WebSocket connections werden automatisch geschlossen
     };
   }, [localPrinters]);
 
@@ -261,8 +258,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     items.splice(result.destination.index, 0, reorderedItem);
     
     setLocalPrinters(items);
-    // Speichere die neue Reihenfolge
-    localStorage.setItem('printers', JSON.stringify(items));
   };
 
   // Lade die gespeicherte Reihenfolge beim Start
@@ -270,7 +265,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     try {
       const savedPrinters = localStorage.getItem('printers');
       if (savedPrinters) {
-        setLocalPrinters(JSON.parse(savedPrinters));
+        const parsedPrinters = JSON.parse(savedPrinters);
+        // Stelle sicher, dass alle Drucker eine ID haben
+        const validPrinters = parsedPrinters.filter(printer => printer.id);
+        setLocalPrinters(validPrinters);
       }
     } catch (error) {
       console.error('Error loading saved printers:', error);
@@ -437,7 +435,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
               {Array.isArray(displayPrinters) && displayPrinters.map((printer, index) => {
-                const dragId = (printer.id || `printer-${index}`).toString();
+                const dragId = printer.id ? printer.id.toString() : `printer-${index}`;
                 
                 return (
                   <Draggable
@@ -455,7 +453,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           sx={{ 
                             position: 'relative',
                             height: 0,
-                            paddingBottom: 'calc(78.75% + 40px)',
+                            paddingBottom: 'calc(56.25% + 40px)',  // 16:9 (56.25%) + Header/Footer
                             borderRadius: '15px',
                             overflow: 'hidden',
                             background: '#000',

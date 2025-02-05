@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 
 const RTSPStream = ({ printer, fullscreen, ...props }) => {
+  // Filtere nicht-DOM Props
+  const { wsPort, ...videoProps } = props;
   const videoRef = useRef(null);
   const wsRef = useRef(null);
   const mediaSourceRef = useRef(null);
@@ -80,7 +82,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   return (
     <video
       ref={videoRef}
-      {...props}
+      {...videoProps}
       autoPlay
       playsInline
       muted
@@ -89,7 +91,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
         width: '100%',
         height: '100%',
         objectFit: fullscreen ? 'contain' : 'cover',
-        ...props.style
+        ...videoProps.style
       }}
     />
   );
