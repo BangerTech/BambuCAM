@@ -304,10 +304,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   const getPrintStatus = (printer) => {
-    const status = printerStatus[printer.id]?.status || 'unknown';
+    const status = printerStatus[printer.id]?.status?.toLowerCase() || 'unknown';
     
     switch(status.toLowerCase()) {
-      case 'printing':
+      case 'running':  // MQTT sendet "RUNNING" statt "printing"
         return { text: 'Printing', color: '#4caf50' };
       case 'idle':
         return { text: 'Idle', color: '#2196f3' };
@@ -525,7 +525,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                                 {getPrintStatus(printer).text}
                               </Typography>
                             </Box>
-                            {getPrintStatus(printer).text === 'Druckt' && (
+                            {getPrintStatus(printer).text === 'Printing' && (
                               <Box sx={{ mt: 1 }}>
                                 <LinearProgress 
                                   variant="determinate" 
@@ -758,6 +758,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           setFullscreenPrinter(null);
         }}
         getTemperature={getTemperature}
+        printerStatus={printerStatus}
       />
 
       {/* Styled Snackbar */}
