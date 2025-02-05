@@ -15,6 +15,8 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   useEffect(() => {
     if (!printer || !videoRef.current) return;
 
+    console.log('RTSPStream mounted:', { printer, fullscreen });
+
     let retryCount = 0;
     const maxRetries = 3;
     let isComponentMounted = true;  // Flag für Komponenten-Status

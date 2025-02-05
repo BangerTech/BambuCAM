@@ -3,12 +3,36 @@ import { Dialog, IconButton, Box, Typography, AppBar, Toolbar, LinearProgress, P
 import CloseIcon from '@mui/icons-material/Close';
 import RTSPStream from './RTSPStream';
 
+// Dynamische API URL basierend auf dem aktuellen Host
+const API_URL = `http://${window.location.hostname}:4000`;
+
 const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatus }) => {
+  // Starte den Stream wenn der Dialog geöffnet wird
+  React.useEffect(() => {
+    if (open && printer) {
+      const startStream = async () => {
+        try {
+          const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
+          console.log('Starting fullscreen stream:', wsUrl);
+        } catch (e) {
+          console.warn('Error starting fullscreen stream:', e);
+        }
+      };
+      startStream();
+    }
+  }, [open, printer]);
+
   return (
     <Dialog
       fullScreen
       open={open}
-      onClose={onClose}
+      onClose={() => {
+        // Cleanup beim Schließen
+        if (printer) {
+          console.log('Closing fullscreen stream');
+        }
+        onClose();
+      }}
       PaperProps={{
         sx: {
           background: '#1a1a1a',

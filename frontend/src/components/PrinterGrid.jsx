@@ -22,9 +22,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   // Stelle sicher, dass printers immer ein Array ist
   const printerList = Array.isArray(printers) ? printers : [];
   const [localPrinters, setLocalPrinters] = useState([]);
-
+  const [cloudPrinters, setCloudPrinters] = useState([]);
+  
   // Bestimme welche Drucker angezeigt werden sollen
-  const displayPrinters = mode === 'cloud' ? printerList : localPrinters;
+  const displayPrinters = mode === 'cloud' ? cloudPrinters : localPrinters;
   
   // Speichere Drucker bei Änderungen
   useEffect(() => {
@@ -54,6 +55,40 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       isMounted = false;
     };
   }, []);
+
+  // Lade Cloud-Drucker
+  useEffect(() => {
+    const fetchCloudPrinters = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/cloud/printers`);
+        const data = await response.json();
+        if (data.message === "success" && data.devices && Array.isArray(data.devices)) {
+          // Konvertiere Cloud-Drucker in das gleiche Format wie lokale Drucker
+          const formattedPrinters = data.devices.map(printer => ({
+            id: printer.dev_id,
+            name: printer.name,
+            ip: 'cloud',
+            type: 'bambulab',
+            model: printer.dev_product_name,
+            status: printer.online ? 'online' : 'offline',
+            accessCode: printer.dev_access_code,
+            nozzle_diameter: printer.nozzle_diameter,
+            print_status: printer.print_status,
+            dev_structure: printer.dev_structure,
+            isCloud: true
+          }));
+          console.log('Formatted cloud printers:', formattedPrinters);
+          setCloudPrinters(formattedPrinters);
+        }
+      } catch (error) {
+        console.error('Error fetching cloud printers:', error);
+      }
+    };
+
+    if (mode === 'cloud') {
+      fetchCloudPrinters();
+    }
+  }, [mode]);
 
   const [open, setOpen] = useState(false);
   const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
@@ -101,13 +136,14 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       setIsAdding(true);
       console.log('Füge Drucker hinzu:', selectedPrinter);
       
-      // Konstruiere Stream-URL
-      const streamUrl = `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`;
-      
-      const printerData = {
+      // Unterschiedliche Behandlung für Cloud- und lokale Drucker
+      const printerData = selectedPrinter.isCloud ? {
+        ...selectedPrinter,
+        type: 'BAMBULAB_CLOUD'
+      } : {
         ...selectedPrinter,
         type: 'BAMBULAB',
-        streamUrl: streamUrl // Wichtig: Stream-URL mitgeben
+        streamUrl: `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
       };
       
       const response = await fetch(`${API_URL}/printers`, {
@@ -278,6 +314,10 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Status-Anzeige Funktionen
   const getTemperature = (printer, type) => {
+    if (printer.isCloud) {
+      return '-.--';
+    }
+
     try {
       const temps = printerStatus[printer.id]?.temperatures;
       if (!temps) return '-.--';
@@ -298,6 +338,13 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   const getPrintStatus = (printer) => {
+    if (printer.isCloud) {
+      return {
+        text: printer.print_status || 'Unknown',
+        color: printer.online ? '#4caf50' : '#9e9e9e'
+      };
+    }
+
     const status = printerStatus[printer.id]?.status?.toLowerCase() || 'unknown';
     
     switch(status.toLowerCase()) {
@@ -758,12 +805,24 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
             sx={{
               '& .MuiOutlinedInput-root': {
+                '& fieldset': {
+                  borderColor: 'rgba(0, 255, 255, 0.3)',
+                },
                 '&.Mui-focused fieldset': {
                   borderColor: '#00ffff',
                 },
+                '&:hover fieldset': {
+                  borderColor: 'rgba(0, 255, 255, 0.5)',
+                },
+                '& input': {
+                  color: '#00ffff',
+                }
               },
-              '& .MuiInputLabel-root.Mui-focused': {
-                color: '#00ffff',
+              '& .MuiInputLabel-root': {
+                color: 'rgba(0, 255, 255, 0.7)',
+                '&.Mui-focused': {
+                  color: '#00ffff',
+                },
               },
             }}
           />
