@@ -117,58 +117,58 @@ def removePrinter(printer_id):
         return False
 
 def getPrinterStatus(printer_id):
-    """Gets the printer status using BambuLab API"""
+    """Gets the printer status using BambuLab HTTP API"""
     try:
         printer = getPrinterById(printer_id)
         if not printer:
             raise Exception("Printer not found")
             
-        # Create API instance with minimal parameters
-        bambu_printer = bl.Printer(
-            printer['ip'],
-            printer['accessCode'],
-            serial="UNKNOWN"  # Serial parameter name is required
-        )
+        # Use HTTP API endpoints
+        base_url = f"http://{printer['ip']}"
+        headers = {
+            "Authorization": f"Bearer {printer['accessCode']}"
+        }
         
         try:
-            # Connect to printer
-            logger.info(f"Connecting to printer at {printer['ip']}")
-            if not bambu_printer.connect():
-                logger.error("Could not connect to printer")
+            # Get printer info
+            info_response = requests.get(f"{base_url}/api/info", headers=headers, timeout=5)
+            if not info_response.ok:
+                logger.error(f"Could not get printer info: {info_response.status_code}")
                 return {
                     "temperatures": {"bed": 0, "nozzle": 0},
                     "status": "offline",
                     "progress": 0
                 }
-
-            try:
-                # Get all info at once using get_all()
-                info = bambu_printer.get_all()
-                logger.debug(f"Printer info: {info}")
+            
+            info = info_response.json()
+            logger.debug(f"Printer info: {info}")
+            
+            # Get print status
+            status_response = requests.get(f"{base_url}/api/print", headers=headers, timeout=5)
+            status = status_response.json() if status_response.ok else {}
+            logger.debug(f"Print status: {status}")
+            
+            # Get temperatures
+            temp_response = requests.get(f"{base_url}/api/temperature", headers=headers, timeout=5)
+            temps = temp_response.json() if temp_response.ok else {}
+            logger.debug(f"Temperatures: {temps}")
+            
+            return {
+                "temperatures": {
+                    "bed": float(temps.get('bed', {}).get('actual', 0)),
+                    "nozzle": float(temps.get('nozzle', {}).get('actual', 0))
+                },
+                "status": status.get('status', 'unknown'),
+                "progress": float(status.get('progress', 0))
+            }
                 
-                # Extract required data
-                return {
-                    "temperatures": {
-                        "bed": float(info.get('bed_temper', 0)),
-                        "nozzle": float(info.get('nozzle_temper', 0))
-                    },
-                    "status": info.get('gcode_state', 'unknown'),
-                    "progress": float(info.get('mc_percent', 0))
-                }
-                
-            except Exception as e:
-                logger.error(f"Error getting printer data: {e}")
-                return {
-                    "temperatures": {"bed": 0, "nozzle": 0},
-                    "status": "error",
-                    "progress": 0
-                }
-                
-        finally:
-            try:
-                bambu_printer.disconnect()
-            except:
-                pass
+        except Exception as e:
+            logger.error(f"Error getting printer data: {e}")
+            return {
+                "temperatures": {"bed": 0, "nozzle": 0},
+                "status": "error",
+                "progress": 0
+            }
             
     except Exception as e:
         logger.error(f"Error getting printer status: {str(e)}")

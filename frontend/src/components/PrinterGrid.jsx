@@ -11,6 +11,7 @@ import { NeonSwitch } from '../styles/NeonSwitch.js';
 import RouterIcon from '@mui/icons-material/Router';
 import CloudIcon from '@mui/icons-material/Cloud';
 import AddIcon from '@mui/icons-material/Add';
+import FullscreenDialog from './FullscreenDialog';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -53,6 +54,39 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       isMounted = false;
     };
   }, []);
+
+  // Starte Streams automatisch nach dem Laden
+  useEffect(() => {
+    const startStreams = async () => {
+      for (const printer of localPrinters) {
+        try {
+          // Starte den Stream für jeden Drucker
+          await fetch(`${API_URL}/stream/${printer.id}/start`, {
+            method: 'POST'
+          });
+        } catch (e) {
+          console.warn(`Error starting stream for printer ${printer.id}:`, e);
+        }
+      }
+    };
+
+    if (localPrinters.length > 0) {
+      startStreams();
+    }
+
+    // Cleanup beim Unmount
+    return () => {
+      localPrinters.forEach(printer => {
+        try {
+          fetch(`${API_URL}/stream/${printer.id}/stop`, {
+            method: 'POST'
+          });
+        } catch (e) {
+          console.warn(`Error stopping stream for printer ${printer.id}:`, e);
+        }
+      });
+    };
+  }, [localPrinters]);
 
   const [open, setOpen] = useState(false);
   const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
@@ -168,6 +202,16 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   const handleFullscreen = (printer) => {
+    // Stoppe existierenden Stream falls vorhanden
+    if (fullscreenPrinter) {
+      try {
+        fetch(`${API_URL}/stream/${fullscreenPrinter.id}/stop`, {
+          method: 'POST'
+        });
+      } catch (e) {
+        console.warn('Error stopping stream:', e);
+      }
+    }
     setFullscreenPrinter(printer);
   };
 
@@ -217,7 +261,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     items.splice(result.destination.index, 0, reorderedItem);
     
     setLocalPrinters(items);
+    // Speichere die neue Reihenfolge
+    localStorage.setItem('printers', JSON.stringify(items));
   };
+
+  // Lade die gespeicherte Reihenfolge beim Start
+  useEffect(() => {
+    try {
+      const savedPrinters = localStorage.getItem('printers');
+      if (savedPrinters) {
+        setLocalPrinters(JSON.parse(savedPrinters));
+      }
+    } catch (error) {
+      console.error('Error loading saved printers:', error);
+    }
+  }, []);
 
   const handleClose = () => {
     setOpen(false);
@@ -684,87 +742,12 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         </DialogActions>
       </Dialog>
 
-      {/* Fullscreen Dialog mit Abstand */}
-      <Dialog 
-        fullScreen 
-        open={fullscreenPrinter !== null} 
+      <FullscreenDialog
+        printer={fullscreenPrinter}
+        open={fullscreenPrinter !== null}
         onClose={() => setFullscreenPrinter(null)}
-        PaperProps={{
-          sx: {
-            margin: '20px',
-            borderRadius: '15px',
-            overflow: 'hidden',
-            background: '#000',
-            height: 'calc(100vh - 40px)'  // Volle Höhe minus Margins
-          }
-        }}
-      >
-        <IconButton
-          onClick={() => setFullscreenPrinter(null)}
-          sx={{
-            position: 'absolute',
-            right: 16,
-            top: 16,
-            color: 'white',
-            zIndex: 3,
-            background: 'rgba(0,0,0,0.5)',
-            '&:hover': {
-              background: 'rgba(0,0,0,0.7)'
-            }
-          }}
-        >
-          <CloseIcon />
-        </IconButton>
-        {fullscreenPrinter && (
-          <Box sx={{ 
-            width: '100%', 
-            height: '100%', 
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            <Box sx={{ 
-              flex: 1, 
-              position: 'relative',
-              minHeight: 0  // Wichtig für Flex-Container
-            }}>
-              <RTSPStream 
-                url={fullscreenPrinter.streamUrl} 
-                wsPort={fullscreenPrinter.wsPort}
-                key={`fullscreen-${fullscreenPrinter.id}`}  // Force re-render
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  backgroundColor: '#000'
-                }}
-              />
-            </Box>
-            
-            {/* Status-Overlay */}
-            <Box sx={{
-              padding: '20px',
-              background: 'rgba(0,0,0,0.7)',
-              color: 'white',
-              minHeight: '100px'  // Feste Höhe für Status-Bar
-            }}>
-              <Typography variant="h6">{fullscreenPrinter.name}</Typography>
-              <Box sx={{ display: 'flex', gap: 3, mt: 1 }}>
-                <Typography>
-                  Hotend: {getTemperature(fullscreenPrinter, 'nozzle')}°C
-                </Typography>
-                <Typography>
-                  Bed: {getTemperature(fullscreenPrinter, 'bed')}°C
-                </Typography>
-                {getRemainingTime(fullscreenPrinter) && (
-                  <Typography>
-                    Remaining: {getRemainingTime(fullscreenPrinter)}min
-                  </Typography>
-                )}
-              </Box>
-            </Box>
-          </Box>
-        )}
-      </Dialog>
+        getTemperature={getTemperature}
+      />
 
       {/* Styled Snackbar */}
       <Snackbar
