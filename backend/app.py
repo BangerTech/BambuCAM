@@ -2,7 +2,6 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
 from src.services.bambuCloudService import BambuCloudService
-from src.services.printerService import update_printer_order
 import os
 import logging
 
@@ -194,20 +193,6 @@ def debug_stream(printer_id):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route('/printers/<printer_id>/order', methods=['PUT'])
-def handle_printer_order(printer_id):
-    try:
-        data = request.get_json()
-        order = data.get('order')
-        
-        if update_printer_order(printer_id, order):
-            return jsonify({'success': True})
-        
-        return jsonify({'success': False, 'error': 'Printer not found'}), 404
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 
