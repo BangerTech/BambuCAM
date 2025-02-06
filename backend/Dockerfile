@@ -1,8 +1,10 @@
 FROM python:3.10-slim
 
-# Install system dependencies
+# Installiere Systemabhängigkeiten
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    gcc \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -17,5 +19,6 @@ RUN pip install -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Command to run the application
-CMD ["flask", "run", "--host=0.0.0.0", "--port=4000"] 
+EXPOSE 4000
+
+CMD ["python", "-m", "src.app"] 
