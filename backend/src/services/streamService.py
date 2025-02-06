@@ -28,10 +28,10 @@ class StreamService:
         try:
             printer_id = path.split('/')[-1]
             if printer_id not in self.active_streams:
-                # Versuche Stream neu zu starten
+                # Versuche Stream neu zu starten wenn URL bekannt
                 stream_info = self.active_streams.get(printer_id, {})
-                if stream_info.get('url') and stream_info.get('command'):
-                    logger.info(f"Restarting stream for printer {printer_id}")
+                if stream_info.get('url'):
+                    logger.info(f"Restarting stream for {printer_id}")
                     self.start_stream(printer_id, stream_info['url'], stream_info['port'])
                 else:
                     await websocket.close(1008, "Stream nicht gefunden")
@@ -39,6 +39,12 @@ class StreamService:
                 
             stream = self.active_streams[printer_id]
             process = stream['process']
+            
+            # Prüfe ob Prozess noch läuft
+            if process.poll() is not None:
+                logger.info(f"Restarting dead stream for {printer_id}")
+                self.start_stream(printer_id, stream['url'], stream['port'])
+                process = self.active_streams[printer_id]['process']
             
             logger.info(f"Client connected to stream {printer_id}")
             
@@ -120,29 +126,12 @@ class StreamService:
                 bufsize=10**8
             )
             
-            # Warte kurz und prüfe ob der Prozess läuft
-            time.sleep(1)
-            if process.poll() is not None:
-                _, stderr = process.communicate()
-                logger.error(f"FFmpeg process failed: {stderr.decode()}")
-                raise Exception("FFmpeg process failed to start")
-            
             # Speichere Stream-Info
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
-                'url': stream_url,  # Speichere URL für Neustart
-                'command': command  # Speichere Kommando für Neustart
+                'url': stream_url  # Speichere URL für Neustart
             }
-            
-            # Starte WebSocket-Server wenn noch nicht laufend
-            if port not in self.ws_servers:
-                thread = threading.Thread(
-                    target=self.start_websocket_server,
-                    args=(port,),
-                    daemon=True
-                )
-                thread.start()
             
             return port
             
