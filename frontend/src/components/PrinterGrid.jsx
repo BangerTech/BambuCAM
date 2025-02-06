@@ -15,9 +15,9 @@ import FullscreenDialog from './FullscreenDialog';
 import PrinterCard from './PrinterCard';
 import NotificationButton from './NotificationButton';
 import { showNotification } from '../services/notificationService';
-
-// Dynamische API URL basierend auf dem aktuellen Host
-const API_URL = `http://${window.location.hostname}:4000`;
+import SystemStatsButton from './SystemStatsButton';
+import SystemStatsDialog from './SystemStatsDialog';
+import { API_URL } from '../config';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
@@ -123,6 +123,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   });
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [scannedPrinters, setScannedPrinters] = useState([]);
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -996,6 +997,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         </Alert>
       </Snackbar>
       <NotificationButton />
+      <SystemStatsButton onClick={() => setStatsDialogOpen(true)} />
+      <SystemStatsDialog 
+        open={statsDialogOpen}
+        onClose={() => setStatsDialogOpen(false)}
+      />
     </div>
   );
 };

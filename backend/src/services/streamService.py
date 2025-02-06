@@ -115,7 +115,6 @@ class StreamService:
             raise e
 
     async def stream_handler(self, websocket, path):
-        """Behandelt WebSocket-Verbindungen"""
         try:
             printer_id = path.split('/')[-1]
             logger.info(f"Stream handler called for printer {printer_id}")
@@ -152,10 +151,14 @@ class StreamService:
             # Reset retry counter when stream starts successfully
             self.retry_count[printer_id] = 0
 
-            # Verbesserte Timeout-Prüfung
+            # Verbesserte Timeout-Prüfung mit weniger strengen Parametern
             last_data_time = time.time()
-            TIMEOUT_SECONDS = 10
-            MIN_DATA_SIZE = 1024  # Minimale Datengröße für gültigen Stream
+            TIMEOUT_SECONDS = 15  # 15 Sekunden Timeout
+            MIN_DATA_SIZE = 256  # Reduziert auf 256 Bytes
+            INITIAL_WAIT = 3     # 3 Sekunden initiales Warten
+
+            # Warte initial auf Daten
+            await asyncio.sleep(INITIAL_WAIT)
 
             while True:
                 try:
@@ -163,42 +166,33 @@ class StreamService:
                         None, process.stdout.read, 4096
                     )
                     
-                    current_time = time.time()
-                    
-                    # Prüfe auf Timeout oder zu kleine Datenpakete
-                    if not data or len(data) < MIN_DATA_SIZE or current_time - last_data_time > TIMEOUT_SECONDS:
-                        logger.warning("Stream timeout or invalid data, restarting...")
-                        self.stop_stream(printer_id)  # Stoppe alten Stream sauber
-                        await asyncio.sleep(1)  # Kurze Pause vor Neustart
-                        self.start_stream(printer_id, printer['streamUrl'], 9000)
-                        process = self.active_streams[printer_id]['process']
-                        logger.info(f"Stream restarted (new PID: {process.pid})")
+                    if data:  # Wenn überhaupt Daten kommen, ist der Stream wahrscheinlich ok
+                        await websocket.send(data)
                         last_data_time = time.time()
                         continue
 
-                    await websocket.send(data)
-                    last_data_time = current_time
+                    # Nur wenn gar keine Daten kommen, neu starten
+                    logger.warning("No data received, restarting stream...")
+                    self.stop_stream(printer_id)
+                    await asyncio.sleep(1)
+                    self.start_stream(printer_id, printer['streamUrl'], 9000)
+                    process = self.active_streams[printer_id]['process']
+                    last_data_time = time.time()
 
                 except websockets.exceptions.ConnectionClosed:
                     logger.info("Client disconnected")
-                    break
+                    self.stop_stream(printer_id)
+                    return
+                    
                 except Exception as e:
                     logger.error(f"Stream error: {e}")
-                    
-                    # Increment retry counter
-                    self.retry_count[printer_id] = self.retry_count.get(printer_id, 0) + 1
-                    
-                    # Check if max retries reached
-                    if self.retry_count[printer_id] >= self.max_retries:
-                        logger.error(f"Max retries ({self.max_retries}) reached for printer {printer_id}")
-                        self.retry_count[printer_id] = 0  # Reset counter
-                        return  # Stop retrying
-                        
-                    logger.warning(f"Stream ended, retry {self.retry_count[printer_id]}/{self.max_retries}...")
-                    break
-                    
+                    self.stop_stream(printer_id)
+                    return
+
         except Exception as e:
             logger.error(f"Handler error: {e}")
+            if printer_id in self.active_streams:
+                self.stop_stream(printer_id)
         finally:
             logger.info("Stream handler finished")
         
