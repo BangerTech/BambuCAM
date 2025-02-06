@@ -12,7 +12,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const lastDataRef = useRef(Date.now());
   const isInitializedRef = useRef(false);
   const pendingBuffersRef = useRef([]);
-  const logCountRef = useRef(0);  // Für Logging-Begrenzung
 
   useEffect(() => {
     if (!printer || !videoRef.current) return;
@@ -45,21 +44,14 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
     const appendBuffer = (data) => {
       if (!sourceBufferRef.current || sourceBufferRef.current.updating) {
-        // Log nur die ersten paar Buffer-Events
-        if (logCountRef.current < 5) {
-          console.log('Buffering data for later, pending buffers:', pendingBuffersRef.current.length);
-          logCountRef.current++;
+        if (pendingBuffersRef.current.length % 10 === 0) {
+          console.debug('Buffering data, pending:', pendingBuffersRef.current.length);
         }
         pendingBuffersRef.current.push(data);
         return;
       }
 
       try {
-        // Log nur die ersten paar Chunks
-        if (logCountRef.current < 5) {
-          console.log('Appending buffer, size:', data.byteLength);
-          logCountRef.current++;
-        }
         sourceBufferRef.current.appendBuffer(data);
         
         if (videoRef.current.paused) {
@@ -72,12 +64,9 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
           });
         }
 
-        // Process any pending buffers
         if (pendingBuffersRef.current.length > 0 && !sourceBufferRef.current.updating) {
-          // Log nur die ersten paar Verarbeitungen
-          if (logCountRef.current < 5) {
-            console.log('Processing pending buffer, remaining:', pendingBuffersRef.current.length);
-            logCountRef.current++;
+          if (pendingBuffersRef.current.length === 1) {
+            console.debug('Processing last pending buffer');
           }
           const nextBuffer = pendingBuffersRef.current.shift();
           appendBuffer(nextBuffer);
@@ -97,7 +86,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       try {
         console.log('Setting up new MediaSource...');
         
-        // Cleanup old MediaSource
         if (mediaSourceRef.current) {
           if (sourceBufferRef.current) {
             try {
@@ -110,10 +98,8 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
           sourceBufferRef.current = null;
         }
 
-        // Clear pending buffers
         pendingBuffersRef.current = [];
 
-        // Initialize new MediaSource
         mediaSourceRef.current = await initializeMediaSource();
         console.log('Setting up SourceBuffer...');
         sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
@@ -166,31 +152,15 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
           if (!isComponentMounted) return;
           lastDataRef.current = Date.now();
           
-          // Log nur die ersten paar Nachrichten
-          if (logCountRef.current < 5) {
-            console.log('Received data chunk, size:', event.data.byteLength);
-            logCountRef.current++;
-          }
-          
-          if (!sourceBufferRef.current) {
-            console.error('No SourceBuffer available!');
-            return;
-          }
-          
           appendBuffer(event.data);
         };
 
-        // Add video element event listeners
         videoRef.current.addEventListener('error', (e) => {
           console.error('Video error:', e);
         });
 
         videoRef.current.addEventListener('stalled', () => {
-          console.log('Video stalled');
-        });
-
-        videoRef.current.addEventListener('waiting', () => {
-          console.log('Video waiting for data');
+          console.warn('Video stalled');
         });
 
         videoRef.current.addEventListener('playing', () => {
@@ -209,7 +179,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
     setupMediaSource();
 
-    // Reset log counter when component unmounts
     return () => {
       console.log('RTSPStream unmounting, cleaning up...');
       isComponentMounted = false;
@@ -238,7 +207,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       } catch (e) {
         console.warn('Error during cleanup:', e);
       }
-      logCountRef.current = 0;
     };
   }, [printer]);
 
