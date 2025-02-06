@@ -25,6 +25,8 @@ class StreamService:
         self.server_lock = threading.Lock()
         self.main_loop = None
         self.main_thread = None
+        self.max_retries = 5  # Maximale Anzahl von Neustartversuchen
+        self.retry_count = {}  # Zähler für Neustartversuche pro Drucker
         
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
@@ -147,40 +149,52 @@ class StreamService:
             
             logger.info(f"Using stream process (PID: {process.pid})")
             
-            # Setze Timeout für inaktive Streams
+            # Reset retry counter when stream starts successfully
+            self.retry_count[printer_id] = 0
+
+            # Verbesserte Timeout-Prüfung
             last_data_time = time.time()
             TIMEOUT_SECONDS = 10
-            
+            MIN_DATA_SIZE = 1024  # Minimale Datengröße für gültigen Stream
+
             while True:
                 try:
                     data = await asyncio.get_event_loop().run_in_executor(
                         None, process.stdout.read, 4096
                     )
                     
-                    if not data:
-                        logger.warning("Stream ended, restarting...")
-                        self.start_stream(printer_id, printer['streamUrl'], 9000)
-                        process = self.active_streams[printer_id]['process']
-                        logger.info(f"Stream restarted (new PID: {process.pid})")
-                        continue
-                    
                     current_time = time.time()
-                    if current_time - last_data_time > TIMEOUT_SECONDS:
-                        logger.warning("Stream timeout, restarting...")
+                    
+                    # Prüfe auf Timeout oder zu kleine Datenpakete
+                    if not data or len(data) < MIN_DATA_SIZE or current_time - last_data_time > TIMEOUT_SECONDS:
+                        logger.warning("Stream timeout or invalid data, restarting...")
+                        self.stop_stream(printer_id)  # Stoppe alten Stream sauber
+                        await asyncio.sleep(1)  # Kurze Pause vor Neustart
                         self.start_stream(printer_id, printer['streamUrl'], 9000)
                         process = self.active_streams[printer_id]['process']
                         logger.info(f"Stream restarted (new PID: {process.pid})")
-                        last_data_time = current_time
+                        last_data_time = time.time()
                         continue
-                    
+
                     await websocket.send(data)
                     last_data_time = current_time
-                    
+
                 except websockets.exceptions.ConnectionClosed:
                     logger.info("Client disconnected")
                     break
                 except Exception as e:
                     logger.error(f"Stream error: {e}")
+                    
+                    # Increment retry counter
+                    self.retry_count[printer_id] = self.retry_count.get(printer_id, 0) + 1
+                    
+                    # Check if max retries reached
+                    if self.retry_count[printer_id] >= self.max_retries:
+                        logger.error(f"Max retries ({self.max_retries}) reached for printer {printer_id}")
+                        self.retry_count[printer_id] = 0  # Reset counter
+                        return  # Stop retrying
+                        
+                    logger.warning(f"Stream ended, retry {self.retry_count[printer_id]}/{self.max_retries}...")
                     break
                     
         except Exception as e:
