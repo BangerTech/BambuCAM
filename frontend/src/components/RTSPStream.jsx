@@ -4,13 +4,10 @@ import React, { useEffect, useRef } from 'react';
 const API_URL = `http://${window.location.hostname}:4000`;
 
 const RTSPStream = ({ printer, fullscreen, ...props }) => {
-  // Filtere nicht-DOM Props
-  const { wsPort, ...videoProps } = props;
   const videoRef = useRef(null);
   const wsRef = useRef(null);
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
-  const queueRef = useRef([]);
 
   useEffect(() => {
     if (!printer || !videoRef.current) return;
@@ -20,33 +17,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
     let retryCount = 0;
     const maxRetries = 3;
     let isComponentMounted = true;
-
-    const setupStream = async () => {
-        if (!isComponentMounted) return;
-        
-        try {
-            // Starte den Stream auf dem Backend
-            const response = await fetch(`${API_URL}/stream/${printer.id}`, {
-                method: 'GET'
-            });
-            
-            if (!response.ok) throw new Error('Failed to start stream');
-            
-            const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
-            console.log('Connecting to WebSocket:', wsUrl);
-            
-            // Setup MediaSource und WebSocket wie gehabt...
-            setupMediaSource();
-            
-        } catch (error) {
-            console.error('Error setting up stream:', error);
-            if (retryCount < maxRetries) {
-                console.log(`Retrying (${retryCount + 1}/${maxRetries})...`);
-                retryCount++;
-                setTimeout(setupStream, 1000);
-            }
-        }
-    };
 
     const setupMediaSource = () => {
       if (!isComponentMounted || !videoRef.current) return;
@@ -60,6 +30,9 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
               'video/mp2t; codecs="avc1.640029"'
             );
+            
+            const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
+            console.log('Connecting to WebSocket:', wsUrl);
             
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';
@@ -105,7 +78,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       }
     };
 
-    setupStream();
+    setupMediaSource();
 
     return () => {
       isComponentMounted = false;
@@ -136,7 +109,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   return (
     <video
       ref={videoRef}
-      {...videoProps}
+      {...props}
       autoPlay
       playsInline
       muted
@@ -145,7 +118,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
         width: '100%',
         height: '100%',
         objectFit: fullscreen ? 'contain' : 'cover',
-        ...videoProps.style
+        ...props.style
       }}
     />
   );

@@ -26,21 +26,24 @@ class StreamService:
     async def stream_handler(self, websocket, path):
         """Behandelt WebSocket-Verbindungen"""
         try:
-            # Extrahiere printer_id aus dem Pfad
             printer_id = path.split('/')[-1]
             if printer_id not in self.active_streams:
-                await websocket.close(1008, "Stream nicht gefunden")
-                return
+                # Versuche Stream neu zu starten
+                stream_info = self.active_streams.get(printer_id, {})
+                if stream_info.get('url') and stream_info.get('command'):
+                    logger.info(f"Restarting stream for printer {printer_id}")
+                    self.start_stream(printer_id, stream_info['url'], stream_info['port'])
+                else:
+                    await websocket.close(1008, "Stream nicht gefunden")
+                    return
                 
             stream = self.active_streams[printer_id]
             process = stream['process']
             
             logger.info(f"Client connected to stream {printer_id}")
             
-            # Lese FFMPEG Output und sende an WebSocket
             while True:
                 try:
-                    # Lese Chunks von 4KB
                     data = await asyncio.get_event_loop().run_in_executor(
                         None, process.stdout.read, 4096
                     )
@@ -128,8 +131,18 @@ class StreamService:
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
-                'url': stream_url  # Speichere URL für Neustart
+                'url': stream_url,  # Speichere URL für Neustart
+                'command': command  # Speichere Kommando für Neustart
             }
+            
+            # Starte WebSocket-Server wenn noch nicht laufend
+            if port not in self.ws_servers:
+                thread = threading.Thread(
+                    target=self.start_websocket_server,
+                    args=(port,),
+                    daemon=True
+                )
+                thread.start()
             
             return port
             
