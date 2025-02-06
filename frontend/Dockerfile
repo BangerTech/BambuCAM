@@ -2,22 +2,14 @@ FROM node:16-alpine
 
 WORKDIR /app
 
-# Install wget
-RUN apk add --no-cache wget
-
 # Kopiere package.json und package-lock.json
 COPY package*.json ./
 
 # Installiere Abhängigkeiten und react-scripts global
 RUN npm install -g react-scripts && npm install
 
-# Kopiere den Rest des Codes
+# Kopiere den Rest des Codes (inkl. Assets)
 COPY . .
-
-# Download assets
-RUN mkdir -p src/assets && \
-    wget https://cdn-icons-png.flaticon.com/64/5038/5038961.png -O src/assets/printer-icon.png && \
-    wget https://github.com/notification-sounds/notification-sounds/raw/master/notification-sounds/pristine/pristine.mp3 -O src/assets/notification.mp3
 
 # Setze Umgebungsvariablen
 ENV NODE_ENV=development

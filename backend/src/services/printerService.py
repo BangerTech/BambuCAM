@@ -382,10 +382,9 @@ def getPrinterStatus(printer_id):
 
 def handle_mqtt_message(client, userdata, message):
     try:
-        printer_id = message.topic.split('/')[1]  # z.B. "printer/123/status"
+        printer_id = message.topic.split('/')[1]
         data = json.loads(message.payload)
         
-        # Status aktualisieren
         if printer_id in stored_printers:
             stored_printers[printer_id].update({
                 'status': data.get('print_status', 'unknown'),
@@ -395,7 +394,17 @@ def handle_mqtt_message(client, userdata, message):
                     'chamber': data.get('temperatures', {}).get('chamber', 0)
                 },
                 'progress': data.get('progress', 0),
-                'remaining_time': data.get('remaining_time', 0)
+                'remaining_time': data.get('remaining_time', 0),
+                'last_update': time.time()
             })
+            
+            # Prüfe auf wichtige Status-Änderungen für Benachrichtigungen
+            if data.get('print_status') in ['completed', 'error', 'cancelled']:
+                notification_service.send_notification(
+                    printer_id,
+                    data.get('print_status'),
+                    stored_printers[printer_id]['name']
+                )
+                
     except Exception as e:
         logger.error(f"Error handling MQTT message: {e}") 

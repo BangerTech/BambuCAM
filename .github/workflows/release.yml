@@ -2,40 +2,47 @@ name: Create Release
 
 on:
   push:
-    branches:
-      - main
-
-permissions:
-  contents: write  # Wichtig: Explizite Schreibberechtigung
+    branches: [ main ]
+    tags:
+      - 'v*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Create Release ZIP
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Build and test
         run: |
-          chmod +x create-release.sh
-          ./create-release.sh
-
-      - name: Get version
-        id: version
-        run: echo "version=$(date +'v%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
-
+          docker-compose build
+          docker-compose up -d
+          sleep 10
+          curl http://localhost:3000
+      
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: BambuCAM ${{ steps.version.outputs.version }}
-          body: |
-            Automatisches Release von BambuCAM
-            
-            Änderungen in diesem Release:
-            - ${{ github.event.head_commit.message }}
-          files: BambuCAM.zip
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
+      
+      - name: Zip Release Files
+        run: |
+          zip -r BambuCAM.zip . -x "*.git*"
+      
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./BambuCAM.zip
+          asset_name: BambuCAM.zip
+          asset_content_type: application/zip 

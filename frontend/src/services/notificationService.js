@@ -4,7 +4,7 @@ import notificationSound from '../assets/notification.mp3';
 const audio = new Audio(notificationSound);
 
 const showNotification = (printer, status) => {
-  if (!('Notification' in window) || Notification.permission !== 'granted') {
+  if (!("Notification" in window) || Notification.permission !== 'granted') {
     return;
   }
 
@@ -13,39 +13,34 @@ const showNotification = (printer, status) => {
 
   const title = `Printer ${printer.name}`;
   let message = '';
-  let icon = '/notification-icon.png';
-  let sound = null;
+  let icon = '/assets/printer-icon.png';
 
   switch (status.toUpperCase()) {
-    case 'FAILED':
-    case 'ERROR':
-    case 'BLOCKED':
-      message = `Print failed: ${status}! Please check the printer.`;
-      sound = errorSound;
-      break;
-    case 'FINISHED':
+    case 'COMPLETED':
       message = 'Print completed successfully!';
-      sound = successSound;
+      playSound('success');
+      break;
+    case 'ERROR':
+      message = 'Print failed! Please check the printer.';
+      playSound('error');
+      break;
+    case 'CANCELLED':
+      message = 'Print was cancelled.';
+      playSound('notification');
       break;
     default:
       return;
   }
 
-  // Zeige Notification
-  new Notification(title, {
+  const notification = new Notification(title, {
     body: message,
     icon,
-    badge: icon,
-    silent: false,  // Browser-eigener Sound
     requireInteraction: true,
-    data: { printer },
-    vibrate: [200, 100, 200]
+    silent: true // Wir nutzen eigene Sounds
   });
 
-  // Spiele zusätzlichen Sound ab
-  if (sound) {
-    sound.play().catch(err => console.log('Sound konnte nicht abgespielt werden:', err));
-  }
+  // Schließe nach 10 Sekunden
+  setTimeout(() => notification.close(), 10000);
 };
 
 export const showNotification = (title, message) => {

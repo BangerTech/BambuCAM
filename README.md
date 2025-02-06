@@ -38,16 +38,50 @@ BambuCAM is a user-friendly web application for simultaneously monitoring multip
 
 ## Installation
 
-### For Windows Users
-1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/)
-2. Download the latest version of [BambuCAM](https://github.com/BangerTech/BambuCAM/releases)
-3. Extract ZIP file to any location
-4. Right-click `start.bat` and run as administrator
-5. Open in browser:
-   - http://localhost:3000
-   - or http://YOUR-IP-ADDRESS:3000
+### Windows Users
 
-### For Linux Users
+#### 🚀 Quick Start
+
+1. Download the latest version of BambuCAM
+2. Extract the ZIP file
+3. Right-click `install-and-run.ps1` and select "Run with PowerShell"
+4. Follow the on-screen instructions
+
+The installer will automatically:
+- Install required programs (Docker, Git) if not present
+- Install BambuCAM
+- Create a desktop shortcut
+- Start the application
+
+#### 📋 System Requirements
+
+- Windows 10/11
+- 4 GB RAM
+- 2 GB free disk space
+- Internet connection
+
+#### 🔄 Starting the Application
+
+After installation, you can start BambuCAM in two ways:
+1. Via the "BambuCAM" desktop shortcut
+2. By running `start.bat`
+
+The application will be available at http://localhost:3000
+
+#### ❓ Troubleshooting
+
+If you encounter issues:
+1. Make sure Docker Desktop is running
+2. Check if port 3000 is not in use by another application
+3. Open an issue on GitHub
+
+#### 🔧 Uninstallation
+
+1. Run `docker-compose down` in the installation directory
+2. Delete the folder `%LOCALAPPDATA%\BambuCAM`
+3. Remove the desktop shortcut
+
+### Linux Users
 
 #### Quick Start Installation
 1. Clone repository:
@@ -110,3 +144,5 @@ For issues or questions, please create a [GitHub Issue](https://github.com/Bange
 `bambulab` `3d-printer` `camera-viewer` `monitoring` `docker` `react` `rtsp-stream` 
 `printer-management` `web-interface` `live-stream` `temperature-monitoring` 
 `print-progress` `open-source`
+
+## Configuration

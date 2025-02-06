@@ -1,99 +1,103 @@
-# Prüfe ob Script als Administrator läuft
-if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Warning "Bitte Script als Administrator ausführen!"
-    Break
-}
+# Schönes ASCII-Art Banner
+Write-Host @"
+╔══════════════════════════════════════════╗
+║             BambuCAM Setup               ║
+║        Modern 3D Printer Monitoring      ║
+╚══════════════════════════════════════════╝
+"@ -ForegroundColor Cyan
 
-# Funktion zum Überprüfen der Docker-Installation
-function Test-DockerInstallation {
-    try {
-        $docker = Get-Command docker -ErrorAction Stop
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-# Funktion zum Installieren von Docker Desktop
-function Install-DockerDesktop {
-    Write-Host "Docker wird installiert..."
-    
-    # Docker Desktop Installer herunterladen
-    $dockerUrl = "https://desktop.docker.com/win/stable/Docker%20Desktop%20Installer.exe"
-    $installerPath = "$env:TEMP\DockerDesktopInstaller.exe"
-    
-    Invoke-WebRequest -Uri $dockerUrl -OutFile $installerPath
-    
-    # Installer ausführen
-    Start-Process -Wait $installerPath -ArgumentList "install --quiet"
-    Remove-Item $installerPath
-    
-    Write-Host "Docker wurde installiert. Bitte starten Sie Ihren Computer neu und führen Sie das Script erneut aus."
+# Prüfe Admin-Rechte
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Host "⚠️ Diese Installation benötigt Administrator-Rechte." -ForegroundColor Yellow
+    Write-Host "Starte PowerShell als Administrator und versuche es erneut." -ForegroundColor Yellow
+    pause
     exit
 }
 
-# Prüfe ob Docker installiert ist
-if (-not (Test-DockerInstallation)) {
-    Write-Host "Docker ist nicht installiert."
-    $install = Read-Host "Möchten Sie Docker Desktop installieren? (J/N)"
-    if ($install -eq 'J') {
-        Install-DockerDesktop
-    }
-    else {
-        Write-Host "Docker wird für diese App benötigt. Installation wird abgebrochen."
+# Prüfe Docker Installation
+Write-Host "🔍 Prüfe Docker Installation..." -ForegroundColor Cyan
+$dockerVersion = docker --version 2>$null
+if (-not $?) {
+    Write-Host "❌ Docker ist nicht installiert!" -ForegroundColor Red
+    $installDocker = Read-Host "Möchten Sie Docker Desktop jetzt installieren? (j/n)"
+    if ($installDocker -eq 'j') {
+        Write-Host "📥 Lade Docker Desktop herunter..." -ForegroundColor Cyan
+        $dockerUrl = "https://desktop.docker.com/win/stable/Docker%20Desktop%20Installer.exe"
+        $dockerInstaller = "$env:TEMP\DockerDesktopInstaller.exe"
+        Invoke-WebRequest -Uri $dockerUrl -OutFile $dockerInstaller
+        Write-Host "⚙️ Installiere Docker Desktop..." -ForegroundColor Cyan
+        Start-Process -Wait $dockerInstaller
+        Remove-Item $dockerInstaller
+    } else {
+        Write-Host "❌ Installation abgebrochen. Docker wird benötigt." -ForegroundColor Red
+        pause
         exit
     }
 }
 
-# Prüfe ob Docker läuft
-$dockerProcess = Get-Process "Docker Desktop" -ErrorAction SilentlyContinue
-if (-not $dockerProcess) {
-    Write-Host "Docker Desktop wird gestartet..."
-    Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-    Write-Host "Warte 30 Sekunden bis Docker gestartet ist..."
-    Start-Sleep -Seconds 30
+# Prüfe Git Installation
+Write-Host "🔍 Prüfe Git Installation..." -ForegroundColor Cyan
+$gitVersion = git --version 2>$null
+if (-not $?) {
+    Write-Host "❌ Git ist nicht installiert!" -ForegroundColor Red
+    $installGit = Read-Host "Möchten Sie Git jetzt installieren? (j/n)"
+    if ($installGit -eq 'j') {
+        Write-Host "📥 Lade Git herunter..." -ForegroundColor Cyan
+        $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe"
+        $gitInstaller = "$env:TEMP\GitInstaller.exe"
+        Invoke-WebRequest -Uri $gitUrl -OutFile $gitInstaller
+        Write-Host "⚙️ Installiere Git..." -ForegroundColor Cyan
+        Start-Process -Wait $gitInstaller "/VERYSILENT"
+        Remove-Item $gitInstaller
+    } else {
+        Write-Host "❌ Installation abgebrochen. Git wird benötigt." -ForegroundColor Red
+        pause
+        exit
+    }
 }
 
-# Erstelle App-Verzeichnis
-$appPath = "$env:USERPROFILE\BambuLabViewer"
-if (Test-Path $appPath) {
-    Remove-Item -Path $appPath -Recurse -Force
+# Hole neueste Version von GitHub
+Write-Host "📥 Lade neueste Version von BambuCAM..." -ForegroundColor Cyan
+$releases = Invoke-RestMethod -Uri "https://api.github.com/repos/YOURUSERNAME/BambuCAM/releases/latest"
+$latestVersion = $releases.tag_name
+Write-Host "✨ Neueste Version: $latestVersion" -ForegroundColor Green
+
+# Erstelle Installations-Verzeichnis
+$installDir = "$env:LOCALAPPDATA\BambuCAM"
+if (-not (Test-Path $installDir)) {
+    New-Item -ItemType Directory -Path $installDir | Out-Null
 }
-New-Item -ItemType Directory -Path $appPath | Out-Null
 
-# Kopiere alle Dateien aus dem aktuellen Verzeichnis
-Copy-Item -Path "$PSScriptRoot\*" -Destination $appPath -Recurse -Exclude "install-and-run.ps1","start.bat"
+# Lade und entpacke Release
+$downloadUrl = $releases.zipball_url
+$zipFile = "$env:TEMP\BambuCAM.zip"
+Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile
+Expand-Archive -Path $zipFile -DestinationPath $installDir -Force
+Remove-Item $zipFile
 
-# Wechsel ins App-Verzeichnis
-Set-Location $appPath
+# Erstelle Desktop-Verknüpfung
+$WshShell = New-Object -comObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("$env:USERPROFILE\Desktop\BambuCAM.lnk")
+$Shortcut.TargetPath = "powershell.exe"
+$Shortcut.Arguments = "-ExecutionPolicy Bypass -File `"$installDir\start.ps1`""
+$Shortcut.IconLocation = "$installDir\frontend\src\assets\printer-icon.png"
+$Shortcut.Save()
 
-# Stoppe eventuell laufende Container
-docker-compose down
-
-# Starte die App
-Write-Host "Installing BambuCAM..."
+# Starte Docker Compose
+Write-Host "🚀 Starte BambuCAM..." -ForegroundColor Cyan
+Set-Location $installDir
 docker-compose up --build -d
 
 # Öffne Browser
-Start-Sleep -Seconds 10
 Start-Process "http://localhost:3000"
 
 Write-Host @"
 
-BambuLab Camera Viewer wurde gestartet!
+✅ Installation abgeschlossen!
+🌐 BambuCAM läuft auf: http://localhost:3000
+🖥️ Eine Desktop-Verknüpfung wurde erstellt.
 
-Sie können die App nun im Browser unter folgenden Adressen aufrufen:
-- http://localhost:3000
-- http://$($(ipconfig | Select-String "IPv4").ToString().Split()[-1]):3000
-
-Zum Beenden der App dieses Fenster schließen und 'J' eingeben.
-
-"@
-
-# Warte auf Benutzereingabe zum Beenden
-$exit = Read-Host "Möchten Sie die App beenden? (J/N)"
-if ($exit -eq 'J') {
-    docker-compose down
-    Write-Host "App wurde beendet."
-} 
+Drücken Sie eine Taste zum Beenden...
+"@ -ForegroundColor Green
+pause 
