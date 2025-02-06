@@ -1,4 +1,12 @@
-from .printerService import scanNetwork, getPrinterStatus, getPrinters, removePrinter, getPrinterById, savePrinters
+from .printerService import (
+    scanNetwork, 
+    getPrinterStatus,
+    getPrinters, 
+    removePrinter, 
+    getPrinterById, 
+    savePrinters,
+    printer_service
+)
 from .streamService import startStream, stopStream, getNextPort, stream_service
 import uuid
 import subprocess

@@ -27,6 +27,9 @@ stored_printers = {}
 # Pfad zur JSON-Datei
 PRINTERS_FILE = Path(os.getenv('PRINTERS_FILE', 'printers.json'))
 
+# Globale Instanz des PrinterService
+printer_service = PrinterService()
+
 async def test_stream_url(url):
     """Testet ob eine Stream-URL erreichbar ist"""
     try:
@@ -117,105 +120,63 @@ def removePrinter(printer_id):
         logger.error(f"Fehler beim Entfernen des Druckers: {str(e)}")
         return False
 
-def getPrinterStatus(printer_id):
-    """Gets the printer status using MQTT"""
-    try:
-        printer = getPrinterById(printer_id)
-        if not printer:
-            raise Exception("Printer not found")
-            
-        # Store received data
-        received_data = {}
-        connection_established = False
+class PrinterService:
+    def __init__(self):
+        self.mqtt_clients = {}  # Speichere MQTT Clients pro Drucker
+        self.printer_data = {}  # Cache für Drucker-Status
+
+    def connect_mqtt(self, printer_id, ip):
+        """Erstellt eine persistente MQTT Verbindung"""
+        if printer_id in self.mqtt_clients:
+            # Prüfe ob Client noch verbunden ist
+            if self.mqtt_clients[printer_id].is_connected():
+                return
+            # Wenn nicht, cleanup
+            self.mqtt_clients[printer_id].disconnect()
         
-        # MQTT callbacks
+        client = mqtt.Client()
+        
         def on_connect(client, userdata, flags, rc):
-            nonlocal connection_established
             logger.info(f"MQTT Connected with result code: {rc}")
-            if rc == 0:
-                connection_established = True
-                # Subscribe to printer status topic
-                client.subscribe(f"device/+/report")
-                logger.info(f"Subscribed to topic: device/+/report")
-            else:
-                logger.error(f"Connection failed with code {rc}")
+            # Subscribe nach erfolgreicher Verbindung
+            client.subscribe("device/+/report")
         
         def on_message(client, userdata, msg):
-            nonlocal received_data
             try:
-                logger.debug(f"Received message on topic {msg.topic}")
+                # Update Status-Cache
                 data = json.loads(msg.payload)
-                if 'print' in data:  # Only store print data
-                    received_data = data['print']  # Store print section
-                logger.debug(f"Message data: {data}")
+                self.printer_data[printer_id] = data
             except Exception as e:
-                logger.error(f"Error parsing MQTT message: {e}")
-        
-        # Create MQTT client
-        client = mqtt.Client(protocol=mqtt.MQTTv311)  # Use MQTT 3.1.1
-        client.username_pw_set("bblp", printer['accessCode'])
-        
-        # Enable SSL/TLS
-        client.tls_set(cert_reqs=ssl.CERT_NONE)
-        client.tls_insecure_set(True)
-        
-        # Set callbacks
+                logger.error(f"Error processing MQTT message: {e}")
+
         client.on_connect = on_connect
         client.on_message = on_message
         
         try:
-            # Connect to printer MQTT
-            logger.info(f"Connecting to printer MQTT at {printer['ip']}")
-            client.connect(printer['ip'], 8883, 60)
-            
-            # Start MQTT loop
-            client.loop_start()
-            
-            # Wait for connection and data
-            timeout = time.time() + 5  # 5 seconds timeout
-            while not connection_established and time.time() < timeout:
-                time.sleep(0.1)
-            
-            if not connection_established:
-                raise Exception("Could not connect to printer MQTT")
-            
-            # Wait for data
-            time.sleep(3)  # Wait a bit longer for data
-            
-            if not received_data:
-                raise Exception("No data received from printer")
-                
-            # Extract required data
-            return {
-                "temperatures": {
-                    "bed": float(received_data.get('bed_temper', 0)),
-                    "nozzle": float(received_data.get('nozzle_temper', 0)),
-                    "chamber": float(received_data.get('chamber_temper', 0))
-                },
-                "status": received_data.get('gcode_state', 'unknown'),
-                "progress": float(received_data.get('mc_percent', 0)),
-                "remaining_time": int(received_data.get('mc_remaining_time', 0))
-            }
-                
-        finally:
-            try:
-                client.loop_stop()
+            client.connect(ip, 1883, 60)
+            client.loop_start()  # Starte Background-Thread
+            self.mqtt_clients[printer_id] = client
+        except Exception as e:
+            logger.error(f"Error connecting to MQTT: {e}")
+            raise
+
+    def get_printer_status(self, printer_id):
+        """Holt den Status aus dem Cache"""
+        return self.printer_data.get(printer_id, {})
+
+    def cleanup(self, printer_id=None):
+        """Beendet MQTT Verbindungen"""
+        if printer_id:
+            if printer_id in self.mqtt_clients:
+                self.mqtt_clients[printer_id].disconnect()
+                del self.mqtt_clients[printer_id]
+                del self.printer_data[printer_id]
+        else:
+            # Cleanup alle Verbindungen
+            for client in self.mqtt_clients.values():
                 client.disconnect()
-            except:
-                pass
-            
-    except Exception as e:
-        logger.error(f"Error getting printer status: {str(e)}")
-        return {
-            "temperatures": {
-                "bed": 0,
-                "nozzle": 0,
-                "chamber": 0
-            },
-            "status": "offline",
-            "progress": 0,
-            "remaining_time": 0
-        }
+            self.mqtt_clients.clear()
+            self.printer_data.clear()
 
 def scanNetwork():
     """Scannt nach neuen Druckern im Netzwerk via SSDP"""
@@ -355,4 +316,47 @@ def on_message(client, userdata, msg):
     logger.debug(f"MQTT Message received: {msg.topic} {msg.payload}")
 
 # Lade gespeicherte Drucker beim Start
-stored_printers = getPrinters() 
+stored_printers = getPrinters()
+
+def getPrinterStatus(printer_id):
+    """Gets the printer status using MQTT"""
+    try:
+        printer = getPrinterById(printer_id)
+        if not printer:
+            raise Exception("Printer not found")
+            
+        # Stelle sicher dass eine MQTT Verbindung besteht
+        printer_service.connect_mqtt(printer_id, printer['ip'])
+        
+        # Hole Status aus dem Cache
+        data = printer_service.get_printer_status(printer_id)
+        
+        # Extrahiere die benötigten Daten
+        if 'print' in data:
+            print_data = data['print']
+            return {
+                "temperatures": {
+                    "bed": float(print_data.get('bed_temper', 0)),
+                    "nozzle": float(print_data.get('nozzle_temper', 0)),
+                    "chamber": float(print_data.get('chamber_temper', 0))
+                },
+                "status": print_data.get('gcode_state', 'unknown'),
+                "progress": float(print_data.get('mc_percent', 0)),
+                "remaining_time": int(print_data.get('mc_remaining_time', 0))
+            }
+        
+        return {
+            "temperatures": {"bed": 0, "nozzle": 0, "chamber": 0},
+            "status": "offline",
+            "progress": 0,
+            "remaining_time": 0
+        }
+                
+    except Exception as e:
+        logger.error(f"Error getting printer status: {str(e)}")
+        return {
+            "temperatures": {"bed": 0, "nozzle": 0, "chamber": 0},
+            "status": "offline",
+            "progress": 0,
+            "remaining_time": 0
+        } 
