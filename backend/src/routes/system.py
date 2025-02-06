@@ -7,7 +7,7 @@ from flask_cors import cross_origin
 import logging
 
 logger = logging.getLogger(__name__)
-system_bp = Blueprint('system', __name__)
+system_bp = Blueprint('system', __name__, url_prefix='')
 
 # Cache für System-Informationen
 system_info_cache = {
@@ -74,44 +74,16 @@ def get_load_average():
         pass
     return [0, 0, 0]
 
-@system_bp.route('/system/stats')
-@cross_origin()
+@system_bp.route('/system/stats')  # Vereinfachte Route
 def get_stats():
-    """Liefert System-Statistiken"""
     try:
-        current_time = time.time()
-        
-        # Prüfe Cache
-        if system_info_cache['data'] and current_time - system_info_cache['last_update'] < CACHE_DURATION:
-            return jsonify(system_info_cache['data'])
-
-        # CPU Nutzung (1 Sekunde Intervall)
-        cpu_percent = psutil.cpu_percent(interval=1)
-        
-        # Sammle Systeminformationen
         stats = {
-            'hostname': platform.node(),
-            'platform': platform.system(),
-            'architecture': platform.machine(),
-            'processor': platform.processor(),
-            'cpu_cores': psutil.cpu_count(),
-            'cpu_percent': cpu_percent,
-            'memory': get_memory_info(),
-            'disk': get_disk_info(),
-            'temperature': get_cpu_temp(),
-            'load_average': get_load_average(),
-            'uptime': int(time.time() - psutil.boot_time()),
-            'timestamp': int(time.time())
+            'cpu_percent': psutil.cpu_percent(),
+            'memory': dict(psutil.virtual_memory()._asdict()),
+            'disk': dict(psutil.disk_usage('/')._asdict())
         }
-
-        # Aktualisiere Cache
-        system_info_cache['data'] = stats
-        system_info_cache['last_update'] = current_time
-
         return jsonify(stats)
-
     except Exception as e:
-        logger.error(f"Error getting system stats: {e}")
         return jsonify({'error': str(e)}), 500
 
 @system_bp.route('/system/shutdown', methods=['POST'])

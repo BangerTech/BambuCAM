@@ -11,6 +11,19 @@ const NotificationButton = () => {
     if (permission !== 'granted') {
       const newPermission = await Notification.requestPermission();
       setPermission(newPermission);
+      if (newPermission === 'granted') {
+        // Test notification when enabling
+        const notification = new Notification("BambuCAM", {
+          body: "Notifications enabled! 🔔",
+          icon: '/printer-icon.png'
+        });
+        const audio = document.getElementById('notificationSound');
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch(err => console.warn('Could not play sound:', err));
+        }
+        setTimeout(() => notification.close(), 3000);
+      }
     }
     setNotificationsEnabled(prev => !prev);
     localStorage.setItem('notificationsEnabled', (!notificationsEnabled).toString());

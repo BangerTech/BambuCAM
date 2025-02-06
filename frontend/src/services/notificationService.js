@@ -1,7 +1,13 @@
-const audio = new Audio('/notification.mp3');
+const audio = document.getElementById('notificationSound');
 
 const playSound = (type) => {
-  audio.play().catch(err => console.log('Sound konnte nicht abgespielt werden:', err));
+  if (!audio) {
+    console.warn('Notification sound element not found');
+    return;
+  }
+  
+  audio.currentTime = 0; // Reset audio to start
+  audio.play().catch(err => console.warn('Could not play notification sound:', err));
 };
 
 export const showNotification = (printer, status) => {
@@ -46,17 +52,21 @@ export const showNotification = (printer, status) => {
 
 export const requestNotificationPermission = async () => {
   if (!("Notification" in window)) {
+    console.warn('Notifications not supported');
     return false;
   }
 
   let permission = await Notification.requestPermission();
   
   if (permission === "granted") {
-    localStorage.setItem('notifications', 'enabled');
-    showNotification(
-      { name: "System" }, 
-      "NOTIFICATION_TEST"
-    );
+    localStorage.setItem('notificationsEnabled', 'true');
+    // Test Notification
+    const notification = new Notification("BambuCAM", {
+      body: "Notifications enabled! 🔔",
+      icon: '/printer-icon.png'
+    });
+    playSound('notification');
+    setTimeout(() => notification.close(), 3000);
     return true;
   }
   

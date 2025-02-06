@@ -79,6 +79,21 @@ class StreamService:
             logger.error(f"Failed to start stream: {e}")
             raise e
 
+    def stop_stream(self, printer_id):
+        """Stoppt einen Stream"""
+        if printer_id in self.active_streams:
+            try:
+                process = self.active_streams[printer_id]['process']
+                process.terminate()
+                process.wait(timeout=5)
+            except:
+                try:
+                    process.kill()
+                except:
+                    pass
+            finally:
+                del self.active_streams[printer_id]
+
     def start_main_server(self, port):
         """Startet den Haupt-WebSocket-Server"""
         try:
@@ -115,68 +130,55 @@ class StreamService:
             raise e
 
     async def stream_handler(self, websocket, path):
+        printer_id = None
         try:
             printer_id = path.split('/')[-1]
             logger.info(f"Stream handler called for printer {printer_id}")
             
-            # Hole Drucker-Info
             printer = next((p for p in getPrinters() if p['id'] == printer_id), None)
             if not printer:
                 logger.error(f"No printer found with ID {printer_id}")
                 return
 
-            # Stoppe existierenden Stream
             if printer_id in self.active_streams:
                 self.stop_stream(printer_id)
                 await asyncio.sleep(1)
 
-            try:
-                self.start_stream(printer_id, printer['streamUrl'], 9000)
-                process = self.active_streams[printer_id]['process']
-                
-                # Warte initial auf Stream-Start
-                await asyncio.sleep(3)
-                
-                while True:
-                    try:
-                        # Prüfe ob Drucker noch existiert
-                        if not any(p['id'] == printer_id for p in getPrinters()):
-                            logger.info(f"Printer {printer_id} was deleted")
-                            self.stop_stream(printer_id)
-                            return
+            self.start_stream(printer_id, printer['streamUrl'], 9000)
+            process = self.active_streams[printer_id]['process']
+            
+            await asyncio.sleep(3)
+            
+            while True:
+                if not any(p['id'] == printer_id for p in getPrinters()):
+                    logger.info(f"Printer {printer_id} was deleted")
+                    break
 
-                        data = await asyncio.get_event_loop().run_in_executor(
-                            None, process.stdout.read, 4096
-                        )
-                        
-                        if data:
-                            await websocket.send(data)
-                        else:
-                            if printer_id not in self.active_streams:
-                                return
-                            logger.warning("Stream reconnect needed")
-                            self.stop_stream(printer_id)
-                            await asyncio.sleep(2)
-                            self.start_stream(printer_id, printer['streamUrl'], 9000)
-                            process = self.active_streams[printer_id]['process']
-
-                    except websockets.exceptions.ConnectionClosed:
-                        logger.info("Client disconnected")
+                try:
+                    data = await asyncio.get_event_loop().run_in_executor(
+                        None, process.stdout.read, 4096
+                    )
+                    
+                    if data:
+                        await websocket.send(data)
+                    else:
+                        if printer_id not in self.active_streams:
+                            break
+                        logger.warning("Stream reconnect needed")
                         self.stop_stream(printer_id)
-                        return
+                        await asyncio.sleep(2)
+                        self.start_stream(printer_id, printer['streamUrl'], 9000)
+                        process = self.active_streams[printer_id]['process']
+
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info("Client disconnected")
+                    break
 
         except Exception as e:
             logger.error(f"Stream error: {e}")
-            self.stop_stream(printer_id)
-            return
-
-        except Exception as e:
-            logger.error(f"Handler error: {e}")
-            if printer_id in self.active_streams:
-                self.stop_stream(printer_id)
         
         finally:
-            if printer_id in self.active_streams:
+            if printer_id and printer_id in self.active_streams:
                 self.stop_stream(printer_id)
 
 # Globale Stream-Service Instanz
