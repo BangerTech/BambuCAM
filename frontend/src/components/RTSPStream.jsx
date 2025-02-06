@@ -14,6 +14,26 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const pendingBuffersRef = useRef([]);
   const logCountRef = useRef(0);  // Für Logging-Begrenzung
 
+  const initializeMediaSource = () => {
+    return new Promise((resolve, reject) => {
+      try {
+        console.log('Initializing MediaSource...');
+        const ms = new MediaSource();
+        ms.addEventListener('sourceopen', () => {
+          console.log('MediaSource opened');
+          resolve(ms);
+        });
+        ms.addEventListener('error', (e) => {
+          console.error('MediaSource error:', e);
+          reject(e);
+        });
+        videoRef.current.src = URL.createObjectURL(ms);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  };
+
   // Extrahiere setupMediaSource aus dem useEffect
   const setupMediaSource = async () => {
     if (!printer || !videoRef.current) return;
@@ -139,26 +159,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
     let retryCount = 0;
     const maxRetries = 3;
     let isComponentMounted = true;
-
-    const initializeMediaSource = () => {
-      return new Promise((resolve, reject) => {
-        try {
-          console.log('Initializing MediaSource...');
-          const ms = new MediaSource();
-          ms.addEventListener('sourceopen', () => {
-            console.log('MediaSource opened');
-            resolve(ms);
-          });
-          ms.addEventListener('error', (e) => {
-            console.error('MediaSource error:', e);
-            reject(e);
-          });
-          videoRef.current.src = URL.createObjectURL(ms);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    };
 
     const appendBuffer = (data) => {
       if (!sourceBufferRef.current || sourceBufferRef.current.updating) {

@@ -11,8 +11,6 @@ import uuid
 import paho.mqtt.client as mqtt
 import bambulabs_api as bl
 import ssl
-from flask import request, jsonify
-from flask import current_app as app  # Importiere current_app statt app
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -368,23 +366,4 @@ def update_printer_order(printer_id, order):
         return False
     except Exception as e:
         logger.error(f"Error updating printer order: {e}")
-        return False
-
-@app.route('/printers/<printer_id>/order', methods=['PUT'])
-def update_printer_order(printer_id):
-    try:
-        data = request.get_json()
-        order = data.get('order')
-        
-        printers = getPrinters()
-        printer_index = next((i for i, p in enumerate(printers) if p['id'] == printer_id), None)
-        
-        if printer_index is not None:
-            printers[printer_index]['order'] = order
-            savePrinters(printers)
-            return jsonify({'success': True})
-        
-        return jsonify({'success': False, 'error': 'Printer not found'}), 404
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500 
+        return False 
