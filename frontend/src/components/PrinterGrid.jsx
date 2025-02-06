@@ -12,6 +12,7 @@ import RouterIcon from '@mui/icons-material/Router';
 import CloudIcon from '@mui/icons-material/Cloud';
 import AddIcon from '@mui/icons-material/Add';
 import FullscreenDialog from './FullscreenDialog';
+import PrinterCard from './PrinterCard';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -263,8 +264,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   };
 
-  const handleFullscreen = (printer) => {
-    setFullscreenPrinter(printer);
+  const handleFullscreenToggle = (printer) => {
+    setFullscreenPrinter(fullscreenPrinter ? null : printer);
   };
 
   // Modifizierte handleDelete Funktion
@@ -437,6 +438,46 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   };
 
+  // Fullscreen card styles
+  const fullscreenStyle = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1300,
+    backgroundColor: 'white',
+    padding: '20px',
+    overflow: 'auto'
+  };
+
+  // Regular grid styles
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: '20px',
+    padding: '20px'
+  };
+
+  if (fullscreenPrinter) {
+    return (
+      <div style={fullscreenStyle}>
+        <IconButton 
+          onClick={() => handleFullscreenToggle(null)}
+          style={{ position: 'absolute', top: 10, right: 10 }}
+        >
+          <CloseIcon />
+        </IconButton>
+        <PrinterCard 
+          printer={fullscreenPrinter}
+          onRemove={handleDelete}
+          isFullscreen={true}
+          onFullscreenToggle={handleFullscreenToggle}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ 
@@ -558,7 +599,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           }}>
                             <Typography variant="subtitle1">{printer.name}</Typography>
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreen(printer)}>
+                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreenToggle(printer)}>
                                 <FullscreenIcon />
                               </IconButton>
                               <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printer.id)}>
@@ -884,20 +925,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           >Add</Button>
         </DialogActions>
       </Dialog>
-
-      <FullscreenDialog
-        printer={fullscreenPrinter}
-        open={fullscreenPrinter !== null}
-        onClose={() => {
-          // Stream stoppen beim Schließen
-          if (fullscreenPrinter) {
-            // Optional: Cleanup-Code hier
-          }
-          setFullscreenPrinter(null);
-        }}
-        getTemperature={getTemperature}
-        printerStatus={printerStatus}
-      />
 
       {/* Styled Snackbar */}
       <Snackbar
