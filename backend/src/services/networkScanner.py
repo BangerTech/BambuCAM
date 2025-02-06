@@ -13,13 +13,11 @@ logger = logging.getLogger(__name__)
 
 def scan_printer(ip, port, result_queue):
     try:
-        # Versuche eine Verbindung zum Drucker aufzubauen
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)  # 1 Sekunde Timeout
         
         if sock.connect_ex((ip, port)) == 0:
             try:
-                # Versuche Drucker-Info abzurufen
                 response = requests.get(
                     f"http://{ip}:8989/api/info",
                     timeout=2,
@@ -33,12 +31,10 @@ def scan_printer(ip, port, result_queue):
                         'name': printer_info.get('name', f'Drucker {ip}'),
                         'model': printer_info.get('model', 'X1C'),
                         'status': printer_info.get('status', 'unknown'),
-                        'accessCode': '',  # Muss manuell eingegeben werden
-                        'streamUrl': ''  # Wird später mit Access Code erstellt
+                        'accessCode': '',
+                        'streamUrl': ''
                     })
-                    logger.info(f"Drucker gefunden: {ip}")
             except:
-                # Wenn API nicht erreichbar, trotzdem als möglichen Drucker markieren
                 result_queue.put({
                     'ip': ip,
                     'name': f'Drucker {ip}',
@@ -47,7 +43,6 @@ def scan_printer(ip, port, result_queue):
                     'accessCode': '',
                     'streamUrl': ''
                 })
-                logger.info(f"Möglicher Drucker gefunden: {ip}")
     except:
         pass
     finally:

@@ -218,95 +218,83 @@ def getPrinterStatus(printer_id):
         }
 
 def scanNetwork():
-    """Scannt das lokale Netzwerk nach BambuLab Druckern mit verbesserter Zuverlässigkeit"""
-    logger.info("Starting network scan for printers...")
-    
-    # SSDP M-SEARCH Message für Bambu Lab Drucker
-    ssdp_request = (
-        'M-SEARCH * HTTP/1.1\r\n'
-        'HOST: 239.255.255.250:1990\r\n'
-        'MAN: "ssdp:discover"\r\n'
-        'MX: 5\r\n'  # Erhöhter Timeout auf 5 Sekunden
-        'ST: urn:bambulab-com:device:3dprinter:1\r\n'
-        '\r\n'
-    )
-    
-    found_printers = {}  # Dictionary für eindeutige Drucker
-    
+    """Scannt nach neuen Druckern im Netzwerk via SSDP"""
     try:
-        # Erstelle UDP Socket mit größerem Buffer
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        logger.info("Starting network scan for printers...")
+        
+        # SSDP M-SEARCH Message für Bambu Lab Drucker
+        ssdp_request = (
+            'M-SEARCH * HTTP/1.1\r\n'
+            'HOST: 239.255.255.250:1990\r\n'
+            'MAN: "ssdp:discover"\r\n'
+            'MX: 3\r\n'
+            'ST: urn:bambulab-com:device:3dprinter:1\r\n'
+            '\r\n'
+        ).encode()
+
+        # Erstelle UDP Socket mit Broadcast
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
-        
+        sock.settimeout(5)  # 5 Sekunden Timeout
+
         # Bind to all interfaces
         sock.bind(('', 0))
+
+        # Sende an beide Discovery Ports
+        discovery_ports = [1990, 2021]
+        for port in discovery_ports:
+            try:
+                logger.info(f"Sending SSDP discovery to port {port}")
+                # Sende beide Nachrichten mehrmals für bessere Zuverlässigkeit
+                for _ in range(2):
+                    sock.sendto(ssdp_request, ('239.255.255.250', port))  # Multicast
+                    sock.sendto(ssdp_request, ('255.255.255.255', port))  # Broadcast
+                    time.sleep(0.1)  # Kleine Pause zwischen den Versuchen
+            except Exception as e:
+                logger.error(f"Error sending to port {port}: {e}")
+
+        # Sammle Antworten
+        printers = []
+        start_time = time.time()
         
-        # Mehrere Versuche mit verschiedenen Methoden
-        discovery_targets = [
-            ('239.255.255.250', 1990),  # SSDP Multicast
-            ('255.255.255.255', 1990),  # Network Broadcast
-            ('239.255.255.250', 2021),  # Alternative SSDP Port
-        ]
-        
-        # Zwei Durchläufe für bessere Zuverlässigkeit
-        for attempt in range(2):  # Reduziert auf 2 Durchläufe
-            logger.info(f"Scan attempt {attempt + 1}/2")  # Aktualisierte Logging-Nachricht
-            
-            for target in discovery_targets:
-                try:
-                    logger.debug(f"Sending discovery to {target}")
-                    sock.sendto(ssdp_request.encode(), target)
-                    time.sleep(0.5)  # Kleine Pause zwischen Versuchen
-                except Exception as e:
-                    logger.debug(f"Error sending to {target}: {e}")
-            
-            # Sammle Antworten
-            start_time = time.time()
-            sock.settimeout(1.0)  # Kürzerer Timeout pro Durchlauf
-            
-            while time.time() - start_time < 2.0:  # 2 Sekunden pro Durchlauf
-                try:
-                    data, addr = sock.recvfrom(4096)
-                    response = data.decode()
-                    logger.debug(f"Received from {addr}:\n{response}")
+        while time.time() - start_time < 5:  # 5 Sekunden warten
+            try:
+                data, addr = sock.recvfrom(4096)
+                response = data.decode()
+                logger.debug(f"Received from {addr}: {response}")  # Debug-Level für weniger Spam
+                
+                # Parse SSDP Response
+                if 'bambulab' in response.lower():
+                    printer_info = {
+                        'id': str(uuid.uuid4()),
+                        'ip': addr[0],
+                        'type': 'bambulab',
+                        'status': 'online'
+                    }
                     
-                    if 'bambulab' in response.lower():
-                        # Parse SSDP Response
-                        printer_info = {
-                            'id': str(uuid.uuid4()),
-                            'ip': addr[0],
-                            'type': 'bambulab',
-                            'status': 'online'
-                        }
-                        
-                        # Extrahiere zusätzliche Informationen
-                        for line in response.split('\r\n'):
-                            if 'DevName.bambu.com:' in line:
-                                printer_info['name'] = line.split(':', 1)[1].strip()
-                            elif 'DevModel.bambu.com:' in line:
-                                printer_info['model'] = line.split(':', 1)[1].strip()
-                            elif 'DevVersion.bambu.com:' in line:
-                                printer_info['version'] = line.split(':', 1)[1].strip()
-                        
-                        if not printer_info.get('name'):
-                            printer_info['name'] = f"Bambu Lab Printer ({addr[0]})"
-                            
-                        # Speichere Drucker mit IP als Schlüssel für Eindeutigkeit
-                        if addr[0] not in found_printers:
-                            found_printers[addr[0]] = printer_info
-                            logger.info(f"Found new printer: {printer_info['name']} at {addr[0]}")
-                            
-                except socket.timeout:
-                    continue
-                except Exception as e:
-                    logger.debug(f"Error receiving response: {e}")
+                    # Extrahiere Details aus Response
+                    for line in response.split('\r\n'):
+                        if 'DevName.bambu.com:' in line:
+                            printer_info['name'] = line.split(':', 1)[1].strip()
+                        elif 'DevModel.bambu.com:' in line:
+                            printer_info['model'] = line.split(':', 1)[1].strip()
+                        elif 'DevVersion.bambu.com:' in line:
+                            printer_info['version'] = line.split(':', 1)[1].strip()
                     
-            logger.info(f"Found {len(found_printers)} unique printers after attempt {attempt + 1}")
-            
-        return list(found_printers.values())
-        
+                    # Prüfe ob der Drucker bereits gefunden wurde
+                    if not any(p['ip'] == addr[0] for p in printers):
+                        printers.append(printer_info)
+                        logger.info(f"Found printer: {printer_info}")  # Info-Level für gefundene Drucker
+                        
+            except socket.timeout:
+                continue
+            except Exception as e:
+                logger.error(f"Error receiving response: {e}")
+
+        logger.info(f"Scan complete. Found {len(printers)} printers")
+        return printers
+
     except Exception as e:
         logger.error(f"Error during network scan: {str(e)}")
         return []
