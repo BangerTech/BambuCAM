@@ -23,78 +23,6 @@ class StreamService:
         self.active_streams = {}
         self.ws_servers = {}  # Speichere WebSocket-Server pro Port
         
-    async def stream_handler(self, websocket, path):
-        """Behandelt WebSocket-Verbindungen"""
-        try:
-            printer_id = path.split('/')[-1]
-            if printer_id not in self.active_streams:
-                # Versuche Stream neu zu starten wenn URL bekannt
-                stream_info = self.active_streams.get(printer_id, {})
-                if stream_info.get('url'):
-                    logger.info(f"Restarting stream for {printer_id}")
-                    self.start_stream(printer_id, stream_info['url'], stream_info['port'])
-                else:
-                    await websocket.close(1008, "Stream nicht gefunden")
-                    return
-                
-            stream = self.active_streams[printer_id]
-            process = stream['process']
-            
-            # Prüfe ob Prozess noch läuft
-            if process.poll() is not None:
-                logger.info(f"Restarting dead stream for {printer_id}")
-                self.start_stream(printer_id, stream['url'], stream['port'])
-                process = self.active_streams[printer_id]['process']
-            
-            logger.info(f"Client connected to stream {printer_id}")
-            
-            while True:
-                try:
-                    data = await asyncio.get_event_loop().run_in_executor(
-                        None, process.stdout.read, 4096
-                    )
-                    
-                    if not data:
-                        logger.warning("FFmpeg stream ended")
-                        break
-                        
-                    await websocket.send(data)
-                    
-                except websockets.exceptions.ConnectionClosed:
-                    logger.info("Client disconnected")
-                    break
-                except Exception as e:
-                    logger.error(f"Error in stream handler: {e}")
-                    break
-                
-        except Exception as e:
-            logger.error(f"Error in stream handler: {e}")
-        finally:
-            logger.info("Stream handler finished")
-            
-    def start_websocket_server(self, port):
-        """Startet den WebSocket-Server"""
-        if port in self.ws_servers:
-            return  # Server läuft bereits
-            
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        start_server = websockets.serve(
-            self.stream_handler, 
-            "0.0.0.0", 
-            port,
-            ping_interval=None
-        )
-        
-        self.ws_servers[port] = {
-            'server': start_server,
-            'loop': loop
-        }
-        
-        loop.run_until_complete(start_server)
-        loop.run_forever()
-        
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
@@ -133,12 +61,88 @@ class StreamService:
                 'url': stream_url  # Speichere URL für Neustart
             }
             
+            # Starte WebSocket-Server wenn noch nicht laufend
+            if port not in self.ws_servers:
+                thread = threading.Thread(
+                    target=self.start_websocket_server,
+                    args=(port,),
+                    daemon=True
+                )
+                thread.start()
+                logger.info(f"Started WebSocket server on port {port}")
+            
             return port
             
         except Exception as e:
             logger.error(f"Error starting stream: {e}")
             raise e
+
+    async def stream_handler(self, websocket, path):
+        """Behandelt WebSocket-Verbindungen"""
+        try:
+            printer_id = path.split('/')[-1]
+            if printer_id not in self.active_streams:
+                await websocket.close(1008, "Stream nicht gefunden")
+                return
+                
+            stream = self.active_streams[printer_id]
+            process = stream['process']
             
+            # Prüfe ob Prozess noch läuft
+            if process.poll() is not None:
+                logger.info(f"Restarting dead stream for {printer_id}")
+                self.start_stream(printer_id, stream['url'], stream['port'])
+                process = self.active_streams[printer_id]['process']
+            
+            logger.info(f"Client connected to stream {printer_id}")
+            
+            while True:
+                try:
+                    data = await asyncio.get_event_loop().run_in_executor(
+                        None, process.stdout.read, 4096
+                    )
+                    
+                    if not data:
+                        logger.warning("FFmpeg stream ended")
+                        break
+                        
+                    await websocket.send(data)
+                    
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info("Client disconnected")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in stream handler: {e}")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error in stream handler: {e}")
+        finally:
+            logger.info("Stream handler finished")
+        
+    def start_websocket_server(self, port):
+        """Startet den WebSocket-Server"""
+        if port in self.ws_servers:
+            return  # Server läuft bereits
+            
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        start_server = websockets.serve(
+            self.stream_handler, 
+            "0.0.0.0", 
+            port,
+            ping_interval=None
+        )
+        
+        self.ws_servers[port] = {
+            'server': start_server,
+            'loop': loop
+        }
+        
+        loop.run_until_complete(start_server)
+        loop.run_forever()
+        
     def stop_stream(self, printer_id):
         """Stoppt einen Stream"""
         if printer_id in self.active_streams:
