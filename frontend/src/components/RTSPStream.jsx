@@ -14,6 +14,123 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const pendingBuffersRef = useRef([]);
   const logCountRef = useRef(0);  // Für Logging-Begrenzung
 
+  // Extrahiere setupMediaSource aus dem useEffect
+  const setupMediaSource = async () => {
+    if (!printer || !videoRef.current) return;
+    
+    try {
+      console.log('Setting up new MediaSource...');
+      
+      // Cleanup old MediaSource
+      if (mediaSourceRef.current) {
+        if (sourceBufferRef.current) {
+          try {
+            mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+          } catch (e) {
+            console.warn('Error removing old SourceBuffer:', e);
+          }
+        }
+        mediaSourceRef.current = null;
+        sourceBufferRef.current = null;
+      }
+
+      // Clear pending buffers
+      pendingBuffersRef.current = [];
+
+      // Initialize new MediaSource
+      mediaSourceRef.current = await initializeMediaSource();
+      console.log('Setting up SourceBuffer...');
+      sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
+        'video/mp2t; codecs="avc1.640029"'
+      );
+
+      sourceBufferRef.current.addEventListener('updateend', () => {
+        if (pendingBuffersRef.current.length > 0) {
+          console.log('Buffer update complete, processing pending buffer');
+          const nextBuffer = pendingBuffersRef.current.shift();
+          appendBuffer(nextBuffer);
+        }
+      });
+      
+      sourceBufferRef.current.addEventListener('error', (e) => {
+        console.error('SourceBuffer error:', e);
+      });
+      
+      const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      
+      wsRef.current = new WebSocket(wsUrl);
+      wsRef.current.binaryType = 'arraybuffer';
+      
+      wsRef.current.onopen = () => {
+        if (!isComponentMounted) return;
+        console.log('WebSocket Connected, waiting for video data...');
+        retryCount = 0;
+        isInitializedRef.current = true;
+      };
+
+      wsRef.current.onclose = () => {
+        console.log('WebSocket Closed');
+        if (!isComponentMounted) return;
+        if (retryCount < maxRetries) {
+          console.log(`Attempting reconnect (${retryCount + 1}/${maxRetries})...`);
+          retryCount++;
+          setTimeout(setupMediaSource, 1000);
+        }
+      };
+
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
+      };
+
+      wsRef.current.onmessage = (event) => {
+        if (!isComponentMounted) return;
+        lastDataRef.current = Date.now();
+        
+        // Reduziertes Logging für Datenchunks
+        if (logCountRef.current < 5) {
+          console.log('Received data chunk, size:', event.data.byteLength);
+          logCountRef.current++;
+        }
+        
+        if (!sourceBufferRef.current) {
+          console.error('No SourceBuffer available!');
+          return;
+        }
+        
+        appendBuffer(event.data);
+      };
+
+      // Add video element event listeners
+      videoRef.current.addEventListener('error', (e) => {
+        console.error('Video error:', e);
+      });
+
+      videoRef.current.addEventListener('stalled', () => {
+        console.log('Video stalled');
+      });
+
+      videoRef.current.addEventListener('waiting', () => {
+        console.log('Video waiting for data');
+      });
+
+      videoRef.current.addEventListener('playing', () => {
+        console.log('Video playing');
+      });
+
+    } catch (e) {
+      console.error('Error in setupMediaSource:', e);
+      if (retryCount < maxRetries) {
+        retryCount++;
+        console.log(`Retrying setup (${retryCount}/${maxRetries})...`);
+        setTimeout(setupMediaSource, 1000);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!printer || !videoRef.current) return;
 
@@ -91,122 +208,6 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       }
     };
 
-    const setupMediaSource = async () => {
-      if (!isComponentMounted || !videoRef.current) return;
-      
-      try {
-        console.log('Setting up new MediaSource...');
-        
-        // Cleanup old MediaSource
-        if (mediaSourceRef.current) {
-          if (sourceBufferRef.current) {
-            try {
-              mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-            } catch (e) {
-              console.warn('Error removing old SourceBuffer:', e);
-            }
-          }
-          mediaSourceRef.current = null;
-          sourceBufferRef.current = null;
-        }
-
-        // Clear pending buffers
-        pendingBuffersRef.current = [];
-
-        // Initialize new MediaSource
-        mediaSourceRef.current = await initializeMediaSource();
-        console.log('Setting up SourceBuffer...');
-        sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
-          'video/mp2t; codecs="avc1.640029"'
-        );
-
-        sourceBufferRef.current.addEventListener('updateend', () => {
-          if (pendingBuffersRef.current.length > 0) {
-            console.log('Buffer update complete, processing pending buffer');
-            const nextBuffer = pendingBuffersRef.current.shift();
-            appendBuffer(nextBuffer);
-          }
-        });
-        
-        sourceBufferRef.current.addEventListener('error', (e) => {
-          console.error('SourceBuffer error:', e);
-        });
-        
-        const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
-        console.log('Connecting to WebSocket:', wsUrl);
-        
-        wsRef.current = new WebSocket(wsUrl);
-        wsRef.current.binaryType = 'arraybuffer';
-        
-        wsRef.current.onopen = () => {
-          if (!isComponentMounted) return;
-          console.log('WebSocket Connected, waiting for video data...');
-          retryCount = 0;
-          isInitializedRef.current = true;
-        };
-
-        wsRef.current.onclose = () => {
-          console.log('WebSocket Closed');
-          if (!isComponentMounted) return;
-          if (retryCount < maxRetries) {
-            console.log(`Attempting reconnect (${retryCount + 1}/${maxRetries})...`);
-            retryCount++;
-            setTimeout(setupMediaSource, 1000);
-          }
-        };
-
-        wsRef.current.onerror = (error) => {
-          console.error('WebSocket Error:', error);
-          if (wsRef.current) {
-            wsRef.current.close();
-          }
-        };
-
-        wsRef.current.onmessage = (event) => {
-          if (!isComponentMounted) return;
-          lastDataRef.current = Date.now();
-          
-          // Reduziertes Logging für Datenchunks
-          if (logCountRef.current < 5) {
-            console.log('Received data chunk, size:', event.data.byteLength);
-            logCountRef.current++;
-          }
-          
-          if (!sourceBufferRef.current) {
-            console.error('No SourceBuffer available!');
-            return;
-          }
-          
-          appendBuffer(event.data);
-        };
-
-        // Add video element event listeners
-        videoRef.current.addEventListener('error', (e) => {
-          console.error('Video error:', e);
-        });
-
-        videoRef.current.addEventListener('stalled', () => {
-          console.log('Video stalled');
-        });
-
-        videoRef.current.addEventListener('waiting', () => {
-          console.log('Video waiting for data');
-        });
-
-        videoRef.current.addEventListener('playing', () => {
-          console.log('Video playing');
-        });
-
-      } catch (e) {
-        console.error('Error in setupMediaSource:', e);
-        if (retryCount < maxRetries) {
-          retryCount++;
-          console.log(`Retrying setup (${retryCount}/${maxRetries})...`);
-          setTimeout(setupMediaSource, 1000);
-        }
-      }
-    };
-
     setupMediaSource();
 
     // Reset log counter periodically
@@ -248,7 +249,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
 
   // Reagiere auf Fullscreen-Änderungen
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !printer) return;
     
     // Passe Video-Größe an
     videoRef.current.style.objectFit = fullscreen ? 'contain' : 'cover';
@@ -258,7 +259,7 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       console.log('Reinitializing stream for fullscreen');
       setupMediaSource();
     }
-  }, [fullscreen]);
+  }, [fullscreen, printer]);
 
   return (
     <video

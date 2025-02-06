@@ -42,7 +42,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         const response = await fetch(`${API_URL}/printers`);
         const data = await response.json();
         if (isMounted) {
-          setLocalPrinters(data);
+          // Sort printers by order field
+          const sortedPrinters = data.printers.sort((a, b) => 
+            (a.order ?? Number.MAX_VALUE) - (b.order ?? Number.MAX_VALUE)
+          );
+          setLocalPrinters(sortedPrinters);
         }
       } catch (error) {
         console.error('Error loading printers:', error);
@@ -279,15 +283,33 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   };
 
-  const onDragEnd = (result) => {
+  const handleDragEnd = (result) => {
     if (!result.destination) return;
-    
+
     const items = Array.from(localPrinters);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-    
-    setLocalPrinters(items);
-    localStorage.setItem('printers', JSON.stringify(items));
+
+    // Update order field for each printer
+    const updatedPrinters = items.map((printer, index) => ({
+      ...printer,
+      order: index
+    }));
+
+    setLocalPrinters(updatedPrinters);
+
+    // Save new order to backend
+    updatedPrinters.forEach(printer => {
+      fetch(`${API_URL}/printers/${printer.id}/order`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ order: printer.order })
+      }).catch(error => {
+        console.error('Error saving printer order:', error);
+      });
+    });
   };
 
   // Lade die gespeicherte Reihenfolge beim Start
@@ -483,7 +505,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         )}
       </div>
 
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="printers">
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>

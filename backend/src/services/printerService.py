@@ -11,6 +11,8 @@ import uuid
 import paho.mqtt.client as mqtt
 import bambulabs_api as bl
 import ssl
+from flask import request, jsonify
+from flask import current_app as app  # Importiere current_app statt app
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -70,16 +72,12 @@ def getPrinters():
         return []
 
 def savePrinters(printers):
-    """Speichert die Drucker-Liste"""
+    """Speichert die Drucker in der JSON-Datei"""
     try:
-        # Stelle sicher, dass wir eine Liste speichern
-        if not isinstance(printers, list):
-            printers = list(printers.values()) if isinstance(printers, dict) else []
-            
         with open(PRINTERS_FILE, 'w') as f:
             json.dump(printers, f, indent=2)
     except Exception as e:
-        logger.error(f"Fehler beim Speichern der Drucker: {str(e)}")
+        logger.error(f"Error saving printers: {e}")
         raise e
 
 def getPrinterById(printer_id):
@@ -355,4 +353,38 @@ def on_message(client, userdata, msg):
     logger.debug(f"MQTT Message received: {msg.topic} {msg.payload}")
 
 # Lade gespeicherte Drucker beim Start
-stored_printers = getPrinters() 
+stored_printers = getPrinters()
+
+def update_printer_order(printer_id, order):
+    """Update printer order in database"""
+    try:
+        printers = getPrinters()
+        printer_index = next((i for i, p in enumerate(printers) if p['id'] == printer_id), None)
+        
+        if printer_index is not None:
+            printers[printer_index]['order'] = order
+            savePrinters(printers)
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating printer order: {e}")
+        return False
+
+@app.route('/printers/<printer_id>/order', methods=['PUT'])
+def update_printer_order(printer_id):
+    try:
+        data = request.get_json()
+        order = data.get('order')
+        
+        printers = getPrinters()
+        printer_index = next((i for i, p in enumerate(printers) if p['id'] == printer_id), None)
+        
+        if printer_index is not None:
+            printers[printer_index]['order'] = order
+            savePrinters(printers)
+            return jsonify({'success': True})
+        
+        return jsonify({'success': False, 'error': 'Printer not found'}), 404
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500 
