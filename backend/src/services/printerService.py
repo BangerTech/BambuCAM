@@ -27,6 +27,83 @@ stored_printers = {}
 # Pfad zur JSON-Datei
 PRINTERS_FILE = Path(os.getenv('PRINTERS_FILE', 'printers.json'))
 
+class PrinterService:
+    def __init__(self):
+        self.mqtt_clients = {}
+        self.printer_data = {}
+
+    def connect_mqtt(self, printer_id, ip):
+        """Erstellt eine persistente MQTT Verbindung"""
+        try:
+            printer = getPrinterById(printer_id)
+            if not printer:
+                logger.error(f"Printer {printer_id} not found")
+                raise Exception("Printer not found")
+
+            if printer_id in self.mqtt_clients:
+                if self.mqtt_clients[printer_id].is_connected():
+                    return
+                self.mqtt_clients[printer_id].disconnect()
+            
+            client = mqtt.Client()
+            
+            # SSL Konfiguration
+            client.tls_set(certfile=None, keyfile=None, cert_reqs=ssl.CERT_NONE)
+            client.tls_insecure_set(True)
+            
+            # Setze Credentials
+            client.username_pw_set("bblp", printer['accessCode'])
+            
+            def on_connect(client, userdata, flags, rc):
+                rc_codes = {
+                    0: "Connection successful",
+                    1: "Incorrect protocol version",
+                    2: "Invalid client identifier",
+                    3: "Server unavailable",
+                    4: "Bad username or password",
+                    5: "Not authorized"
+                }
+                logger.info(f"MQTT Connect result: {rc_codes.get(rc, f'Unknown error {rc}')}")
+                if rc == 0:
+                    client.subscribe("device/+/report")
+
+            def on_message(client, userdata, msg):
+                try:
+                    data = json.loads(msg.payload)
+                    self.printer_data[printer_id] = data
+                except Exception as e:
+                    logger.error(f"Error processing MQTT message: {e}")
+
+            client.on_connect = on_connect
+            client.on_message = on_message
+            
+            # Verbinde mit Port 8883
+            client.connect(ip, 8883, 60)
+            client.loop_start()
+            self.mqtt_clients[printer_id] = client
+
+        except Exception as e:
+            logger.error(f"Error connecting to MQTT: {e}")
+            raise
+
+    def get_printer_status(self, printer_id):
+        """Holt den Status aus dem Cache"""
+        return self.printer_data.get(printer_id, {})
+
+    def cleanup(self, printer_id=None):
+        """Beendet MQTT Verbindungen"""
+        if printer_id:
+            if printer_id in self.mqtt_clients:
+                self.mqtt_clients[printer_id].disconnect()
+                del self.mqtt_clients[printer_id]
+                del self.printer_data[printer_id]
+        else:
+            # Cleanup alle Verbindungen
+            for client in self.mqtt_clients.values():
+                client.disconnect()
+            self.mqtt_clients.clear()
+            self.printer_data.clear()
+
 # Globale Instanz des PrinterService
 printer_service = PrinterService()
 
@@ -119,64 +196,6 @@ def removePrinter(printer_id):
     except Exception as e:
         logger.error(f"Fehler beim Entfernen des Druckers: {str(e)}")
         return False
-
-class PrinterService:
-    def __init__(self):
-        self.mqtt_clients = {}  # Speichere MQTT Clients pro Drucker
-        self.printer_data = {}  # Cache für Drucker-Status
-
-    def connect_mqtt(self, printer_id, ip):
-        """Erstellt eine persistente MQTT Verbindung"""
-        if printer_id in self.mqtt_clients:
-            # Prüfe ob Client noch verbunden ist
-            if self.mqtt_clients[printer_id].is_connected():
-                return
-            # Wenn nicht, cleanup
-            self.mqtt_clients[printer_id].disconnect()
-        
-        client = mqtt.Client()
-        
-        def on_connect(client, userdata, flags, rc):
-            logger.info(f"MQTT Connected with result code: {rc}")
-            # Subscribe nach erfolgreicher Verbindung
-            client.subscribe("device/+/report")
-        
-        def on_message(client, userdata, msg):
-            try:
-                # Update Status-Cache
-                data = json.loads(msg.payload)
-                self.printer_data[printer_id] = data
-            except Exception as e:
-                logger.error(f"Error processing MQTT message: {e}")
-
-        client.on_connect = on_connect
-        client.on_message = on_message
-        
-        try:
-            client.connect(ip, 1883, 60)
-            client.loop_start()  # Starte Background-Thread
-            self.mqtt_clients[printer_id] = client
-        except Exception as e:
-            logger.error(f"Error connecting to MQTT: {e}")
-            raise
-
-    def get_printer_status(self, printer_id):
-        """Holt den Status aus dem Cache"""
-        return self.printer_data.get(printer_id, {})
-
-    def cleanup(self, printer_id=None):
-        """Beendet MQTT Verbindungen"""
-        if printer_id:
-            if printer_id in self.mqtt_clients:
-                self.mqtt_clients[printer_id].disconnect()
-                del self.mqtt_clients[printer_id]
-                del self.printer_data[printer_id]
-        else:
-            # Cleanup alle Verbindungen
-            for client in self.mqtt_clients.values():
-                client.disconnect()
-            self.mqtt_clients.clear()
-            self.printer_data.clear()
 
 def scanNetwork():
     """Scannt nach neuen Druckern im Netzwerk via SSDP"""
