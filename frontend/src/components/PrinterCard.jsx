@@ -66,6 +66,7 @@ const PrinterCard = ({ printer, onRemove, isFullscreen, onFullscreenToggle }) =>
           <RTSPStream printer={printer} />
           <Box sx={statusStyle}>
             <Typography variant="body2" sx={{ mb: printer.progress ? 1 : 0 }}>
+              Status: {printer.status || 'connecting'} | 
               Nozzle: {printer.temperatures?.nozzle || 0}°C | 
               Bed: {printer.temperatures?.bed || 0}°C | 
               Chamber: {printer.temperatures?.chamber || 0}°C

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress, FormControlLabel, SpeedDial, SpeedDialIcon, SpeedDialAction } from '@mui/material';
+import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress, FormControlLabel, SpeedDial, SpeedDialIcon, SpeedDialAction, Tooltip } from '@mui/material';
 import RTSPStream from './RTSPStream';
 import DeleteIcon from '@mui/icons-material/Delete';
 import '../styles/NeonButton.css';
@@ -13,6 +13,8 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import AddIcon from '@mui/icons-material/Add';
 import FullscreenDialog from './FullscreenDialog';
 import PrinterCard from './PrinterCard';
+import NotificationButton from './NotificationButton';
+import { showNotification } from '../services/notificationService';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -459,7 +461,32 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     padding: '20px'
   };
 
+  // Überwache Statusänderungen für Benachrichtigungen
+  useEffect(() => {
+    printers.forEach(printer => {
+      if (['failed', 'error', 'finished'].includes(printer.status)) {
+        showNotification(printer, printer.status);
+      }
+    });
+  }, [printers]);
+
+  // Status-Management für alle Drucker
+  const getPrinterWithStatus = (printer) => {
+    const status = printerStatus[printer.id];
+    if (!status) {
+      return { ...printer, status: 'connecting' };
+    }
+    return {
+      ...printer,
+      status: status.status || 'offline',
+      temperatures: status.temperatures || { nozzle: 0, bed: 0, chamber: 0 },
+      progress: status.progress,
+      remaining_time: status.remaining_time
+    };
+  };
+
   if (fullscreenPrinter) {
+    const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);
     return (
       <div style={fullscreenStyle}>
         <IconButton 
@@ -469,7 +496,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           <CloseIcon />
         </IconButton>
         <PrinterCard 
-          printer={fullscreenPrinter}
+          printer={printerWithStatus}  // Übergebe Drucker mit Status
           onRemove={handleDelete}
           isFullscreen={true}
           onFullscreenToggle={handleFullscreenToggle}
@@ -499,19 +526,23 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
           onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
           onClick={onThemeToggle}
-          title={`Klicken um zu ${isDarkMode ? 'Light' : 'Dark'} Mode zu wechseln`}
+          title={`Click to switch to ${isDarkMode ? 'Light' : 'Dark'} Mode`}
         />
 
         {/* Cloud/LAN Switch in der Mitte */}
         <div style={{ 
           display: 'flex', 
-          justifyContent: 'center',  // Zentriert den Switch-Container
-          flex: 1  // Nimmt den verfügbaren Platz ein
+          justifyContent: 'center',
+          flex: 1
         }}>
-          <NeonSwitch
-            checked={mode === 'cloud'}
-            onChange={(e) => onModeChange(e.target.checked ? 'cloud' : 'lan')}
-          />
+          <Tooltip title={`Switch to ${mode === 'cloud' ? 'LAN' : 'Cloud'} Mode`}>
+            <div>  {/* Wrapper div needed for Tooltip to work with custom component */}
+              <NeonSwitch
+                checked={mode === 'cloud'}
+                onChange={(e) => onModeChange(e.target.checked ? 'cloud' : 'lan')}
+              />
+            </div>
+          </Tooltip>
         </div>
         
         {/* Neon Button nur im LAN-Mode anzeigen */}
@@ -550,7 +581,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
               {displayPrinters.map((printer, index) => {
-                const dragId = printer.id?.toString() || `printer-${index}`;
+                const printerWithStatus = getPrinterWithStatus(printer);
+                const dragId = printerWithStatus.id?.toString() || `printer-${index}`;
                 
                 return (
                   <Draggable
@@ -597,12 +629,12 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                             color: 'white',
                             zIndex: 2
                           }}>
-                            <Typography variant="subtitle1">{printer.name}</Typography>
+                            <Typography variant="subtitle1">{printerWithStatus.name}</Typography>
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreenToggle(printer)}>
+                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreenToggle(printerWithStatus)}>
                                 <FullscreenIcon />
                               </IconButton>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printer.id)}>
+                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printerWithStatus.id)}>
                                 <DeleteIcon />
                               </IconButton>
                             </Box>
@@ -617,7 +649,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                             bottom: '40px',
                             background: '#000'
                           }}>
-                            <RTSPStream printer={printer} />
+                            <RTSPStream printer={printerWithStatus} />
                           </Box>
 
                           {/* Footer */}
@@ -633,23 +665,23 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                               <Typography variant="body2">
-                                Hotend: {getTemperature(printer, 'nozzle')}°C
+                                Hotend: {getTemperature(printerWithStatus, 'nozzle')}°C
                               </Typography>
                               <Typography variant="body2">
-                                Bed: {getTemperature(printer, 'bed')}°C
+                                Bed: {getTemperature(printerWithStatus, 'bed')}°C
                               </Typography>
                               <Typography variant="body2">
-                                Chamber: {getTemperature(printer, 'chamber')}°C
+                                Chamber: {getTemperature(printerWithStatus, 'chamber')}°C
                               </Typography>
-                              <Typography variant="body2" sx={{ color: getPrintStatus(printer).color }}>
-                                {getPrintStatus(printer).text}
+                              <Typography variant="body2" sx={{ color: getPrintStatus(printerWithStatus).color }}>
+                                {getPrintStatus(printerWithStatus).text}
                               </Typography>
                             </Box>
-                            {getPrintStatus(printer).text === 'Printing' && (
+                            {getPrintStatus(printerWithStatus).text === 'Printing' && (
                               <Box sx={{ mt: 1 }}>
                                 <LinearProgress 
                                   variant="determinate" 
-                                  value={getPrintProgress(printer)}
+                                  value={getPrintProgress(printerWithStatus)}
                                   sx={{
                                     height: 4,
                                     borderRadius: 2,
@@ -660,7 +692,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                                   }}
                                 />
                                 <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
-                                  Remaining: {printerStatus[printer.id]?.remaining_time || 0} min
+                                  Remaining: {printerWithStatus.remaining_time || 0} min
                                 </Typography>
                               </Box>
                             )}
@@ -963,6 +995,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           {snackbar.message}
         </Alert>
       </Snackbar>
+      <NotificationButton />
     </div>
   );
 };
