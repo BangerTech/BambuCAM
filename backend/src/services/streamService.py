@@ -132,6 +132,7 @@ class StreamService:
             if printer_id in self.active_streams:
                 logger.info("Stopping existing stream before starting new one")
                 self.stop_stream(printer_id)
+                await asyncio.sleep(1)  # Kurz warten
 
             # Starte neuen Stream
             logger.info(f"Starting new stream for {printer_id}")
@@ -151,32 +152,45 @@ class StreamService:
             # Reset retry counter when stream starts successfully
             self.retry_count[printer_id] = 0
 
-            # Verbesserte Timeout-Prüfung mit weniger strengen Parametern
+            # Verbesserte Timeout-Prüfung
             last_data_time = time.time()
-            TIMEOUT_SECONDS = 15  # 15 Sekunden Timeout
-            MIN_DATA_SIZE = 256  # Reduziert auf 256 Bytes
-            INITIAL_WAIT = 3     # 3 Sekunden initiales Warten
+            TIMEOUT_SECONDS = 30  # Längerer Timeout
+            INITIAL_WAIT = 5     # Längeres initiales Warten
 
             # Warte initial auf Daten
             await asyncio.sleep(INITIAL_WAIT)
 
             while True:
                 try:
+                    # Prüfe ob der Drucker noch existiert
+                    printers = getPrinters()
+                    if not any(p['id'] == printer_id for p in printers):
+                        logger.info(f"Printer {printer_id} was deleted, stopping stream")
+                        self.stop_stream(printer_id)
+                        return
+
                     data = await asyncio.get_event_loop().run_in_executor(
                         None, process.stdout.read, 4096
                     )
-                    
-                    if data:  # Wenn überhaupt Daten kommen, ist der Stream wahrscheinlich ok
-                        await websocket.send(data)
+
+                    if not data:
+                        # Prüfe ob der Stream beendet werden soll
+                        if printer_id not in self.active_streams:
+                            logger.info("Stream was stopped, exiting handler")
+                            return
+
+                        # Warte etwas länger vor dem Neustart
+                        await asyncio.sleep(5)
+                        logger.warning("No data received, restarting stream...")
+                        self.stop_stream(printer_id)
+                        await asyncio.sleep(2)
+                        self.start_stream(printer_id, printer['streamUrl'], 9000)
+                        process = self.active_streams[printer_id]['process']
                         last_data_time = time.time()
                         continue
 
-                    # Nur wenn gar keine Daten kommen, neu starten
-                    logger.warning("No data received, restarting stream...")
-                    self.stop_stream(printer_id)
-                    await asyncio.sleep(1)
-                    self.start_stream(printer_id, printer['streamUrl'], 9000)
-                    process = self.active_streams[printer_id]['process']
+                    # Wenn Daten kommen, sende sie
+                    await websocket.send(data)
                     last_data_time = time.time()
 
                 except websockets.exceptions.ConnectionClosed:

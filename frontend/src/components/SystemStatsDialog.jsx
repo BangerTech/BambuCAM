@@ -55,6 +55,20 @@ const SystemStatsDialog = ({ open, onClose }) => {
     }
   };
 
+  const formatBytes = (bytes) => {
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return '0 B';
+    const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+    return Math.round(bytes / Math.pow(1024, i), 2) + ' ' + sizes[i];
+  };
+
+  const formatUptime = (seconds) => {
+    const days = Math.floor(seconds / (24 * 60 * 60));
+    const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60));
+    const minutes = Math.floor((seconds % (60 * 60)) / 60);
+    return `${days}d ${hours}h ${minutes}m`;
+  };
+
   return (
     <Dialog 
       open={open} 
@@ -79,6 +93,14 @@ const SystemStatsDialog = ({ open, onClose }) => {
       <DialogContent>
         {stats ? (
           <Box sx={{ color: '#00ffff' }}>
+            {/* System Info */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1">System Information</Typography>
+              <Typography variant="body2">Platform: {stats.platform}</Typography>
+              <Typography variant="body2">Machine: {stats.machine}</Typography>
+              <Typography variant="body2">Uptime: {formatUptime(stats.uptime)}</Typography>
+            </Box>
+
             {/* CPU Usage */}
             <Box sx={{ mb: 3 }}>
               <Typography variant="subtitle1">CPU Usage</Typography>
@@ -102,7 +124,7 @@ const SystemStatsDialog = ({ open, onClose }) => {
               <Typography variant="subtitle1">Memory Usage</Typography>
               <LinearProgress 
                 variant="determinate" 
-                value={(stats.memory_used / stats.memory_total) * 100}
+                value={stats.memory_percent}
                 sx={{
                   height: 10,
                   borderRadius: 5,
@@ -113,7 +135,7 @@ const SystemStatsDialog = ({ open, onClose }) => {
                 }}
               />
               <Typography variant="body2" sx={{ mt: 1 }}>
-                {Math.round(stats.memory_used / 1024 / 1024)}MB / {Math.round(stats.memory_total / 1024 / 1024)}MB
+                {formatBytes(stats.memory_used)} / {formatBytes(stats.memory_total)} ({stats.memory_percent}%)
               </Typography>
             </Box>
 
@@ -122,7 +144,7 @@ const SystemStatsDialog = ({ open, onClose }) => {
               <Typography variant="subtitle1">Disk Usage</Typography>
               <LinearProgress 
                 variant="determinate" 
-                value={(stats.disk_used / stats.disk_total) * 100}
+                value={stats.disk_percent}
                 sx={{
                   height: 10,
                   borderRadius: 5,
@@ -133,15 +155,29 @@ const SystemStatsDialog = ({ open, onClose }) => {
                 }}
               />
               <Typography variant="body2" sx={{ mt: 1 }}>
-                {Math.round(stats.disk_used / 1024 / 1024 / 1024)}GB / {Math.round(stats.disk_total / 1024 / 1024 / 1024)}GB
+                {formatBytes(stats.disk_used)} / {formatBytes(stats.disk_total)} ({stats.disk_percent}%)
               </Typography>
             </Box>
 
-            {/* System Temperature */}
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1">System Temperature</Typography>
-              <Typography variant="body2">{stats.temperature}°C</Typography>
-            </Box>
+            {/* Temperature (nur wenn verfügbar) */}
+            {stats.temperature > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1">System Temperature</Typography>
+                <Typography variant="body2">{stats.temperature}°C</Typography>
+              </Box>
+            )}
+
+            {/* Load Average (nur auf Linux) */}
+            {stats.platform === 'Linux' && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1">Load Average</Typography>
+                <Typography variant="body2">
+                  1min: {stats.load_average[0].toFixed(1)}% | 
+                  5min: {stats.load_average[1].toFixed(1)}% | 
+                  15min: {stats.load_average[2].toFixed(1)}%
+                </Typography>
+              </Box>
+            )}
 
             {/* Power Controls */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>

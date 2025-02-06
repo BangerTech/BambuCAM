@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
+from routes.system import system_bp  # Import hinzufügen
 
 app = Flask(__name__)
 CORS(app, resources={
@@ -23,5 +24,8 @@ def delete_printer(printer_id):
             return jsonify({"error": "Printer not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# Register blueprints
+app.register_blueprint(system_bp)  # Blueprint registrieren
 
 # ... andere Routes ... 
