@@ -23,7 +23,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-          logout: true  # Optional: Ausloggen nach dem Push
       
       - name: Build and push Backend
         uses: docker/build-push-action@v4
