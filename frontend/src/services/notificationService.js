@@ -3,7 +3,11 @@ import notificationSound from '../assets/notification.mp3';
 
 const audio = new Audio(notificationSound);
 
-const showNotification = (printer, status) => {
+const playSound = (type) => {
+  audio.play().catch(err => console.log('Sound konnte nicht abgespielt werden:', err));
+};
+
+export const showNotification = (printer, status) => {
   if (!("Notification" in window) || Notification.permission !== 'granted') {
     return;
   }
@@ -13,7 +17,7 @@ const showNotification = (printer, status) => {
 
   const title = `Printer ${printer.name}`;
   let message = '';
-  let icon = '/assets/printer-icon.png';
+  let icon = printerIcon;
 
   switch (status.toUpperCase()) {
     case 'COMPLETED':
@@ -43,33 +47,6 @@ const showNotification = (printer, status) => {
   setTimeout(() => notification.close(), 10000);
 };
 
-export const showNotification = (title, message) => {
-  if (!("Notification" in window)) {
-    console.log("Browser unterstützt keine Benachrichtigungen");
-    return;
-  }
-
-  // Prüfe ob Benachrichtigungen aktiviert sind
-  if (localStorage.getItem('notifications') !== 'enabled') {
-    return;
-  }
-
-  // Zeige Benachrichtigung
-  if (Notification.permission === "granted") {
-    const notification = new Notification(title, {
-      body: message,
-      icon: printerIcon,
-      silent: true // Wir nutzen unseren eigenen Sound
-    });
-    
-    // Sound abspielen
-    audio.play();
-    
-    // Notification nach 5 Sekunden schließen
-    setTimeout(() => notification.close(), 5000);
-  }
-};
-
 export const requestNotificationPermission = async () => {
   if (!("Notification" in window)) {
     return false;
@@ -79,10 +56,9 @@ export const requestNotificationPermission = async () => {
   
   if (permission === "granted") {
     localStorage.setItem('notifications', 'enabled');
-    // Test-Benachrichtigung
     showNotification(
-      "Benachrichtigungen aktiviert", 
-      "Sie werden nun über wichtige Drucker-Ereignisse informiert"
+      { name: "System" }, 
+      "NOTIFICATION_TEST"
     );
     return true;
   }
@@ -96,6 +72,4 @@ export const areNotificationsEnabled = () => {
     Notification.permission === "granted" &&
     localStorage.getItem('notifications') === 'enabled'
   );
-};
-
-export { showNotification }; 
+}; 

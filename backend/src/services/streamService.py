@@ -172,30 +172,16 @@ class StreamService:
         except Exception as e:
             logger.error(f"Stream error: {e}")
             self.stop_stream(printer_id)
-            
-        finally:
+            return  # Wichtig: Return nach der Exception
+
+        except Exception as e:
+            logger.error(f"Handler error: {e}")
             if printer_id in self.active_streams:
                 self.stop_stream(printer_id)
         
-    def stop_stream(self, printer_id):
-        """Stoppt einen Stream"""
-        if printer_id in self.active_streams:
-            try:
-                stream = self.active_streams[printer_id]
-                logger.info(f"Stopping stream process (PID: {stream['process'].pid})")
-                
-                # Beende Prozess und warte auf Ende
-                stream['process'].terminate()
-                try:
-                    stream['process'].wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    logger.warning("Stream process did not terminate, killing it")
-                    stream['process'].kill()
-                
-                del self.active_streams[printer_id]
-                logger.info("Stream stopped successfully")
-            except Exception as e:
-                logger.error(f"Error stopping stream: {e}")
+        finally:
+            if printer_id in self.active_streams:
+                self.stop_stream(printer_id)
 
 # Globale Stream-Service Instanz
 stream_service = StreamService()

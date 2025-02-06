@@ -38,7 +38,26 @@ BambuCAM is a user-friendly web application for simultaneously monitoring multip
 
 ## Installation
 
+### 🐳 Quick Docker Installation
+
+The fastest way to get started is using our pre-built Docker images:
+
+1. Download the installation package:
+```bash
+wget https://github.com/BangerTech/BambuCAM/releases/latest/download/BambuCAM-docker.zip
+unzip BambuCAM-docker.zip
+```
+
+2. Start BambuCAM:
+```bash
+docker compose up -d
+```
+
+That's it! The application will be available at http://localhost:3000
+
 ### Windows Users
+
+For Windows users who prefer a guided installation:
 
 #### 🚀 Quick Start
 
@@ -81,7 +100,9 @@ If you encounter issues:
 2. Delete the folder `%LOCALAPPDATA%\BambuCAM`
 3. Remove the desktop shortcut
 
-### Linux Users
+### Method 3: Manual Installation (Linux)
+
+For users who want to build from source:
 
 #### Quick Start Installation
 1. Clone repository:
@@ -146,18 +167,3 @@ For issues or questions, please create a [GitHub Issue](https://github.com/Bange
 `print-progress` `open-source`
 
 ## Configuration
-
-## 🐳 Docker Installation
-
-1. Lade die `docker-compose.yml` herunter:
-```bash
-wget https://github.com/BangerTech/BambuCAM/releases/latest/download/BambuCAM-docker.zip
-unzip BambuCAM-docker.zip
-```
-
-2. Starte BambuCAM:
-```bash
-docker compose up -d
-```
-
-Die App ist dann unter http://localhost:3000 erreichbar.

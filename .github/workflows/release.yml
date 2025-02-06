@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write  # Wichtig für das Erstellen von Releases
+  contents: write
 
 jobs:
   build-and-publish:
@@ -23,24 +23,21 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+          logout: true  # Optional: Ausloggen nach dem Push
       
       - name: Build and push Backend
         uses: docker/build-push-action@v4
         with:
           context: ./backend
           push: true
-          tags: |
-            bangertech/bambucam:backend-latest
-            bangertech/bambucam:backend-${{ github.sha }}
+          tags: bangertech/bambucam:backend-latest
       
       - name: Build and push Frontend
         uses: docker/build-push-action@v4
         with:
           context: ./frontend
           push: true
-          tags: |
-            bangertech/bambucam:frontend-latest
-            bangertech/bambucam:frontend-${{ github.sha }}
+          tags: bangertech/bambucam:frontend-latest
       
       - name: Create Release
         id: create_release
@@ -48,14 +45,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.sha }}
-          release_name: Release ${{ github.sha }}
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
           body: |
             Automatisches Release von BambuCAM
             
             Docker Images:
-            - `docker pull bangertech/bambucam:frontend-latest`
-            - `docker pull bangertech/bambucam:backend-latest`
+            ```bash
+            # Frontend
+            docker pull bangertech/bambucam:frontend-latest
+            
+            # Backend
+            docker pull bangertech/bambucam:backend-latest
+            ```
             
             Änderungen in diesem Release:
             - ${{ github.event.head_commit.message }}
@@ -64,7 +66,7 @@ jobs:
       
       - name: Create docker-compose.yml for release
         run: |
-          cat > docker-compose.release.yml << 'EOL'
+          cat > docker-compose.yml << 'EOL'
           services:
             backend:
               image: bangertech/bambucam:backend-latest
@@ -86,13 +88,11 @@ jobs:
                 - backend
           EOL
       
-      - name: Zip Release Files
+      - name: Create Release ZIP
         run: |
-          zip -r BambuCAM.zip . -x "*.git*" "*.github*"
-          cp docker-compose.release.yml docker-compose.yml
           zip BambuCAM-docker.zip docker-compose.yml README.md
       
-      - name: Upload Release Assets
+      - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
