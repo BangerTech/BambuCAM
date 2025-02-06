@@ -146,3 +146,18 @@ For issues or questions, please create a [GitHub Issue](https://github.com/Bange
 `print-progress` `open-source`
 
 ## Configuration
+
+## 🐳 Docker Installation
+
+1. Lade die `docker-compose.yml` herunter:
+```bash
+wget https://github.com/BangerTech/BambuCAM/releases/latest/download/BambuCAM-docker.zip
+unzip BambuCAM-docker.zip
+```
+
+2. Starte BambuCAM:
+```bash
+docker compose up -d
+```
+
+Die App ist dann unter http://localhost:3000 erreichbar.
