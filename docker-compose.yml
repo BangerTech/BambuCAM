@@ -1,6 +1,6 @@
 services:
   backend:
-    image: bangertech/bambucam:backend-latest
+    build: ./backend
     ports:
       - "4000:4000"  # HTTP API
       - "9000:9000"  # WebSocket Stream
@@ -20,7 +20,7 @@ services:
     privileged: true
 
   frontend:
-    image: bangertech/bambucam:frontend-latest
+    build: ./frontend
     ports:
       - "3000:3000"
     volumes:
