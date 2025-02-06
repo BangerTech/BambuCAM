@@ -1,7 +1,4 @@
-import printerIcon from '../assets/printer-icon.png';
-import notificationSound from '../assets/notification.mp3';
-
-const audio = new Audio(notificationSound);
+const audio = new Audio('/notification.mp3');
 
 const playSound = (type) => {
   audio.play().catch(err => console.log('Sound konnte nicht abgespielt werden:', err));
@@ -17,7 +14,7 @@ export const showNotification = (printer, status) => {
 
   const title = `Printer ${printer.name}`;
   let message = '';
-  let icon = printerIcon;
+  let icon = '/printer-icon.png';
 
   switch (status.toUpperCase()) {
     case 'COMPLETED':

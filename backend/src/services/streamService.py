@@ -130,7 +130,6 @@ class StreamService:
                 self.stop_stream(printer_id)
                 await asyncio.sleep(1)
 
-            # Starte Stream
             try:
                 self.start_stream(printer_id, printer['streamUrl'], 9000)
                 process = self.active_streams[printer_id]['process']
@@ -146,7 +145,6 @@ class StreamService:
                             self.stop_stream(printer_id)
                             return
 
-                        # Lese Daten
                         data = await asyncio.get_event_loop().run_in_executor(
                             None, process.stdout.read, 4096
                         )
@@ -154,10 +152,8 @@ class StreamService:
                         if data:
                             await websocket.send(data)
                         else:
-                            # Nur neu starten wenn Stream wirklich tot
                             if printer_id not in self.active_streams:
                                 return
-                                
                             logger.warning("Stream reconnect needed")
                             self.stop_stream(printer_id)
                             await asyncio.sleep(2)
@@ -172,7 +168,7 @@ class StreamService:
         except Exception as e:
             logger.error(f"Stream error: {e}")
             self.stop_stream(printer_id)
-            return  # Wichtig: Return nach der Exception
+            return
 
         except Exception as e:
             logger.error(f"Handler error: {e}")
