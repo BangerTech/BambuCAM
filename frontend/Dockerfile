@@ -17,7 +17,7 @@ COPY . .
 # Download assets
 RUN mkdir -p src/assets && \
     wget https://cdn-icons-png.flaticon.com/64/5038/5038961.png -O src/assets/printer-icon.png && \
-    wget https://cdn.freesound.org/previews/320/320181_5260872-lq.mp3 -O src/assets/notification.mp3
+    wget https://github.com/notification-sounds/notification-sounds/raw/master/notification-sounds/pristine/pristine.mp3 -O src/assets/notification.mp3
 
 # Setze Umgebungsvariablen
 ENV NODE_ENV=development
