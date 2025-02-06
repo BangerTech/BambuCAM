@@ -35,8 +35,12 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   // Lade Drucker beim Start und alle 30 Sekunden neu
   useEffect(() => {
     let isMounted = true;
+    let loadingInProgress = false;  // Verhindert doppeltes Laden
 
     const loadPrinters = async () => {
+      if (loadingInProgress) return;  // Skip wenn bereits lädt
+      loadingInProgress = true;
+      
       try {
         console.log('Lade Drucker...');
         const response = await fetch(`${API_URL}/printers`);
@@ -46,6 +50,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         }
       } catch (error) {
         console.error('Error loading printers:', error);
+      } finally {
+        loadingInProgress = false;
       }
     };
 
@@ -107,8 +113,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [scannedPrinters, setScannedPrinters] = useState([]);
 
+  // Separater Effect für Status-Updates
   useEffect(() => {
-    const fetchStatus = async () => {
+    const updateStatus = async () => {
       const newStatus = {};
       for (const printer of localPrinters) {
         try {
@@ -125,8 +132,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     };
 
     if (localPrinters.length > 0) {
-      fetchStatus();
-      const interval = setInterval(fetchStatus, 5000);
+      updateStatus();
+      const interval = setInterval(updateStatus, 5000);
       return () => clearInterval(interval);
     }
   }, [localPrinters]);

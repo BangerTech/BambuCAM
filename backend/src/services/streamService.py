@@ -89,6 +89,9 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen RTSP Stream"""
         try:
+            # Stoppe existierenden Stream falls vorhanden
+            self.stop_stream(printer_id)
+            
             # Optimierter FFmpeg Befehl für Bambulab Kameras
             command = [
                 'ffmpeg',
@@ -135,7 +138,8 @@ class StreamService:
             
             self.active_streams[printer_id] = {
                 'process': process,
-                'port': port
+                'port': port,
+                'url': stream_url  # Speichere URL für Neustart
             }
             
             return port
@@ -149,17 +153,27 @@ class StreamService:
         if printer_id in self.active_streams:
             try:
                 stream = self.active_streams[printer_id]
-                stream['process'].terminate()
-                
-                # Stoppe auch den WebSocket-Server
-                port = stream['port']
-                if port in self.ws_servers:
-                    self.ws_servers[port]['loop'].stop()
-                    del self.ws_servers[port]
-                    
+                if stream['process']:
+                    stream['process'].terminate()
+                    stream['process'].wait(timeout=1)
+                # Cleanup
                 del self.active_streams[printer_id]
             except Exception as e:
                 logger.error(f"Error stopping stream: {e}")
+
+    def restart_stream(self, printer_id):
+        """Startet einen Stream neu"""
+        try:
+            if printer_id in self.active_streams:
+                stream = self.active_streams[printer_id]
+                port = stream['port']
+                url = stream['url']
+                self.stop_stream(printer_id)
+                return self.start_stream(printer_id, url, port)
+            return None
+        except Exception as e:
+            logger.error(f"Error restarting stream: {e}")
+            return None
 
 # Globale Stream-Service Instanz
 stream_service = StreamService()

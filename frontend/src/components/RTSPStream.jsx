@@ -11,15 +11,14 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
   const queueRef = useRef([]);
+  let retryCount = 0;
+  const maxRetries = 3;
 
   useEffect(() => {
     if (!printer || !videoRef.current) return;
 
     console.log('RTSPStream mounted:', { printer, fullscreen });
-
-    let retryCount = 0;
-    const maxRetries = 3;
-    let isComponentMounted = true;  // Flag für Komponenten-Status
+    let isComponentMounted = true;
 
     const setupMediaSource = () => {
       if (!isComponentMounted || !videoRef.current) return;
@@ -37,13 +36,19 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
             const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
             console.log('Connecting to WebSocket:', wsUrl);
             
+            // Cleanup alter Stream falls vorhanden
+            if (wsRef.current) {
+              wsRef.current.close();
+              wsRef.current = null;
+            }
+
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';
             
             wsRef.current.onopen = () => {
               if (!isComponentMounted) return;
               console.log('WebSocket Connected');
-              retryCount = 0;
+              retryCount = 0;  // Reset retry counter on successful connection
             };
 
             wsRef.current.onclose = () => {
@@ -84,28 +89,24 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
     setupMediaSource();
 
     return () => {
-      isComponentMounted = false;  // Komponente wird unmounted
-      try {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-        if (videoRef.current && videoRef.current.src) {
-          URL.revokeObjectURL(videoRef.current.src);
-          videoRef.current.src = '';
-        }
-        if (sourceBufferRef.current && mediaSourceRef.current) {
-          try {
-            mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-            sourceBufferRef.current = null;
-          } catch (e) {
-            console.warn('Error removing source buffer:', e);
-          }
-        }
-        mediaSourceRef.current = null;
-      } catch (e) {
-        console.warn('Error during cleanup:', e);
+      isComponentMounted = false;
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
+      if (videoRef.current && videoRef.current.src) {
+        URL.revokeObjectURL(videoRef.current.src);
+        videoRef.current.src = '';
+      }
+      if (sourceBufferRef.current && mediaSourceRef.current) {
+        try {
+          mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+          sourceBufferRef.current = null;
+        } catch (e) {
+          console.warn('Error removing source buffer:', e);
+        }
+      }
+      mediaSourceRef.current = null;
     };
   }, [printer]);
 
