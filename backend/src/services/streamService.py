@@ -124,18 +124,7 @@ class StreamService:
                 logger.error(f"FFmpeg process failed: {stderr.decode()}")
                 raise Exception("FFmpeg process failed to start")
             
-            # Starte WebSocket-Server wenn noch nicht gestartet
-            if port not in self.ws_servers:
-                ws_thread = Thread(
-                    target=self.start_websocket_server,
-                    args=(port,)
-                )
-                ws_thread.daemon = True
-                ws_thread.start()
-                
-                # Warte bis der Server läuft
-                time.sleep(0.5)
-            
+            # Speichere Stream-Info
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
@@ -153,27 +142,17 @@ class StreamService:
         if printer_id in self.active_streams:
             try:
                 stream = self.active_streams[printer_id]
-                if stream['process']:
-                    stream['process'].terminate()
-                    stream['process'].wait(timeout=1)
-                # Cleanup
+                stream['process'].terminate()
+                
+                # Stoppe auch den WebSocket-Server
+                port = stream['port']
+                if port in self.ws_servers:
+                    self.ws_servers[port]['loop'].stop()
+                    del self.ws_servers[port]
+                    
                 del self.active_streams[printer_id]
             except Exception as e:
                 logger.error(f"Error stopping stream: {e}")
-
-    def restart_stream(self, printer_id):
-        """Startet einen Stream neu"""
-        try:
-            if printer_id in self.active_streams:
-                stream = self.active_streams[printer_id]
-                port = stream['port']
-                url = stream['url']
-                self.stop_stream(printer_id)
-                return self.start_stream(printer_id, url, port)
-            return None
-        except Exception as e:
-            logger.error(f"Error restarting stream: {e}")
-            return None
 
 # Globale Stream-Service Instanz
 stream_service = StreamService()

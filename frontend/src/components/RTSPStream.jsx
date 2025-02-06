@@ -11,14 +11,42 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
   const queueRef = useRef([]);
-  let retryCount = 0;
-  const maxRetries = 3;
 
   useEffect(() => {
     if (!printer || !videoRef.current) return;
 
     console.log('RTSPStream mounted:', { printer, fullscreen });
+
+    let retryCount = 0;
+    const maxRetries = 3;
     let isComponentMounted = true;
+
+    const setupStream = async () => {
+        if (!isComponentMounted) return;
+        
+        try {
+            // Starte den Stream auf dem Backend
+            const response = await fetch(`${API_URL}/stream/${printer.id}`, {
+                method: 'GET'
+            });
+            
+            if (!response.ok) throw new Error('Failed to start stream');
+            
+            const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
+            console.log('Connecting to WebSocket:', wsUrl);
+            
+            // Setup MediaSource und WebSocket wie gehabt...
+            setupMediaSource();
+            
+        } catch (error) {
+            console.error('Error setting up stream:', error);
+            if (retryCount < maxRetries) {
+                console.log(`Retrying (${retryCount + 1}/${maxRetries})...`);
+                retryCount++;
+                setTimeout(setupStream, 1000);
+            }
+        }
+    };
 
     const setupMediaSource = () => {
       if (!isComponentMounted || !videoRef.current) return;
@@ -33,22 +61,13 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
               'video/mp2t; codecs="avc1.640029"'
             );
             
-            const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
-            console.log('Connecting to WebSocket:', wsUrl);
-            
-            // Cleanup alter Stream falls vorhanden
-            if (wsRef.current) {
-              wsRef.current.close();
-              wsRef.current = null;
-            }
-
             wsRef.current = new WebSocket(wsUrl);
             wsRef.current.binaryType = 'arraybuffer';
             
             wsRef.current.onopen = () => {
               if (!isComponentMounted) return;
               console.log('WebSocket Connected');
-              retryCount = 0;  // Reset retry counter on successful connection
+              retryCount = 0;
             };
 
             wsRef.current.onclose = () => {
@@ -86,27 +105,31 @@ const RTSPStream = ({ printer, fullscreen, ...props }) => {
       }
     };
 
-    setupMediaSource();
+    setupStream();
 
     return () => {
       isComponentMounted = false;
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      if (videoRef.current && videoRef.current.src) {
-        URL.revokeObjectURL(videoRef.current.src);
-        videoRef.current.src = '';
-      }
-      if (sourceBufferRef.current && mediaSourceRef.current) {
-        try {
-          mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-          sourceBufferRef.current = null;
-        } catch (e) {
-          console.warn('Error removing source buffer:', e);
+      try {
+        if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
         }
+        if (videoRef.current && videoRef.current.src) {
+          URL.revokeObjectURL(videoRef.current.src);
+          videoRef.current.src = '';
+        }
+        if (sourceBufferRef.current && mediaSourceRef.current) {
+          try {
+            mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+            sourceBufferRef.current = null;
+          } catch (e) {
+            console.warn('Error removing source buffer:', e);
+          }
+        }
+        mediaSourceRef.current = null;
+      } catch (e) {
+        console.warn('Error during cleanup:', e);
       }
-      mediaSourceRef.current = null;
     };
   }, [printer]);
 
