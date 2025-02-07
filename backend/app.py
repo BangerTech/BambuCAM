@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter, stopStream
 from src.services.bambuCloudService import BambuCloudService
-from src.services.whatsappService import whatsapp_service
+from src.services.telegramService import telegram_service
 import os
 import logging
 
@@ -204,76 +204,35 @@ def stop_stream_endpoint(printer_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/notifications/whatsapp', methods=['POST', 'OPTIONS'])
-def whatsapp_notifications():
-    if request.method == 'OPTIONS':
-        return '', 200
-        
+@app.route('/notifications/telegram/setup', methods=['POST'])
+def setup_telegram():
     try:
-        data = request.get_json()
-        number = data.get('number')
-        
-        if not number:
-            return jsonify({
-                'success': False,
-                'error': 'No phone number provided'
-            }), 400
+        data = request.json
+        token = data.get('token')
+        if not token:
+            return jsonify({'error': 'No token provided'}), 400
             
-        # Prüfe ob WhatsApp-Client eingerichtet ist
-        if not whatsapp_service.is_logged_in():
-            return jsonify({
-                'success': False,
-                'needs_login': True,
-                'error': 'WhatsApp login required'
-            }), 401
+        os.environ['TELEGRAM_BOT_TOKEN'] = token
+        telegram_service.init_bot()
+        
+        return jsonify({'message': 'Telegram bot setup successful'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/send', methods=['POST'])
+def send_notification():
+    try:
+        data = request.json
+        message = data.get('message')
+        if not message:
+            return jsonify({'error': 'No message provided'}), 400
             
-        # Speichere die Nummer für Benachrichtigungen
-        whatsapp_service.save_number(number)
-        
-        return jsonify({
-            'success': True,
-            'message': 'WhatsApp number saved successfully'
-        })
-        
+        if telegram_service.send_notification(message):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Failed to send Telegram message'}), 500
     except Exception as e:
-        logger.error(f"WhatsApp error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/notifications/whatsapp/login', methods=['POST', 'OPTIONS'])
-def whatsapp_login():
-    if request.method == 'OPTIONS':
-        return '', 200
-        
-    try:
-        # Starte WhatsApp Login-Prozess
-        qr_code = whatsapp_service.start_login()
-        
-        return jsonify({
-            'success': True,
-            'qr_code': qr_code,
-            'message': 'Please scan QR code with WhatsApp'
-        })
-        
-    except Exception as e:
-        logger.error(f"WhatsApp login error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/notifications/whatsapp/status', methods=['GET'])
-def whatsapp_status():
-    try:
-        return jsonify(whatsapp_service.get_status())
-    except Exception as e:
-        logger.error(f"WhatsApp status error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 

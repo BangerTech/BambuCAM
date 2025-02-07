@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Grid, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Box, List, ListItem, ListItemText, IconButton, CircularProgress, Chip, Divider, Collapse, Snackbar, Alert, LinearProgress, FormControlLabel, SpeedDial, SpeedDialIcon, SpeedDialAction, Tooltip } from '@mui/material';
 import RTSPStream from './RTSPStream';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -134,64 +134,69 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
     }
   }, [mode]);
 
-  useEffect(() => {
-    const fetchStatus = async () => {
-      const newStatus = {};
-      for (const printer of localPrinters) {
-        try {
-          const response = await fetch(`${API_URL}/printers/${printer.id}/status`);
-          if (response.ok) {
-            const data = await response.json();
-            newStatus[printer.id] = data;
-          }
-        } catch (error) {
-          console.error(`Fehler beim Abrufen des Status für Drucker ${printer.id}:`, error);
-        }
-      }
-      setPrinterStatus(newStatus);
-    };
-
-    if (localPrinters.length > 0) {
-      fetchStatus();
-      const interval = setInterval(fetchStatus, 5000);
-      return () => clearInterval(interval);
+  // Funktion zum Abrufen des Druckerstatus
+  const fetchPrinterStatus = async (printerId) => {
+    try {
+      const response = await fetch(`${API_URL}/printers/${printerId}/status`);
+      const status = await response.json();
+      setPrinterStatus(prev => ({
+        ...prev,
+        [printerId]: status
+      }));
+    } catch (error) {
+      console.error('Error fetching printer status:', error);
     }
-  }, [localPrinters]);
-
-  // Funktion zum Aktualisieren der Positionen
-  const updatePrinterOrder = (printers) => {
-    const orderMap = {};
-    printers.forEach((printer, index) => {
-      orderMap[printer.id] = index;
-    });
-    localStorage.setItem('printerOrder', JSON.stringify(orderMap));
   };
 
-  // Drucker hinzufügen (lokal oder cloud)
+  // Drucker hinzufügen
   const handleAddPrinter = async (printerData) => {
     try {
-      if (printerData.isCloud) {
-        // Cloud-Drucker werden automatisch geladen
-        await loadPrinters();
-      } else {
-        // Lokaler Drucker - bisherige Logik
-        const response = await fetch(`${API_URL}/printers`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(printerData)
-        });
+      setIsAdding(true);
+      console.log('Füge Drucker hinzu:', printerData);
+      
+      const response = await fetch(`${API_URL}/printers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(printerData)
+      });
 
-        const data = await response.json();
-        console.log('Server Response:', data);
-
-        if (data.success) {
-          setPrinters(prev => [...prev, data.printer]);
-        }
+      if (!response.ok) {
+        throw new Error('Failed to add printer');
       }
+
+      const newPrinter = await response.json();
+      
+      // Aktualisiere die Drucker-Liste
+      setPrinters(prevPrinters => [...prevPrinters, newPrinter]);
+      
+      // Starte Status-Updates für den neuen Drucker
+      if (statusIntervals.current) {
+        statusIntervals.current[newPrinter.id] = setInterval(() => {
+          fetchPrinterStatus(newPrinter.id);
+        }, 5000);
+      }
+      
+      // Schließe den Dialog
+      setShowAddDialog(false);
+      
+      // Zeige Erfolgsmeldung
+      setSnackbar({
+        open: true,
+        message: 'Printer added successfully',
+        severity: 'success'
+      });
+
     } catch (error) {
       console.error('Error adding printer:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error adding printer',
+        severity: 'error'
+      });
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -252,30 +257,24 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
   };
 
   // Modifizierte handleDelete Funktion
-  const handleDelete = async (printerId) => {
+  const handleRemovePrinter = async (printerId) => {
     try {
       console.log('Lösche Drucker mit ID:', printerId);
       
-      // Erst den Stream stoppen
-      try {
-        await fetch(`${API_URL}/stream/${printerId}/stop`, {
-          method: 'POST'
-        });
-      } catch (e) {
-        console.warn('Error stopping stream:', e);
-      }
-      
-      // Dann den Drucker löschen
       const response = await fetch(`${API_URL}/printers/${printerId}`, {
         method: 'DELETE'
       });
-      
+
       if (response.ok) {
-        const updatedPrinters = printers.filter(p => p.id !== printerId);
-        setPrinters(updatedPrinters);
-        // Aktualisiere Positionen nach Löschung
-        updatePrinterOrder(updatedPrinters);
+        // Entferne den Drucker aus der lokalen Liste
+        setPrinters(prevPrinters => prevPrinters.filter(p => p.id !== printerId));
         
+        // Stoppe Status-Updates für diesen Drucker
+        if (statusIntervals.current[printerId]) {
+          clearInterval(statusIntervals.current[printerId]);
+          delete statusIntervals.current[printerId];
+        }
+
         setSnackbar({
           open: true,
           message: 'Printer deleted successfully',
@@ -466,6 +465,31 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
     };
   };
 
+  // Status-Intervalle speichern
+  const statusIntervals = useRef({});
+
+  // Status-Updates starten
+  useEffect(() => {
+    // Initialisiere Intervalle für alle Drucker
+    printers.forEach(printer => {
+      if (!statusIntervals.current[printer.id]) {
+        // Initial Status abrufen
+        fetchPrinterStatus(printer.id);
+        
+        // Intervall starten
+        statusIntervals.current[printer.id] = setInterval(() => {
+          fetchPrinterStatus(printer.id);
+        }, 5000);
+      }
+    });
+
+    // Cleanup
+    return () => {
+      Object.values(statusIntervals.current).forEach(interval => clearInterval(interval));
+      statusIntervals.current = {};
+    };
+  }, [printers]);
+
   if (fullscreenPrinter) {
     const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);
     return (
@@ -478,7 +502,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         </IconButton>
         <PrinterCard 
           printer={printerWithStatus}  // Übergebe Drucker mit Status
-          onRemove={handleDelete}
+          onRemove={handleRemovePrinter}
           isFullscreen={true}
           onFullscreenToggle={handleFullscreenToggle}
         />
@@ -615,7 +639,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
                               <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreenToggle(printerWithStatus)}>
                                 <FullscreenIcon />
                               </IconButton>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printerWithStatus.id)}>
+                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleRemovePrinter(printerWithStatus.id)}>
                                 <DeleteIcon />
                               </IconButton>
                             </Box>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Fab, Tooltip } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
-import WhatsAppDialog from './WhatsAppDialog';
+import NotificationDialog from './NotificationDialog';
 
 const NotificationButton = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -16,17 +16,13 @@ const NotificationButton = () => {
     }
   };
 
-  const handleDialogClose = () => {
-    setDialogOpen(false);
-  };
-
   return (
     <>
-      <Tooltip title={`${notificationsEnabled ? 'Disable' : 'Enable'} WhatsApp Notifications`}>
+      <Tooltip title={`${notificationsEnabled ? 'Disable' : 'Enable'} Telegram Notifications`}>
         <Fab
           size="small"
           onClick={handleToggle}
-          sx={{
+          sx={{ 
             position: 'fixed',
             bottom: 15,
             right: 15,
@@ -48,10 +44,10 @@ const NotificationButton = () => {
         </Fab>
       </Tooltip>
 
-      <WhatsAppDialog 
+      <NotificationDialog 
         open={dialogOpen}
         onClose={() => {
-          handleDialogClose();
+          setDialogOpen(false);
           setNotificationsEnabled(true);
         }}
       />
