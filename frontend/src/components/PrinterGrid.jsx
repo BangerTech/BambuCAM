@@ -43,6 +43,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
+  const [isLoading, setIsLoading] = useState(false);
 
   // Bestimme welche Drucker angezeigt werden sollen
   const displayPrinters = mode === 'cloud' ? cloudPrinters : localPrinters;
@@ -52,53 +53,24 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
     localStorage.setItem('printers', JSON.stringify(localPrinters));
   }, [localPrinters]);
 
-  // Lade beide Drucker-Typen
+  // Lade Drucker und ihre Positionen
   const loadPrinters = async () => {
     try {
-      // Lade lokale Drucker
       const response = await fetch(`${API_URL}/printers`);
-      const localPrinters = await response.json();
-
-      // Lade Cloud-Drucker
-      const cloudResponse = await fetch(`${API_URL}/api/cloud/printers`);
-      const cloudPrinterData = await cloudResponse.json();
-      
-      // Kombiniere und markiere die Drucker
-      const allPrinters = [
-        ...localPrinters.map(p => ({ ...p, isCloud: false })),
-        ...cloudPrinterData.map(p => ({ ...p, isCloud: true }))
-      ];
-      
-      setPrinters(allPrinters);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setLocalPrinters(data);
     } catch (error) {
       console.error('Error loading printers:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load printers',
+        severity: 'error'
+      });
     }
   };
-
-  // Lade Drucker und ihre Positionen
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadPrinters = async () => {
-      try {
-        const response = await fetch(`${API_URL}/printers`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setLocalPrinters(data);
-      } catch (error) {
-        console.error('Error loading printers:', error);
-        setError('Failed to load printers');
-      }
-    };
-
-    loadPrinters();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []); // Nur beim ersten Laden ausführen
 
   // Lade Cloud-Drucker
   useEffect(() => {
@@ -151,7 +123,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
   // Drucker hinzufügen
   const handleAddPrinter = async (printerData) => {
     try {
-      setIsAdding(true);
+      setIsLoading(true);
       console.log('Füge Drucker hinzu:', printerData);
       
       const response = await fetch(`${API_URL}/printers`, {
@@ -165,50 +137,29 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
       const data = await response.json();
       console.log('Server Response:', data);
 
-      if (!response.ok) {
+      if (!response.ok || !data.success) {
         throw new Error(data.error || 'Failed to add printer');
       }
 
-      if (data.success) {
-        // Aktualisiere die Drucker-Liste
-        setPrinters(prev => [...prev, data.printer]);
-        
-        // Schließe den Dialog
-        setShowAddDialog(false);
-        
-        // Zeige Erfolgsmeldung
-        setSnackbar({
-          open: true,
-          message: 'Printer added successfully',
-          severity: 'success'
-        });
-
-        // Versuche den Drucker-Status abzurufen
-        try {
-          const statusResponse = await fetch(`${API_URL}/printers/${data.printer.id}/status`);
-          const statusData = await statusResponse.json();
-          
-          if (statusData.error) {
-            setSnackbar({
-              open: true,
-              message: `Warning: Could not connect to printer (${statusData.error})`,
-              severity: 'warning'
-            });
-          }
-        } catch (error) {
-          console.error('Error checking printer status:', error);
-        }
-      }
+      // Lade die aktuelle Drucker-Liste neu
+      await loadPrinters();
+      
+      setShowAddDialog(false);
+      setSnackbar({
+        open: true,
+        message: 'Printer added successfully',
+        severity: 'success'
+      });
 
     } catch (error) {
       console.error('Error adding printer:', error);
       setSnackbar({
         open: true,
-        message: error.message || 'Error adding printer',
+        message: error.message,
         severity: 'error'
       });
     } finally {
-      setIsAdding(false);
+      setIsLoading(false);
     }
   };
 
@@ -282,7 +233,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         console.warn('Error stopping stream:', e);
       }
       
-      // Dann den Drucker löschen
       const response = await fetch(`${API_URL}/printers/${printerId}`, {
         method: 'DELETE'
       });
@@ -291,14 +241,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         throw new Error('Failed to delete printer');
       }
 
-      // Entferne den Drucker aus der lokalen Liste
-      setPrinters(prev => prev.filter(p => p.id !== printerId));
-      
-      // Stoppe Status-Updates für diesen Drucker
-      if (statusIntervals.current[printerId]) {
-        clearInterval(statusIntervals.current[printerId]);
-        delete statusIntervals.current[printerId];
-      }
+      // Lade die aktuelle Drucker-Liste neu
+      await loadPrinters();
 
       setSnackbar({
         open: true,
