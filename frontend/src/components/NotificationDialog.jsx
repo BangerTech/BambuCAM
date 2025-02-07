@@ -81,10 +81,11 @@ const NeonStepper = styled(Stepper)({
 });
 
 const NotificationDialog = ({ open, onClose }) => {
+  const [activeStep, setActiveStep] = useState(0);
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [activeStep, setActiveStep] = useState(0);
+  const [botUsername, setBotUsername] = useState('');
 
   const steps = [
     'Bot erstellen',
@@ -113,12 +114,8 @@ const NotificationDialog = ({ open, onClose }) => {
       }
 
       // Bot wurde erfolgreich eingerichtet
+      setBotUsername(data.botUsername); // Vom Backend zurückgegeben
       setActiveStep(2);
-      
-      // Automatisch schließen nach 3 Sekunden
-      setTimeout(() => {
-        onClose();
-      }, 3000);
 
     } catch (error) {
       setError(error.message);
@@ -229,19 +226,33 @@ const NotificationDialog = ({ open, onClose }) => {
         )}
 
         {activeStep === 2 && (
-          <Alert 
-            severity="success"
-            sx={{
-              backgroundColor: 'rgba(0, 255, 255, 0.1)',
-              color: '#00ffff',
-              border: '1px solid #00ffff',
-              '& .MuiAlert-icon': {
-                color: '#00ffff'
-              }
-            }}
-          >
-            Telegram wurde erfolgreich eingerichtet! Sie erhalten jetzt automatisch Benachrichtigungen über Ihre Drucke.
-          </Alert>
+          <Box sx={{ textAlign: 'center' }}>
+            <Alert 
+              severity="info"
+              sx={{
+                backgroundColor: 'rgba(0, 255, 255, 0.1)',
+                color: '#00ffff',
+                border: '1px solid #00ffff',
+                marginBottom: 2
+              }}
+            >
+              Fast geschafft! Klicken Sie auf den Button unten um den Bot zu starten:
+            </Alert>
+
+            <NeonButton
+              variant="outlined"
+              href={`https://t.me/${botUsername}?start=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ marginBottom: 2 }}
+            >
+              Bot starten
+            </NeonButton>
+
+            <Typography variant="body2" sx={{ color: '#888' }}>
+              Nach dem Start des Bots können Sie diesen Dialog schließen.
+            </Typography>
+          </Box>
         )}
       </DialogContent>
     </NeonDialog>

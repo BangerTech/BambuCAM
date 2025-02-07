@@ -5,6 +5,7 @@ from src.services.bambuCloudService import BambuCloudService
 from src.services.telegramService import telegram_service
 import os
 import logging
+import psutil  # Sollte bereits in requirements.txt sein
 
 logging.basicConfig(level=logging.INFO)
 
@@ -75,39 +76,20 @@ def get_printer_status(printer_id):
 @app.route('/printers', methods=['POST'])
 def add_printer():
     try:
-        data = request.json
+        printer_data = request.get_json()
+        result = addPrinter(printer_data)
         
-        # Validiere Pflichtfelder
-        required_fields = ['name', 'ip', 'accessCode']
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({
-                    "success": False,
-                    "error": "Missing required fields",
-                    "details": f"Field '{field}' is required"
-                }), 400
+        if not result.get('success'):
+            return jsonify({
+                'error': result.get('error', 'Failed to add printer')
+            }), 400
+            
+        return jsonify(result)
         
-        # Erstelle Stream-URL wenn nicht vorhanden
-        if not data.get('streamUrl'):
-            data['streamUrl'] = f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
-        
-        # WebSocket-Port hinzufügen
-        data['wsPort'] = 9000
-        
-        # Drucker speichern
-        printer = addPrinter(data)
-        
-        return jsonify({
-            "success": True,
-            "printer": printer
-        })
     except Exception as e:
-        print(f"Error adding printer: {str(e)}")
         return jsonify({
-            "success": False,
-            "error": "Connection error",
-            "details": str(e)
-        }), 400
+            'error': str(e)
+        }), 500
 
 @app.route('/printers/<printer_id>', methods=['DELETE', 'OPTIONS'])
 def delete_printer(printer_id):
@@ -213,9 +195,16 @@ def setup_telegram():
             return jsonify({'error': 'No token provided'}), 400
             
         os.environ['TELEGRAM_BOT_TOKEN'] = token
-        telegram_service.init_bot()
+        if not telegram_service.init_bot():
+            return jsonify({'error': 'Failed to initialize bot'}), 500
         
-        return jsonify({'message': 'Telegram bot setup successful'})
+        # Bot-Info zurückgeben
+        bot_info = telegram_service.bot.bot.get_me()
+        return jsonify({
+            'message': 'Telegram bot initialized',
+            'botUsername': bot_info.username
+        })
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -231,6 +220,71 @@ def send_notification():
             return jsonify({'success': True})
         else:
             return jsonify({'error': 'Failed to send Telegram message'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/test', methods=['POST'])
+def send_test_notification():
+    try:
+        message = (
+            "🎉 *Telegram-Benachrichtigungen erfolgreich eingerichtet!*\n\n"
+            "Sie erhalten ab jetzt Benachrichtigungen über:\n"
+            "✅ Abgeschlossene Drucke\n"
+            "❌ Fehlgeschlagene Drucke\n"
+            "⚠️ Drucker-Fehler\n\n"
+            "Die Benachrichtigungen enthalten:\n"
+            "- Drucker-Name\n"
+            "- Dateiname\n"
+            "- Druckzeit\n"
+            "- Fortschritt\n"
+            "- Temperaturen\n"
+            "- Fehlerdetails (falls vorhanden)\n\n"
+            "_Dies ist eine Testnachricht._"
+        )
+        
+        if telegram_service.send_notification(message):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Failed to send test message'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/system/stats', methods=['GET'])
+def get_system_stats():
+    try:
+        # CPU Statistiken
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+        
+        # RAM Statistiken
+        memory = psutil.virtual_memory()
+        ram_total = memory.total / (1024 * 1024 * 1024)  # In GB
+        ram_used = memory.used / (1024 * 1024 * 1024)    # In GB
+        ram_percent = memory.percent
+        
+        # Disk Statistiken
+        disk = psutil.disk_usage('/')
+        disk_total = disk.total / (1024 * 1024 * 1024)   # In GB
+        disk_used = disk.used / (1024 * 1024 * 1024)     # In GB
+        disk_percent = disk.percent
+
+        return jsonify({
+            'cpu': {
+                'percent': cpu_percent,
+                'cores': cpu_count
+            },
+            'memory': {
+                'total': round(ram_total, 2),
+                'used': round(ram_used, 2),
+                'percent': ram_percent
+            },
+            'disk': {
+                'total': round(disk_total, 2),
+                'used': round(disk_used, 2),
+                'percent': disk_percent
+            }
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

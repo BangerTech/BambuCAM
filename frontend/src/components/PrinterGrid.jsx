@@ -162,37 +162,49 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
         body: JSON.stringify(printerData)
       });
 
+      const data = await response.json();
+      console.log('Server Response:', data);
+
       if (!response.ok) {
-        throw new Error('Failed to add printer');
+        throw new Error(data.error || 'Failed to add printer');
       }
 
-      const newPrinter = await response.json();
-      
-      // Aktualisiere die Drucker-Liste
-      setPrinters(prevPrinters => [...prevPrinters, newPrinter]);
-      
-      // Starte Status-Updates für den neuen Drucker
-      if (statusIntervals.current) {
-        statusIntervals.current[newPrinter.id] = setInterval(() => {
-          fetchPrinterStatus(newPrinter.id);
-        }, 5000);
+      if (data.success) {
+        // Aktualisiere die Drucker-Liste
+        setPrinters(prev => [...prev, data.printer]);
+        
+        // Schließe den Dialog
+        setShowAddDialog(false);
+        
+        // Zeige Erfolgsmeldung
+        setSnackbar({
+          open: true,
+          message: 'Printer added successfully',
+          severity: 'success'
+        });
+
+        // Versuche den Drucker-Status abzurufen
+        try {
+          const statusResponse = await fetch(`${API_URL}/printers/${data.printer.id}/status`);
+          const statusData = await statusResponse.json();
+          
+          if (statusData.error) {
+            setSnackbar({
+              open: true,
+              message: `Warning: Could not connect to printer (${statusData.error})`,
+              severity: 'warning'
+            });
+          }
+        } catch (error) {
+          console.error('Error checking printer status:', error);
+        }
       }
-      
-      // Schließe den Dialog
-      setShowAddDialog(false);
-      
-      // Zeige Erfolgsmeldung
-      setSnackbar({
-        open: true,
-        message: 'Printer added successfully',
-        severity: 'success'
-      });
 
     } catch (error) {
       console.error('Error adding printer:', error);
       setSnackbar({
         open: true,
-        message: 'Error adding printer',
+        message: error.message || 'Error adding printer',
         severity: 'error'
       });
     } finally {
@@ -256,38 +268,49 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
     setFullscreenPrinter(fullscreenPrinter ? null : printer);
   };
 
-  // Modifizierte handleDelete Funktion
+  // Drucker entfernen
   const handleRemovePrinter = async (printerId) => {
     try {
       console.log('Lösche Drucker mit ID:', printerId);
       
+      // Erst den Stream stoppen
+      try {
+        await fetch(`${API_URL}/stream/${printerId}/stop`, {
+          method: 'POST'
+        });
+      } catch (e) {
+        console.warn('Error stopping stream:', e);
+      }
+      
+      // Dann den Drucker löschen
       const response = await fetch(`${API_URL}/printers/${printerId}`, {
         method: 'DELETE'
       });
 
-      if (response.ok) {
-        // Entferne den Drucker aus der lokalen Liste
-        setPrinters(prevPrinters => prevPrinters.filter(p => p.id !== printerId));
-        
-        // Stoppe Status-Updates für diesen Drucker
-        if (statusIntervals.current[printerId]) {
-          clearInterval(statusIntervals.current[printerId]);
-          delete statusIntervals.current[printerId];
-        }
-
-        setSnackbar({
-          open: true,
-          message: 'Printer deleted successfully',
-          severity: 'success'
-        });
-      } else {
+      if (!response.ok) {
         throw new Error('Failed to delete printer');
       }
+
+      // Entferne den Drucker aus der lokalen Liste
+      setPrinters(prev => prev.filter(p => p.id !== printerId));
+      
+      // Stoppe Status-Updates für diesen Drucker
+      if (statusIntervals.current[printerId]) {
+        clearInterval(statusIntervals.current[printerId]);
+        delete statusIntervals.current[printerId];
+      }
+
+      setSnackbar({
+        open: true,
+        message: 'Printer deleted successfully',
+        severity: 'success'
+      });
+
     } catch (error) {
       console.error('Error deleting printer:', error);
       setSnackbar({
         open: true,
-        message: 'Error deleting printer',
+        message: error.message || 'Error deleting printer',
         severity: 'error'
       });
     }

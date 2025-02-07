@@ -15,7 +15,7 @@ class TelegramService:
         self.config_file.parent.mkdir(exist_ok=True)
         self.load_config()
         self.bot = None
-        self.init_bot()
+        self.is_ready = False
 
     def init_bot(self):
         """Initialisiert den Telegram Bot"""
@@ -23,44 +23,41 @@ class TelegramService:
             token = os.getenv('TELEGRAM_BOT_TOKEN')
             if not token:
                 logger.warning("TELEGRAM_BOT_TOKEN nicht gesetzt")
-                return
+                return False
+
+            # Extrahiere Chat-ID aus dem Token
+            try:
+                chat_id = token.split(':')[0]
+                self.config['chat_id'] = chat_id
+                self.save_config()
+            except Exception as e:
+                logger.error(f"Error extracting chat ID from token: {e}")
+                return False
                 
             self.bot = Updater(token)
             
+            # Setze Profilbild
+            try:
+                with open('frontend/public/logo.png', 'rb') as photo:
+                    self.bot.bot.set_chat_photo(
+                        chat_id=f'@{self.bot.bot.get_me().username}',
+                        photo=photo
+                    )
+                logger.info("Bot profile photo updated")
+            except Exception as e:
+                logger.warning(f"Could not set bot profile photo: {e}")
+            
             # Kommandos registrieren
             dp = self.bot.dispatcher
-            dp.add_handler(CommandHandler("start", self.start_command))
             dp.add_handler(CommandHandler("help", self.help_command))
             
             # Bot starten
             self.bot.start_polling()
             logger.info("Telegram Bot gestartet")
-            
-            # Automatisch /start ausführen
-            self.auto_start()
-            
-        except Exception as e:
-            logger.error(f"Telegram Bot init error: {e}")
 
-    def auto_start(self):
-        """Bereitet den Bot für den ersten Start vor"""
-        try:
-            # Warte kurz bis der Bot gestartet ist
-            time.sleep(2)
-            logger.info("Bot ist bereit für Benutzerinteraktion")
-        except Exception as e:
-            logger.error(f"Auto-start error: {e}")
-
-    def start_command(self, update, context):
-        """Handler für /start Kommando"""
-        try:
-            # Wenn es ein echtes Update ist, nutze die Chat ID daraus
-            if update and update.effective_chat:
-                chat_id = update.effective_chat.id
-                self.config['chat_id'] = chat_id
-                self.save_config()
-                
-                message = (
+            # Sende sofort eine Willkommensnachricht
+            try:
+                welcome_message = (
                     "🖨 *BambuCam Telegram Bot*\n\n"
                     "Bot wurde erfolgreich eingerichtet!\n"
                     "Sie erhalten ab jetzt Benachrichtigungen über Ihre Drucke.\n\n"
@@ -68,20 +65,33 @@ class TelegramService:
                     "/help - Zeigt diese Hilfe an"
                 )
                 
-                update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
-            else:
-                # Auto-Start: Warte auf ersten /start Befehl vom Benutzer
-                logger.info("Warte auf /start Befehl vom Benutzer...")
+                self.bot.bot.send_message(
+                    chat_id=chat_id,
+                    text=welcome_message,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+                self.is_ready = True
+                logger.info(f"Telegram Bot setup completed with chat_id: {chat_id}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error sending welcome message: {e}")
+                return False
             
         except Exception as e:
-            logger.error(f"Start command error: {e}")
+            logger.error(f"Telegram Bot init error: {e}")
+            return False
 
     def help_command(self, update, context):
         """Handler für /help Kommando"""
         message = (
             "🔍 *Verfügbare Befehle:*\n\n"
-            "/start - Bot einrichten\n"
-            "/help - Diese Hilfe anzeigen"
+            "/help - Diese Hilfe anzeigen\n\n"
+            "Sie erhalten automatisch Benachrichtigungen über:\n"
+            "✅ Abgeschlossene Drucke\n"
+            "❌ Fehlgeschlagene Drucke\n" 
+            "⚠️ Drucker-Fehler"
         )
         
         update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
@@ -104,7 +114,7 @@ class TelegramService:
     def send_notification(self, message):
         """Sendet eine Telegram Nachricht"""
         try:
-            if not self.bot or not self.config.get('chat_id'):
+            if not self.bot or not self.config.get('chat_id') or not self.is_ready:
                 logger.error("Telegram nicht eingerichtet")
                 return False
                 
@@ -121,6 +131,24 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Error sending Telegram message: {e}")
             return False
+
+    def wait_for_setup(self, timeout=30):
+        """Wartet bis der Bot eingerichtet ist"""
+        start_time = time.time()
+        while not self.is_ready and time.time() - start_time < timeout:
+            time.sleep(1)
+            if self.is_ready:
+                return True
+                
+        # Timeout - gib hilfreiche Fehlermeldung zurück
+        bot_info = self.bot.bot.get_me() if self.bot else None
+        if bot_info:
+            raise TimeoutError(
+                f"Setup timeout - please open https://t.me/{bot_info.username} "
+                "and send /start to complete setup"
+            )
+        else:
+            raise TimeoutError("Setup timeout - please send /start to the bot")
 
 # Globale Instanz
 telegram_service = TelegramService() 
