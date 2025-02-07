@@ -41,32 +41,20 @@ def login_whatsapp():
         return jsonify({"error": str(e)}), 500
 
 @notifications_bp.route('/notifications/whatsapp', methods=['POST', 'OPTIONS'])
-@cross_origin(origins=['http://192.168.2.86:3000', 'http://localhost:3000'],
-             methods=['POST', 'OPTIONS'],
-             allow_headers=['Content-Type', 'Authorization', 'Accept'],
-             supports_credentials=True)
 def set_whatsapp():
     """Speichert die WhatsApp Nummer"""
     try:
-        # Handle Preflight Request
-        if request.method == 'OPTIONS':
-            response = jsonify({'status': 'ok'})
-            response.headers.add('Access-Control-Allow-Origin', 'http://192.168.2.86:3000')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-            response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-            return response, 200
+        data = request.json
+        whatsapp_number = data.get('number')
         
-        global whatsapp_number
         if not is_whatsapp_logged_in:
             return jsonify({
                 "error": "WhatsApp Web not logged in",
                 "needs_login": True
             }), 401
             
-        data = request.json
-        whatsapp_number = data.get('number')
         return jsonify({"success": True, "number": whatsapp_number})
+
     except Exception as e:
         logger.error(f"Error setting WhatsApp number: {e}")
         return jsonify({"error": str(e)}), 500

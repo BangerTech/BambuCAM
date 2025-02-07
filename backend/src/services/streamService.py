@@ -15,6 +15,8 @@ import logging
 from pathlib import Path
 from threading import Thread
 import time
+from flask import jsonify
+from flask import current_app as app
 
 logger = logging.getLogger(__name__)
 
@@ -184,4 +186,14 @@ def startStream(printer_id, stream_url=None):
         
     except Exception as e:
         logger.error(f"Fehler beim Starten des Streams: {str(e)}")
-        raise e 
+        raise e
+
+# Verschiebe diese Route in app.py
+# @app.route('/stream/<printer_id>/stop', methods=['POST'])
+# def stop_stream_endpoint(printer_id):
+#     """Stoppt einen laufenden Stream"""
+#     try:
+#         stopStream(printer_id)
+#         return jsonify({'success': True})
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500 

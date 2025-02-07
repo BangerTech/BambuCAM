@@ -41,28 +41,15 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
     const loadPrinters = async () => {
       try {
-        console.log('Lade Drucker...');
         const response = await fetch(`${API_URL}/printers`);
-        const data = await response.json();
-        
-        if (isMounted) {
-          // Lade gespeicherte Positionen
-          const savedOrder = localStorage.getItem('printerOrder');
-          if (savedOrder) {
-            const orderMap = JSON.parse(savedOrder);
-            // Sortiere Drucker nach gespeicherten Positionen
-            const sortedPrinters = [...data].sort((a, b) => {
-              const posA = orderMap[a.id] ?? Number.MAX_VALUE;
-              const posB = orderMap[b.id] ?? Number.MAX_VALUE;
-              return posA - posB;
-            });
-            setLocalPrinters(sortedPrinters);
-          } else {
-            setLocalPrinters(data);
-          }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+        const data = await response.json();
+        setLocalPrinters(data);
       } catch (error) {
         console.error('Error loading printers:', error);
+        setError('Failed to load printers');
       }
     };
 

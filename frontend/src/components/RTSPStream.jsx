@@ -1,230 +1,206 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Box } from '@mui/material';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
 
-const RTSPStream = ({ printer, fullscreen, ...props }) => {
+const RTSPStream = ({ printer, fullscreen }) => {
   const videoRef = useRef(null);
-  const wsRef = useRef(null);
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
-  const bufferCheckRef = useRef(null);
-  const lastDataRef = useRef(Date.now());
-  const isInitializedRef = useRef(false);
-  const pendingBuffersRef = useRef([]);
+  const wsRef = useRef(null);
+  const [error, setError] = useState(null);
+  const bufferQueue = useRef([]);
+  const isProcessing = useRef(false);
 
+  // Effekt für Fullscreen-Änderungen - nur Fullscreen-Status ändern
   useEffect(() => {
-    if (!printer || !videoRef.current) return;
+    if (!videoRef.current) return;
 
+    if (fullscreen) {
+      try {
+        if (videoRef.current.requestFullscreen) {
+          videoRef.current.requestFullscreen();
+        } else if (videoRef.current.webkitRequestFullscreen) {
+          videoRef.current.webkitRequestFullscreen();
+        }
+      } catch (err) {
+        console.warn('Fullscreen error:', err);
+      }
+    }
+  }, [fullscreen]);
+
+  // Separater Effekt für Stream-Setup - nur bei printer.id Änderung
+  useEffect(() => {
     console.log('RTSPStream mounted:', { printer, fullscreen });
-    
-    let retryCount = 0;
-    const maxRetries = 3;
-    let isComponentMounted = true;
-
-    const initializeMediaSource = () => {
-      return new Promise((resolve, reject) => {
-        try {
-          console.log('Initializing MediaSource...');
-          const ms = new MediaSource();
-          ms.addEventListener('sourceopen', () => {
-            console.log('MediaSource opened');
-            resolve(ms);
-          });
-          ms.addEventListener('error', (e) => {
-            console.error('MediaSource error:', e);
-            reject(e);
-          });
-          videoRef.current.src = URL.createObjectURL(ms);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    };
-
-    const appendBuffer = (data) => {
-      if (!sourceBufferRef.current || sourceBufferRef.current.updating) {
-        if (pendingBuffersRef.current.length % 10 === 0) {
-          console.debug('Buffering data, pending:', pendingBuffersRef.current.length);
-        }
-        pendingBuffersRef.current.push(data);
-        return;
-      }
-
-      try {
-        sourceBufferRef.current.appendBuffer(data);
-        
-        if (videoRef.current.paused) {
-          console.log('Starting video playback, readyState:', videoRef.current.readyState);
-          videoRef.current.play().catch(e => {
-            console.error('Play failed:', e);
-            if (e.name === 'NotAllowedError') {
-              console.log('Autoplay blocked, waiting for user interaction');
-            }
-          });
-        }
-
-        if (pendingBuffersRef.current.length > 0 && !sourceBufferRef.current.updating) {
-          if (pendingBuffersRef.current.length === 1) {
-            console.debug('Processing last pending buffer');
-          }
-          const nextBuffer = pendingBuffersRef.current.shift();
-          appendBuffer(nextBuffer);
-        }
-      } catch (e) {
-        console.error('Error appending buffer:', e);
-        if (e.name === 'QuotaExceededError') {
-          console.log('Buffer full, removing old data');
-          sourceBufferRef.current.remove(0, videoRef.current.currentTime - 1);
-        }
-      }
-    };
-
-    const setupMediaSource = async () => {
-      if (!isComponentMounted || !videoRef.current) return;
-      
-      try {
-        console.log('Setting up new MediaSource...');
-        
-        if (mediaSourceRef.current) {
-          if (sourceBufferRef.current) {
-            try {
-              mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-            } catch (e) {
-              console.warn('Error removing old SourceBuffer:', e);
-            }
-          }
-          mediaSourceRef.current = null;
-          sourceBufferRef.current = null;
-        }
-
-        pendingBuffersRef.current = [];
-
-        mediaSourceRef.current = await initializeMediaSource();
-        console.log('Setting up SourceBuffer...');
-        sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(
-          'video/mp2t; codecs="avc1.640029"'
-        );
-
-        sourceBufferRef.current.addEventListener('updateend', () => {
-          if (pendingBuffersRef.current.length > 0) {
-            console.log('Buffer update complete, processing pending buffer');
-            const nextBuffer = pendingBuffersRef.current.shift();
-            appendBuffer(nextBuffer);
-          }
-        });
-        
-        sourceBufferRef.current.addEventListener('error', (e) => {
-          console.error('SourceBuffer error:', e);
-        });
-        
-        const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
-        console.log('Connecting to WebSocket:', wsUrl);
-        
-        wsRef.current = new WebSocket(wsUrl);
-        wsRef.current.binaryType = 'arraybuffer';
-        
-        wsRef.current.onopen = () => {
-          if (!isComponentMounted) return;
-          console.log('WebSocket Connected, waiting for video data...');
-          retryCount = 0;
-          isInitializedRef.current = true;
-        };
-
-        wsRef.current.onclose = () => {
-          console.log('WebSocket Closed');
-          if (!isComponentMounted) return;
-          if (retryCount < maxRetries) {
-            console.log(`Attempting reconnect (${retryCount + 1}/${maxRetries})...`);
-            retryCount++;
-            setTimeout(setupMediaSource, 1000);
-          }
-        };
-
-        wsRef.current.onerror = (error) => {
-          console.error('WebSocket Error:', error);
-          if (wsRef.current) {
-            wsRef.current.close();
-          }
-        };
-
-        wsRef.current.onmessage = (event) => {
-          if (!isComponentMounted) return;
-          lastDataRef.current = Date.now();
-          
-          appendBuffer(event.data);
-        };
-
-        videoRef.current.addEventListener('error', (e) => {
-          console.error('Video error:', e);
-        });
-
-        videoRef.current.addEventListener('stalled', () => {
-          console.warn('Video stalled');
-        });
-
-        videoRef.current.addEventListener('playing', () => {
-          console.log('Video playing');
-        });
-
-      } catch (e) {
-        console.error('Error in setupMediaSource:', e);
-        if (retryCount < maxRetries) {
-          retryCount++;
-          console.log(`Retrying setup (${retryCount}/${maxRetries})...`);
-          setTimeout(setupMediaSource, 1000);
-        }
-      }
-    };
-
     setupMediaSource();
 
     return () => {
       console.log('RTSPStream unmounting, cleaning up...');
-      isComponentMounted = false;
-      isInitializedRef.current = false;
-      if (bufferCheckRef.current) {
-        clearInterval(bufferCheckRef.current);
+      cleanup();
+    };
+  }, [printer.id]); // Nur bei Printer-ID Änderung neu verbinden
+
+  const setupMediaSource = async () => {
+    try {
+      cleanup(); // Cleanup vor dem Setup
+
+      console.log('Setting up new MediaSource...');
+      const mediaSource = new MediaSource();
+      mediaSourceRef.current = mediaSource;
+      videoRef.current.src = URL.createObjectURL(mediaSource);
+
+      mediaSource.addEventListener('sourceopen', () => {
+        console.log('MediaSource opened');
+        setupSourceBuffer();
+      });
+
+    } catch (err) {
+      console.error('Error setting up MediaSource:', err);
+      setError(err.message);
+    }
+  };
+
+  const setupSourceBuffer = () => {
+    try {
+      if (sourceBufferRef.current) return; // Verhindere doppeltes Setup
+
+      console.log('Setting up SourceBuffer...');
+      const mimeType = 'video/mp2t; codecs="avc1.640029"';
+      sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(mimeType);
+      
+      // Konfiguriere SourceBuffer
+      sourceBufferRef.current.mode = 'sequence';
+      sourceBufferRef.current.addEventListener('error', (e) => {
+        console.error('SourceBuffer error:', e);
+      });
+
+      connectWebSocket();
+    } catch (err) {
+      console.error('Error setting up SourceBuffer:', err);
+      setError(err.message);
+    }
+  };
+
+  const connectWebSocket = () => {
+    if (wsRef.current) return; // Verhindere doppelte Verbindungen
+
+    const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
+    console.log('Connecting to WebSocket:', wsUrl);
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket Connected, waiting for video data...');
+    };
+
+    // Funktion zum Verarbeiten der Queue
+    const processBufferQueue = async () => {
+      if (isProcessing.current || !sourceBufferRef.current || bufferQueue.current.length === 0) {
+        return;
       }
+
+      isProcessing.current = true;
+      
       try {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
+        while (bufferQueue.current.length > 0 && !sourceBufferRef.current.updating) {
+          const data = bufferQueue.current.shift();
+          sourceBufferRef.current.appendBuffer(data);
+          await new Promise(resolve => {
+            sourceBufferRef.current.addEventListener('updateend', resolve, { once: true });
+          });
         }
-        if (videoRef.current && videoRef.current.src) {
-          URL.revokeObjectURL(videoRef.current.src);
-          videoRef.current.src = '';
+      } catch (err) {
+        console.error('Error processing buffer queue:', err);
+      } finally {
+        isProcessing.current = false;
+        
+        // Falls noch Daten in der Queue sind, weiter verarbeiten
+        if (bufferQueue.current.length > 0) {
+          processBufferQueue();
         }
-        if (sourceBufferRef.current && mediaSourceRef.current) {
-          try {
-            mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-            sourceBufferRef.current = null;
-          } catch (e) {
-            console.warn('Error removing source buffer:', e);
-          }
-        }
-        mediaSourceRef.current = null;
-      } catch (e) {
-        console.warn('Error during cleanup:', e);
       }
     };
-  }, [printer]);
+
+    ws.onmessage = async (event) => {
+      try {
+        const data = await event.data.arrayBuffer();
+        bufferQueue.current.push(data);
+        processBufferQueue();
+      } catch (err) {
+        console.error('Error handling WebSocket message:', err);
+      }
+    };
+
+    ws.onerror = (event) => {
+      console.error('WebSocket Error:', event);
+      setError('WebSocket connection failed');
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket Closed');
+      wsRef.current = null;
+    };
+  };
+
+  const cleanup = () => {
+    // WebSocket cleanup
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    // SourceBuffer cleanup
+    if (sourceBufferRef.current && mediaSourceRef.current) {
+      try {
+        mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+      } catch (err) {
+        console.warn('Error removing source buffer:', err);
+      }
+      sourceBufferRef.current = null;
+    }
+
+    // MediaSource cleanup
+    if (mediaSourceRef.current && videoRef.current) {
+      try {
+        URL.revokeObjectURL(videoRef.current.src);
+      } catch (err) {
+        console.warn('Error revoking object URL:', err);
+      }
+      mediaSourceRef.current = null;
+    }
+  };
 
   return (
-    <video
-      ref={videoRef}
-      {...props}
-      autoPlay
-      playsInline
-      muted
-      controls={false}
-      style={{ 
-        width: '100%',
-        height: '100%',
-        objectFit: fullscreen ? 'contain' : 'cover',
-        ...props.style
-      }}
-    />
+    <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: fullscreen ? 'contain' : 'cover',
+          backgroundColor: 'black'
+        }}
+      />
+      {error && (
+        <Box sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: 'red',
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          padding: '10px',
+          borderRadius: '5px'
+        }}>
+          {error}
+        </Box>
+      )}
+    </Box>
   );
 };
 

@@ -8,15 +8,12 @@ import logging
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
-# Erweiterte CORS-Konfiguration
+# Einfachste CORS-Konfiguration
 CORS(app, resources={
     r"/*": {
-        "origins": ["http://192.168.2.86:3000", "http://localhost:3000"],
+        "origins": "*",
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"],
-        "expose_headers": ["Content-Type"],
-        "supports_credentials": True,
-        "max_age": 600
+        "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
@@ -24,17 +21,15 @@ CORS(app, resources={
 app.register_blueprint(system_bp)
 app.register_blueprint(notifications_bp)
 
-# Globaler Error Handler für CORS
-@app.after_request
-def after_request(response):
-    # Erlaube nur spezifische Origins
-    origin = request.headers.get('Origin')
-    if origin in ["http://192.168.2.86:3000", "http://localhost:3000"]:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
+# Globaler CORS Handler für OPTIONS requests
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response, 200
 
 @app.route('/printers/<printer_id>', methods=['DELETE'])
 def delete_printer(printer_id):

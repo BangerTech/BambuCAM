@@ -1,11 +1,37 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RTSPStream from './RTSPStream';
 
-const PrinterCard = ({ printer, onRemove, isFullscreen, onFullscreenToggle }) => {
+const PrinterCard = ({ printer, onRemove }) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const cardRef = useRef(null);
+
+  const handleFullscreenClick = () => {
+    setIsFullscreen(prev => !prev);
+  };
+
+  // Höre auf Fullscreen-Änderungen vom Browser
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      // Nur setzen wenn sich der Status wirklich geändert hat
+      const isCurrentlyFullscreen = document.fullscreenElement !== null;
+      if (isFullscreen !== isCurrentlyFullscreen) {
+        setIsFullscreen(isCurrentlyFullscreen);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, [isFullscreen]);
+
   const cardStyle = isFullscreen ? {
     position: 'fixed',
     top: '20px',
@@ -45,12 +71,12 @@ const PrinterCard = ({ printer, onRemove, isFullscreen, onFullscreenToggle }) =>
   };
 
   return (
-    <Card sx={cardStyle}>
+    <Card ref={cardRef} sx={cardStyle}>
       <CardHeader
         sx={headerStyle}
         action={
           <div>
-            <IconButton onClick={onFullscreenToggle} sx={{ color: '#00ffff' }}>
+            <IconButton onClick={handleFullscreenClick} sx={{ color: '#00ffff' }}>
               {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
             </IconButton>
             <IconButton onClick={() => onRemove(printer.id)} sx={{ color: '#00ffff' }}>
@@ -63,7 +89,11 @@ const PrinterCard = ({ printer, onRemove, isFullscreen, onFullscreenToggle }) =>
       />
       <CardContent sx={{ p: 0, flex: 1 }}>
         <Box sx={videoContainerStyle}>
-          <RTSPStream printer={printer} />
+          <RTSPStream 
+            printer={printer} 
+            fullscreen={isFullscreen} 
+            key={`${printer.id}-${isFullscreen}`}
+          />
           <Box sx={statusStyle}>
             <Typography variant="body2" sx={{ mb: printer.progress ? 1 : 0 }}>
               Status: {printer.status || 'connecting'} | 

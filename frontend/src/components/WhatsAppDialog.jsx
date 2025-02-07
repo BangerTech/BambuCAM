@@ -16,6 +16,7 @@ const WhatsAppDialog = ({ open, onClose }) => {
   const [number, setNumber] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const handleLogin = async () => {
     try {
@@ -23,14 +24,17 @@ const WhatsAppDialog = ({ open, onClose }) => {
       setError('');
       
       const response = await fetch(`${API_URL}/notifications/whatsapp/login`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
       });
-      
+
       if (!response.ok) {
         throw new Error('Login failed');
       }
       
-      // Zeige Info dass QR Code gescannt werden muss
       setError('Please scan the QR code in the opened browser window');
     } catch (error) {
       setError('Error during WhatsApp login');
@@ -48,22 +52,24 @@ const WhatsAppDialog = ({ open, onClose }) => {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({ number: number })
       });
 
       const data = await response.json();
-
-      if (data.needs_login) {
-        await handleLogin();
-        return;
-      }
-
-      if (response.ok) {
-        onClose();
-      } else {
+      
+      if (!response.ok) {
+        if (data.needs_login) {
+          await handleLogin();
+          return;
+        }
         throw new Error(data.error || 'Failed to save number');
       }
+
+      setSuccess(data.message || 'WhatsApp number saved successfully');
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+
     } catch (error) {
       setError(error.message);
       console.error('Error:', error);

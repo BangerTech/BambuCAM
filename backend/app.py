@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
+from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter, stopStream
 from src.services.bambuCloudService import BambuCloudService
+from src.services.whatsappService import whatsapp_service
 import os
 import logging
 
@@ -193,6 +194,75 @@ def debug_stream(printer_id):
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/stream/<printer_id>/stop', methods=['POST'])
+def stop_stream_endpoint(printer_id):
+    """Stoppt einen laufenden Stream"""
+    try:
+        stopStream(printer_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/notifications/whatsapp', methods=['POST', 'OPTIONS'])
+def whatsapp_notifications():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        data = request.get_json()
+        number = data.get('number')
+        
+        if not number:
+            return jsonify({
+                'success': False,
+                'error': 'No phone number provided'
+            }), 400
+            
+        # Prüfe ob WhatsApp-Client eingerichtet ist
+        if not whatsapp_service.is_logged_in():
+            return jsonify({
+                'success': False,
+                'needs_login': True,
+                'error': 'WhatsApp login required'
+            }), 401
+            
+        # Speichere die Nummer für Benachrichtigungen
+        whatsapp_service.save_number(number)
+        
+        return jsonify({
+            'success': True,
+            'message': 'WhatsApp number saved successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"WhatsApp error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/whatsapp/login', methods=['POST', 'OPTIONS'])
+def whatsapp_login():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        # Starte WhatsApp Login-Prozess
+        qr_code = whatsapp_service.start_login()
+        
+        return jsonify({
+            'success': True,
+            'qr_code': qr_code,
+            'message': 'Please scan QR code with WhatsApp'
+        })
+        
+    except Exception as e:
+        logger.error(f"WhatsApp login error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 
