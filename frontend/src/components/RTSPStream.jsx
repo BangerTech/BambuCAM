@@ -12,10 +12,13 @@ const RTSPStream = ({ printer, fullscreen }) => {
   const [error, setError] = useState(null);
   const bufferQueue = useRef([]);
   const isProcessing = useRef(false);
+  const isFullscreenRef = useRef(fullscreen);
+  const isInitializedRef = useRef(false);
 
   // Effekt für Fullscreen-Änderungen - nur Fullscreen-Status ändern
   useEffect(() => {
     if (!videoRef.current) return;
+    isFullscreenRef.current = fullscreen;
 
     if (fullscreen) {
       try {
@@ -30,20 +33,30 @@ const RTSPStream = ({ printer, fullscreen }) => {
     }
   }, [fullscreen]);
 
-  // Separater Effekt für Stream-Setup - nur bei printer.id Änderung
+  // Separater Effekt für Stream-Setup - nur einmal initialisieren
   useEffect(() => {
-    console.log('RTSPStream mounted:', { printer, fullscreen });
-    setupMediaSource();
+    if (!isInitializedRef.current) {
+      console.log('RTSPStream initializing:', { printer, fullscreen });
+      setupMediaSource();
+      isInitializedRef.current = true;
+    }
 
     return () => {
-      console.log('RTSPStream unmounting, cleaning up...');
-      cleanup();
+      // Nur aufräumen wenn die Komponente wirklich unmounted
+      if (!isFullscreenRef.current) {
+        console.log('RTSPStream unmounting, cleaning up...');
+        cleanup();
+        isInitializedRef.current = false;
+      }
     };
   }, [printer.id]); // Nur bei Printer-ID Änderung neu verbinden
 
   const setupMediaSource = async () => {
     try {
-      cleanup(); // Cleanup vor dem Setup
+      if (mediaSourceRef.current) {
+        console.log('MediaSource already exists, skipping setup');
+        return;
+      }
 
       console.log('Setting up new MediaSource...');
       const mediaSource = new MediaSource();

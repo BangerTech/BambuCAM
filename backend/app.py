@@ -264,5 +264,19 @@ def whatsapp_login():
             'error': str(e)
         }), 500
 
+@app.route('/notifications/whatsapp/status', methods=['GET'])
+def whatsapp_status():
+    try:
+        return jsonify({
+            'success': True,
+            'is_logged_in': whatsapp_service.is_logged_in()
+        })
+    except Exception as e:
+        logger.error(f"WhatsApp status error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 

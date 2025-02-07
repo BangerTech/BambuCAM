@@ -26,9 +26,20 @@ class WhatsAppService:
             json.dump(self.config, f)
 
     def is_logged_in(self):
-        return self.config.get('is_logged_in', False)
+        """Prüft ob WhatsApp eingerichtet ist"""
+        try:
+            # Hier würde die echte WhatsApp-Prüfung kommen
+            # Für den Test immer False zurückgeben, damit der Login-Flow getestet werden kann
+            return False
+        except Exception as e:
+            logger.error(f"WhatsApp login check error: {e}")
+            return False
 
     def save_number(self, number):
+        """Speichert die WhatsApp Nummer"""
+        if not self.is_logged_in():
+            raise Exception("WhatsApp not logged in")
+        
         self.config['number'] = number
         self.save_config()
         logger.info(f"Saved WhatsApp number: {number}")
@@ -36,12 +47,14 @@ class WhatsAppService:
     def start_login(self):
         """Startet den WhatsApp Login-Prozess"""
         try:
-            # Hier würde die echte WhatsApp Web API Integration kommen
-            # Für den Test öffnen wir einfach WhatsApp Web
-            webbrowser.open('https://web.whatsapp.com')
-            self.config['is_logged_in'] = True
+            # Öffne WhatsApp Web in einem neuen Browser-Fenster
+            webbrowser.open('https://web.whatsapp.com', new=2)
+            
+            # Setze Login-Status zurück
+            self.config['is_logged_in'] = False
             self.save_config()
-            return "QR-Code generiert"
+            
+            return "QR-Code wird im Browser angezeigt"
         except Exception as e:
             logger.error(f"WhatsApp login error: {e}")
             raise
