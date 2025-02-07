@@ -14,7 +14,7 @@ services:
 
   frontend:
     build: ./frontend
-    network_mode: "host"
+    network_mode: "host"  # Auch das Frontend auf host networking
     volumes:
       - ./frontend:/app
       - /app/node_modules

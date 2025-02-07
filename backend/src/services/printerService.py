@@ -171,47 +171,18 @@ def getPrinterById(printer_id):
                 return printer
     return None
 
-def addPrinter(printer_data):
+def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
     try:
-        # Generiere eine UUID für den Drucker
-        printer_id = str(uuid.uuid4())
-        
-        # Erstelle den Drucker-Eintrag
-        printer = {
-            'id': printer_id,
-            'name': printer_data['name'],
-            'ip': printer_data['ip'],
-            'accessCode': printer_data['accessCode'],
-            'streamUrl': f"rtsps://bblp:{printer_data['accessCode']}@{printer_data['ip']}:322/streaming/live/1",
-            'wsPort': 9000
-        }
-        
-        # Teste die Verbindung zum Drucker
-        try:
-            # Versuche MQTT-Verbindung
-            mqtt_client = printer_service.connect_mqtt(printer_id, printer['ip'])
-            mqtt_client.disconnect()
-            
-            # Wenn wir hier ankommen, war die Verbindung erfolgreich
-            stored_printers[printer_id] = printer
-            savePrinters()
-            
-            return {
-                'success': True,
-                'printer': printer
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to connect to printer: {e}")
-            raise ValueError(f"Could not connect to printer at {printer['ip']}: {str(e)}")
-            
+        printers = getPrinters()
+        if not isinstance(printers, list):
+            printers = []
+        printers.append(data)
+        savePrinters(printers)
+        return data
     except Exception as e:
-        logger.error(f"Error adding printer: {e}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        logger.error(f"Fehler beim Hinzufügen des Druckers: {str(e)}")
+        raise e
 
 def removePrinter(printer_id):
     """Entfernt einen Drucker anhand seiner ID"""
@@ -367,39 +338,46 @@ def on_message(client, userdata, msg):
 stored_printers = getPrinters()
 
 def getPrinterStatus(printer_id):
-    """Holt den Status eines Druckers"""
+    """Gets the printer status using MQTT"""
     try:
-        if printer_id not in stored_printers:
-            raise ValueError("Printer not found")
+        printer = getPrinterById(printer_id)
+        if not printer:
+            raise Exception("Printer not found")
             
-        printer = stored_printers[printer_id]
+        # Stelle sicher dass eine MQTT Verbindung besteht
+        printer_service.connect_mqtt(printer_id, printer['ip'])
         
-        # Versuche MQTT-Verbindung
-        try:
-            mqtt_client = printer_service.connect_mqtt(printer_id, printer['ip'])
-            mqtt_client.disconnect()
-        except Exception as e:
+        # Hole Status aus dem Cache
+        data = printer_service.get_printer_status(printer_id)
+        
+        # Extrahiere die benötigten Daten
+        if 'print' in data:
+            print_data = data['print']
             return {
-                'status': 'error',
-                'error': f"Cannot connect to printer: {str(e)}"
+                "temperatures": {
+                    "bed": float(print_data.get('bed_temper', 0)),
+                    "nozzle": float(print_data.get('nozzle_temper', 0)),
+                    "chamber": float(print_data.get('chamber_temper', 0))
+                },
+                "status": print_data.get('gcode_state', 'unknown'),
+                "progress": float(print_data.get('mc_percent', 0)),
+                "remaining_time": int(print_data.get('mc_remaining_time', 0))
             }
-            
-        return {
-            'status': printer.get('status', 'unknown'),
-            'temperatures': printer.get('temperatures', {
-                'nozzle': 0,
-                'bed': 0,
-                'chamber': 0
-            }),
-            'progress': printer.get('progress', 0),
-            'remaining_time': printer.get('remaining_time', 0)
-        }
         
-    except Exception as e:
-        logger.error(f"Error getting printer status: {e}")
         return {
-            'status': 'error',
-            'error': str(e)
+            "temperatures": {"bed": 0, "nozzle": 0, "chamber": 0},
+            "status": "offline",
+            "progress": 0,
+            "remaining_time": 0
+        }
+                
+    except Exception as e:
+        logger.error(f"Error getting printer status: {str(e)}")
+        return {
+            "temperatures": {"bed": 0, "nozzle": 0, "chamber": 0},
+            "status": "offline",
+            "progress": 0,
+            "remaining_time": 0
         }
 
 def handle_mqtt_message(client, userdata, message):
@@ -430,67 +408,3 @@ def handle_mqtt_message(client, userdata, message):
                 
     except Exception as e:
         logger.error(f"Error handling MQTT message: {e}") 
-
-def on_mqtt_message(client, userdata, message):
-    try:
-        # ... bestehender MQTT Code ...
-        
-        # Sende Benachrichtigungen bei wichtigen Status-Änderungen
-        if status in ['finished', 'failed', 'error']:
-            message = create_notification_message(printer, status, data)
-            telegram_service.send_notification(message)
-            
-    except Exception as e:
-        logger.error(f"MQTT message error: {e}")
-
-def create_notification_message(printer, status, data):
-    """Erstellt formatierte Telegram-Nachricht"""
-    icons = {
-        'finished': '✅',
-        'failed': '❌',
-        'error': '⚠️'
-    }
-    
-    status_text = {
-        'finished': 'Druck abgeschlossen',
-        'failed': 'Druck fehlgeschlagen',
-        'error': 'Drucker-Fehler'
-    }
-    
-    message = (
-        f"{icons[status]} *{status_text[status]}*\n\n"
-        f"🖨 Drucker: `{printer['name']}`\n"
-    )
-    
-    # Füge Druckdetails hinzu wenn verfügbar
-    if 'print_stats' in data:
-        stats = data['print_stats']
-        message += (
-            f"📄 Datei: `{stats.get('filename', 'Unbekannt')}`\n"
-            f"⏱ Druckzeit: `{format_duration(stats.get('print_duration', 0))}`\n"
-            f"🎯 Fortschritt: `{stats.get('progress', 0)*100:.1f}%`\n"
-        )
-    
-    # Füge Temperaturen hinzu wenn verfügbar
-    if 'temperatures' in data:
-        temps = data['temperatures']
-        message += (
-            f"\n🌡 *Temperaturen:*\n"
-            f"- Düse: `{temps.get('nozzle', 0)}°C`\n"
-            f"- Bett: `{temps.get('bed', 0)}°C`\n"
-            f"- Kammer: `{temps.get('chamber', 0)}°C`\n"
-        )
-    
-    # Füge Fehlerdetails hinzu wenn vorhanden
-    if status in ['failed', 'error'] and 'error' in data:
-        message += f"\n⚠️ *Fehler:*\n`{data['error']}`"
-    
-    return message
-
-def format_duration(seconds):
-    """Formatiert Sekunden in lesbare Zeit"""
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    if hours > 0:
-        return f"{hours}h {minutes}m"
-    return f"{minutes}m" 

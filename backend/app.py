@@ -2,10 +2,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter, stopStream
 from src.services.bambuCloudService import BambuCloudService
-from src.services.telegramService import telegram_service
+from src.services.whatsappService import whatsapp_service
 import os
 import logging
-import psutil  # Sollte bereits in requirements.txt sein
 
 logging.basicConfig(level=logging.INFO)
 
@@ -76,20 +75,39 @@ def get_printer_status(printer_id):
 @app.route('/printers', methods=['POST'])
 def add_printer():
     try:
-        printer_data = request.get_json()
-        result = addPrinter(printer_data)
+        data = request.json
         
-        if not result.get('success'):
-            return jsonify({
-                'error': result.get('error', 'Failed to add printer')
-            }), 400
-            
-        return jsonify(result)
+        # Validiere Pflichtfelder
+        required_fields = ['name', 'ip', 'accessCode']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({
+                    "success": False,
+                    "error": "Missing required fields",
+                    "details": f"Field '{field}' is required"
+                }), 400
         
-    except Exception as e:
+        # Erstelle Stream-URL wenn nicht vorhanden
+        if not data.get('streamUrl'):
+            data['streamUrl'] = f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
+        
+        # WebSocket-Port hinzufügen
+        data['wsPort'] = 9000
+        
+        # Drucker speichern
+        printer = addPrinter(data)
+        
         return jsonify({
-            'error': str(e)
-        }), 500
+            "success": True,
+            "printer": printer
+        })
+    except Exception as e:
+        print(f"Error adding printer: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": "Connection error",
+            "details": str(e)
+        }), 400
 
 @app.route('/printers/<printer_id>', methods=['DELETE', 'OPTIONS'])
 def delete_printer(printer_id):
@@ -186,107 +204,79 @@ def stop_stream_endpoint(printer_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/notifications/telegram/setup', methods=['POST'])
-def setup_telegram():
-    try:
-        data = request.json
-        token = data.get('token')
-        if not token:
-            return jsonify({'error': 'No token provided'}), 400
-            
-        os.environ['TELEGRAM_BOT_TOKEN'] = token
-        if not telegram_service.init_bot():
-            return jsonify({'error': 'Failed to initialize bot'}), 500
+@app.route('/notifications/whatsapp', methods=['POST', 'OPTIONS'])
+def whatsapp_notifications():
+    if request.method == 'OPTIONS':
+        return '', 200
         
-        # Bot-Info zurückgeben
-        bot_info = telegram_service.bot.bot.get_me()
+    try:
+        data = request.get_json()
+        number = data.get('number')
+        
+        if not number:
+            return jsonify({
+                'success': False,
+                'error': 'No phone number provided'
+            }), 400
+            
+        # Prüfe ob WhatsApp-Client eingerichtet ist
+        if not whatsapp_service.is_logged_in():
+            return jsonify({
+                'success': False,
+                'needs_login': True,
+                'error': 'WhatsApp login required'
+            }), 401
+            
+        # Speichere die Nummer für Benachrichtigungen
+        whatsapp_service.save_number(number)
+        
         return jsonify({
-            'message': 'Telegram bot initialized',
-            'botUsername': bot_info.username
+            'success': True,
+            'message': 'WhatsApp number saved successfully'
         })
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/notifications/send', methods=['POST'])
-def send_notification():
-    try:
-        data = request.json
-        message = data.get('message')
-        if not message:
-            return jsonify({'error': 'No message provided'}), 400
-            
-        if telegram_service.send_notification(message):
-            return jsonify({'success': True})
-        else:
-            return jsonify({'error': 'Failed to send Telegram message'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/notifications/test', methods=['POST'])
-def send_test_notification():
-    try:
-        message = (
-            "🎉 *Telegram-Benachrichtigungen erfolgreich eingerichtet!*\n\n"
-            "Sie erhalten ab jetzt Benachrichtigungen über:\n"
-            "✅ Abgeschlossene Drucke\n"
-            "❌ Fehlgeschlagene Drucke\n"
-            "⚠️ Drucker-Fehler\n\n"
-            "Die Benachrichtigungen enthalten:\n"
-            "- Drucker-Name\n"
-            "- Dateiname\n"
-            "- Druckzeit\n"
-            "- Fortschritt\n"
-            "- Temperaturen\n"
-            "- Fehlerdetails (falls vorhanden)\n\n"
-            "_Dies ist eine Testnachricht._"
-        )
         
-        if telegram_service.send_notification(message):
-            return jsonify({'success': True})
-        else:
-            return jsonify({'error': 'Failed to send test message'}), 500
-            
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/system/stats', methods=['GET'])
-def get_system_stats():
-    try:
-        # CPU Statistiken
-        cpu_percent = psutil.cpu_percent(interval=1)
-        cpu_count = psutil.cpu_count()
-        
-        # RAM Statistiken
-        memory = psutil.virtual_memory()
-        ram_total = memory.total / (1024 * 1024 * 1024)  # In GB
-        ram_used = memory.used / (1024 * 1024 * 1024)    # In GB
-        ram_percent = memory.percent
-        
-        # Disk Statistiken
-        disk = psutil.disk_usage('/')
-        disk_total = disk.total / (1024 * 1024 * 1024)   # In GB
-        disk_used = disk.used / (1024 * 1024 * 1024)     # In GB
-        disk_percent = disk.percent
-
+        logger.error(f"WhatsApp error: {str(e)}")
         return jsonify({
-            'cpu': {
-                'percent': cpu_percent,
-                'cores': cpu_count
-            },
-            'memory': {
-                'total': round(ram_total, 2),
-                'used': round(ram_used, 2),
-                'percent': ram_percent
-            },
-            'disk': {
-                'total': round(disk_total, 2),
-                'used': round(disk_used, 2),
-                'percent': disk_percent
-            }
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/whatsapp/login', methods=['POST', 'OPTIONS'])
+def whatsapp_login():
+    if request.method == 'OPTIONS':
+        return '', 200
+        
+    try:
+        # Starte WhatsApp Login-Prozess
+        qr_code = whatsapp_service.start_login()
+        
+        return jsonify({
+            'success': True,
+            'qr_code': qr_code,
+            'message': 'Please scan QR code with WhatsApp'
+        })
+        
+    except Exception as e:
+        logger.error(f"WhatsApp login error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/whatsapp/status', methods=['GET'])
+def whatsapp_status():
+    try:
+        return jsonify({
+            'success': True,
+            'is_logged_in': whatsapp_service.is_logged_in()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"WhatsApp status error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 
