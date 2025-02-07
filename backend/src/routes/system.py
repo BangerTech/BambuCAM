@@ -74,16 +74,60 @@ def get_load_average():
         pass
     return [0, 0, 0]
 
-@system_bp.route('/system/stats')  # Vereinfachte Route
+@system_bp.route('/system/stats', methods=['GET'])
+@cross_origin()
 def get_stats():
+    """Liefert System-Statistiken"""
     try:
+        # CPU Informationen
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+        
+        # Speicher Informationen
+        memory = psutil.virtual_memory()
+        
+        # Festplatten Informationen
+        disk = psutil.disk_usage('/')
+        
+        # System Informationen
         stats = {
-            'cpu_percent': psutil.cpu_percent(),
-            'memory': dict(psutil.virtual_memory()._asdict()),
-            'disk': dict(psutil.disk_usage('/')._asdict())
+            'system': {
+                'platform': platform.system(),
+                'machine': platform.machine(),
+                'uptime': int(time.time() - psutil.boot_time())
+            },
+            'cpu': {
+                'percent': cpu_percent,
+                'cores': cpu_count
+            },
+            'memory': {
+                'total': memory.total,
+                'used': memory.used,
+                'free': memory.available,
+                'percent': memory.percent
+            },
+            'disk': {
+                'total': disk.total,
+                'used': disk.used,
+                'free': disk.free,
+                'percent': disk.percent
+            }
         }
+        
+        # Load Average (nur für Unix-Systeme)
+        if platform.system() != "Windows":
+            load1, load5, load15 = psutil.getloadavg()
+            cpu_count = psutil.cpu_count()
+            stats['load_average'] = [
+                (load1/cpu_count) * 100,
+                (load5/cpu_count) * 100,
+                (load15/cpu_count) * 100
+            ]
+            
         return jsonify(stats)
+        
     except Exception as e:
+        logger.error(f"Error getting system stats: {e}")
         return jsonify({'error': str(e)}), 500
 
 @system_bp.route('/system/shutdown', methods=['POST'])

@@ -21,7 +21,11 @@ const SystemStatsDialog = ({ open, onClose }) => {
     const fetchStats = async () => {
       try {
         const response = await fetch(`${API_URL}/system/stats`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
+        console.log('System stats:', data); // Debug log
         setStats(data);
       } catch (error) {
         console.error('Error fetching system stats:', error);

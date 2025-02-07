@@ -49,24 +49,25 @@ def addPrinter(data):
         raise e
 
 def startStream(printer_id, stream_url=None):
-    """Startet einen neuen RTSP zu WebSocket Stream"""
+    """Startet einen Stream"""
     try:
-        port = getNextPort()
-        
         if not stream_url:
             printer = getPrinterById(printer_id)
             if not printer:
-                raise Exception("Drucker nicht gefunden")
-            stream_url = printer['streamUrl']
-        
-        # Stoppe existierenden Stream falls vorhanden
-        stopStream(printer_id)
+                raise Exception(f"Printer {printer_id} not found")
+            stream_url = printer.get('streamUrl')
+            
+        if not stream_url:
+            raise Exception("No stream URL available")
+            
+        # Hole nächsten freien Port
+        port = getNextPort()
         
         # Starte Stream über StreamService
         return stream_service.start_stream(printer_id, stream_url, port)
         
     except Exception as e:
-        logger.error(f"Fehler beim Starten des Streams: {str(e)}")
+        logger.error(f"Error starting stream: {e}")
         raise e
 
 def stopStream(printer_id):
