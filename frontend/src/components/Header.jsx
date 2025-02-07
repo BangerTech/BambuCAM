@@ -22,34 +22,59 @@ const StyledSwitch = styled('div')(({ theme }) => ({
 const Header = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isExtraSmall = useMediaQuery('(max-width:425px)');
 
   return (
     <Box sx={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: isMobile ? '10px 15px' : '20px',
+      padding: isExtraSmall ? '10px' : isMobile ? '10px 15px' : '20px',
       width: '100%',
+      maxWidth: '100vw',  // Verhindert Overflow
       position: 'fixed',
       top: 0,
       left: 0,
       right: 0,
       backgroundColor: 'rgba(0,0,0,0.9)',
-      zIndex: 1000
+      zIndex: 1000,
+      '& > *': {  // Gleichmäßige Verteilung der Elemente
+        flex: isExtraSmall ? '0 1 auto' : 1,
+        textAlign: 'center'
+      }
     }}>
-      <Logo src="/logo.png" alt="BambuCam" />
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'flex-start',
+        flex: isExtraSmall ? '0 0 auto' : 1,
+        marginRight: isExtraSmall ? '10px' : '20px'
+      }}>
+        <Logo src="/logo.png" alt="BambuCam" />
+      </Box>
       
-      <StyledSwitch>
-        <ConnectionToggle />
-      </StyledSwitch>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center',
+        flex: isExtraSmall ? '1 1 auto' : 1
+      }}>
+        <StyledSwitch>
+          <ConnectionToggle />
+        </StyledSwitch>
+      </Box>
       
-      <AddPrinterButton 
-        sx={{ 
-          transform: isMobile ? 'scale(0.8)' : 'none',
-          minWidth: isMobile ? '30px' : '40px',
-          height: isMobile ? '30px' : '40px'
-        }} 
-      />
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'flex-end',
+        flex: isExtraSmall ? '0 0 auto' : 1
+      }}>
+        <AddPrinterButton 
+          sx={{ 
+            transform: isExtraSmall ? 'scale(0.7)' : isMobile ? 'scale(0.8)' : 'none',
+            minWidth: isExtraSmall ? '25px' : isMobile ? '30px' : '40px',
+            height: isExtraSmall ? '25px' : isMobile ? '30px' : '40px'
+          }} 
+        />
+      </Box>
     </Box>
   );
 };
