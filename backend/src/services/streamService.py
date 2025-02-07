@@ -171,31 +171,22 @@ def stopStream(printer_id):
     """Kompatibilitätsfunktion"""
     return stream_service.stop_stream(printer_id)
 
-def startStream(printer_id):
-    """Startet einen neuen Stream für einen Drucker"""
+def startStream(printer_id, stream_url=None):
+    """Startet einen neuen RTSP zu WebSocket Stream"""
     try:
-        # Prüfe ob der Drucker existiert und erreichbar ist
-        if printer_id not in stored_printers:
-            logger.error(f"Printer {printer_id} not found")
-            return None
-
-        # Starte WebSocket-Server wenn noch nicht gestartet
-        if not hasattr(startStream, 'server') or not startStream.server:
-            port = 9000
-            startStream.server = websockets.serve(
-                lambda ws, path: stream_handler(ws, path, printer_id),
-                '0.0.0.0',
-                port
-            )
-            asyncio.get_event_loop().run_until_complete(startStream.server)
-            logger.info(f"Started WebSocket server on port {port}")
-            return port
+        if not stream_url:
+            from .printerService import getPrinterById
+            printer = getPrinterById(printer_id)
+            if not printer:
+                raise Exception("Drucker nicht gefunden")
+            stream_url = printer['streamUrl']
             
-        return 9000  # Standard-Port zurückgeben wenn Server läuft
-
+        port = getNextPort()
+        return stream_service.start_stream(printer_id, stream_url, port)
+        
     except Exception as e:
-        logger.error(f"Error starting stream: {e}")
-        return None
+        logger.error(f"Fehler beim Starten des Streams: {str(e)}")
+        raise e
 
 # Verschiebe diese Route in app.py
 # @app.route('/stream/<printer_id>/stop', methods=['POST'])
