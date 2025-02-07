@@ -267,10 +267,7 @@ def whatsapp_login():
 @app.route('/notifications/whatsapp/status', methods=['GET'])
 def whatsapp_status():
     try:
-        return jsonify({
-            'success': True,
-            'is_logged_in': whatsapp_service.is_logged_in()
-        })
+        return jsonify(whatsapp_service.get_status())
     except Exception as e:
         logger.error(f"WhatsApp status error: {str(e)}")
         return jsonify({

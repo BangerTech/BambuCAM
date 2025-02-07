@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress } from '@mui/material';
+import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress, Chip } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RTSPStream from './RTSPStream';
 
-const PrinterCard = ({ printer, onRemove }) => {
+const PrinterCard = ({ printer, onRemove, isCloud }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const cardRef = useRef(null);
 
@@ -71,7 +71,24 @@ const PrinterCard = ({ printer, onRemove }) => {
   };
 
   return (
-    <Card ref={cardRef} sx={cardStyle}>
+    <Card ref={cardRef} sx={{
+      ...cardStyle,
+      position: 'relative'
+    }}>
+      {isCloud && (
+        <Chip
+          label="Cloud"
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            backgroundColor: 'rgba(0, 255, 255, 0.2)',
+            color: '#00ffff',
+            border: '1px solid #00ffff'
+          }}
+        />
+      )}
       <CardHeader
         sx={headerStyle}
         action={

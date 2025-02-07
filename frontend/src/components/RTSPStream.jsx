@@ -14,11 +14,24 @@ const RTSPStream = ({ printer, fullscreen }) => {
   const isProcessing = useRef(false);
   const isFullscreenRef = useRef(fullscreen);
   const isInitializedRef = useRef(false);
+  const fullscreenChangeRef = useRef(false);
 
-  // Effekt für Fullscreen-Änderungen - nur Fullscreen-Status ändern
+  // Effekt für Fullscreen-Änderungen
   useEffect(() => {
     if (!videoRef.current) return;
+    
+    fullscreenChangeRef.current = true;
     isFullscreenRef.current = fullscreen;
+
+    const handleFullscreenChange = () => {
+      fullscreenChangeRef.current = false;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        // Nur neu initialisieren wenn wirklich nötig
+        if (!mediaSourceRef.current || !sourceBufferRef.current) {
+          setupMediaSource();
+        }
+      }
+    };
 
     if (fullscreen) {
       try {
@@ -27,13 +40,21 @@ const RTSPStream = ({ printer, fullscreen }) => {
         } else if (videoRef.current.webkitRequestFullscreen) {
           videoRef.current.webkitRequestFullscreen();
         }
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
       } catch (err) {
         console.warn('Fullscreen error:', err);
+        fullscreenChangeRef.current = false;
       }
     }
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
   }, [fullscreen]);
 
-  // Separater Effekt für Stream-Setup - nur einmal initialisieren
+  // Stream Setup Effekt
   useEffect(() => {
     if (!isInitializedRef.current) {
       console.log('RTSPStream initializing:', { printer, fullscreen });
@@ -42,14 +63,14 @@ const RTSPStream = ({ printer, fullscreen }) => {
     }
 
     return () => {
-      // Nur aufräumen wenn die Komponente wirklich unmounted
-      if (!isFullscreenRef.current) {
+      // Nur aufräumen wenn kein Fullscreen-Wechsel
+      if (!fullscreenChangeRef.current) {
         console.log('RTSPStream unmounting, cleaning up...');
         cleanup();
         isInitializedRef.current = false;
       }
     };
-  }, [printer.id]); // Nur bei Printer-ID Änderung neu verbinden
+  }, [printer.id]);
 
   const setupMediaSource = async () => {
     try {

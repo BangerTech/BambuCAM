@@ -21,12 +21,29 @@ import { API_URL } from '../config';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
-const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [] }) => {
-  // Stelle sicher, dass printers immer ein Array ist
-  const printerList = Array.isArray(printers) ? printers : [];
-  const [localPrinters, setLocalPrinters] = useState([]);
+const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange }) => {
+  // Alle State-Definitionen zusammenfassen
+  const [printers, setPrinters] = useState([]);
   const [cloudPrinters, setCloudPrinters] = useState([]);
-  
+  const [localPrinters, setLocalPrinters] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanTimer, setScanTimer] = useState(10);
+  const [foundPrinters, setFoundPrinters] = useState([]);
+  const [printerStatus, setPrinterStatus] = useState({});
+  const [fullscreenPrinter, setFullscreenPrinter] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [scannedPrinters, setScannedPrinters] = useState([]);
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
+
   // Bestimme welche Drucker angezeigt werden sollen
   const displayPrinters = mode === 'cloud' ? cloudPrinters : localPrinters;
   
@@ -34,6 +51,29 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   useEffect(() => {
     localStorage.setItem('printers', JSON.stringify(localPrinters));
   }, [localPrinters]);
+
+  // Lade beide Drucker-Typen
+  const loadPrinters = async () => {
+    try {
+      // Lade lokale Drucker
+      const response = await fetch(`${API_URL}/printers`);
+      const localPrinters = await response.json();
+
+      // Lade Cloud-Drucker
+      const cloudResponse = await fetch(`${API_URL}/api/cloud/printers`);
+      const cloudPrinterData = await cloudResponse.json();
+      
+      // Kombiniere und markiere die Drucker
+      const allPrinters = [
+        ...localPrinters.map(p => ({ ...p, isCloud: false })),
+        ...cloudPrinterData.map(p => ({ ...p, isCloud: true }))
+      ];
+      
+      setPrinters(allPrinters);
+    } catch (error) {
+      console.error('Error loading printers:', error);
+    }
+  };
 
   // Lade Drucker und ihre Positionen
   useEffect(() => {
@@ -94,24 +134,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   }, [mode]);
 
-  const [open, setOpen] = useState(false);
-  const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanTimer, setScanTimer] = useState(10);
-  const [foundPrinters, setFoundPrinters] = useState([]);
-  const [printerStatus, setPrinterStatus] = useState({});
-  const [fullscreenPrinter, setFullscreenPrinter] = useState(null);
-  const [showGuide, setShowGuide] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: '',
-    severity: 'success'
-  });
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [scannedPrinters, setScannedPrinters] = useState([]);
-  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
-
   useEffect(() => {
     const fetchStatus = async () => {
       const newStatus = {};
@@ -145,60 +167,31 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     localStorage.setItem('printerOrder', JSON.stringify(orderMap));
   };
 
-  // Modifizierte handleAddPrinter Funktion
-  const handleAddPrinter = async (selectedPrinter) => {
+  // Drucker hinzufügen (lokal oder cloud)
+  const handleAddPrinter = async (printerData) => {
     try {
-      setIsAdding(true);
-      console.log('Füge Drucker hinzu:', selectedPrinter);
-      
-      // Unterschiedliche Behandlung für Cloud- und lokale Drucker
-      const printerData = selectedPrinter.isCloud ? {
-        ...selectedPrinter,
-        type: 'BAMBULAB_CLOUD'
-      } : {
-        ...selectedPrinter,
-        type: 'BAMBULAB',
-        streamUrl: `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
-      };
-      
-      const response = await fetch(`${API_URL}/printers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(printerData)
-      });
-
-      const data = await response.json();
-      console.log('Server Response:', data);
-
-      if (!data.success) {
-        throw new Error(data.error || 'Unknown error');
-      }
-
-      if (data.success && data.printer) {
-        const updatedPrinters = [...localPrinters, data.printer];
-        setLocalPrinters(updatedPrinters);
-        // Neue Position am Ende hinzufügen
-        updatePrinterOrder(updatedPrinters);
-        setOpen(false);
-        setNewPrinter({ name: '', ip: '', accessCode: '' });
-        
-        setSnackbar({
-          open: true,
-          message: `Printer "${data.printer.name}" added successfully`,
-          severity: 'success'
+      if (printerData.isCloud) {
+        // Cloud-Drucker werden automatisch geladen
+        await loadPrinters();
+      } else {
+        // Lokaler Drucker - bisherige Logik
+        const response = await fetch(`${API_URL}/printers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(printerData)
         });
+
+        const data = await response.json();
+        console.log('Server Response:', data);
+
+        if (data.success) {
+          setPrinters(prev => [...prev, data.printer]);
+        }
       }
     } catch (error) {
-      console.error('Fehler beim Hinzufügen:', error);
-      setSnackbar({
-        open: true,
-        message: `Error: ${error.message}`,
-        severity: 'error'
-      });
-    } finally {
-      setIsAdding(false);
+      console.error('Error adding printer:', error);
     }
   };
 
@@ -278,8 +271,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       });
       
       if (response.ok) {
-        const updatedPrinters = localPrinters.filter(p => p.id !== printerId);
-        setLocalPrinters(updatedPrinters);
+        const updatedPrinters = printers.filter(p => p.id !== printerId);
+        setPrinters(updatedPrinters);
         // Aktualisiere Positionen nach Löschung
         updatePrinterOrder(updatedPrinters);
         

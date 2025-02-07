@@ -90,30 +90,44 @@ class BambuCloudService:
             return {"success": False, "error": error_msg}
 
     def get_cloud_printers(self):
-        """Get a list of available cloud devices."""
-        if not self.token:
-            return []
-        
+        """Holt die Liste der Cloud-Drucker"""
         try:
             response = self.session.get(
                 f"{self.base_url}/v1/iot-service/api/user/bind"
             )
             
+            if response.status_code != 200:
+                logger.error(f"Failed to get cloud printers: {response.text}")
+                return []
+            
+            data = response.json()
             logger.info(f"Get cloud printers response: {response.status_code} - {response.text}")
             
-            if response.status_code == 200:
-                devices = response.json().get("devices", [])
-                return [{
-                    "id": device["id"],
-                    "name": device.get("name", "Unnamed Printer"),
-                    "model": device.get("dev_model", "Unknown Model"),
-                    "status": device.get("print_status", "unknown"),
-                    "online": device.get("status") == "online",
-                    "streamUrl": f"rtsps://bblp:{device.get('dev_access_code')}@{device.get('dev_ip')}:322/streaming/live/1",
-                    "isCloud": True  # Markierung für Cloud-Drucker
-                } for device in devices]
+            if not data.get('devices'):
+                return []
+            
+            # Konvertiere die Cloud-Drucker in unser Format
+            printers = []
+            for device in data['devices']:
+                try:
+                    printer = {
+                        'id': device['dev_id'],  # Verwende dev_id als ID
+                        'name': device['name'],
+                        'ip': None,  # Cloud-Drucker haben keine direkte IP
+                        'type': 'bambulab',
+                        'status': 'online' if device['online'] else 'offline',
+                        'model': device['dev_model_name'],
+                        'version': '',  # Nicht in Cloud-API verfügbar
+                        'accessCode': device['dev_access_code'],
+                        'streamUrl': None,  # Cloud-Streaming noch nicht implementiert
+                        'wsPort': None
+                    }
+                    printers.append(printer)
+                except KeyError as e:
+                    logger.error(f"Missing key in device data: {e}")
+                    continue
                 
-            return []
+            return printers
             
         except Exception as e:
             logger.error(f"Failed to get cloud devices: {e}")
