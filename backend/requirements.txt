@@ -13,4 +13,4 @@ numpy==1.24.3
 paho-mqtt>=2.0.0
 bambulabs-api==2.5.8
 psutil==5.9.5
-pywhatkit==5.4 
+python-telegram-bot==13.7 

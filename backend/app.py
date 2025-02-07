@@ -2,13 +2,16 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter, stopStream
 from src.services.bambuCloudService import BambuCloudService
-from src.services.whatsappService import whatsapp_service
+from src.services.telegramService import telegram_service
+from src.services.systemStats import get_system_stats
+from src.routes.system import system_bp
 import os
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
+app.register_blueprint(system_bp)
 
 # Erlaube CORS für alle Ursprünge (einfachste Lösung)
 CORS(app, 
@@ -204,75 +207,137 @@ def stop_stream_endpoint(printer_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/notifications/whatsapp', methods=['POST', 'OPTIONS'])
-def whatsapp_notifications():
+@app.route('/notifications/telegram', methods=['POST', 'OPTIONS'])
+def telegram_notifications():
     if request.method == 'OPTIONS':
         return '', 200
         
     try:
         data = request.get_json()
-        number = data.get('number')
+        bot_token = data.get('bot_token')
+        chat_id = data.get('chat_id')
         
-        if not number:
+        if not bot_token or not chat_id:
             return jsonify({
                 'success': False,
-                'error': 'No phone number provided'
+                'error': 'Bot token and chat ID required'
             }), 400
             
-        # Prüfe ob WhatsApp-Client eingerichtet ist
-        if not whatsapp_service.is_logged_in():
-            return jsonify({
-                'success': False,
-                'needs_login': True,
-                'error': 'WhatsApp login required'
-            }), 401
-            
-        # Speichere die Nummer für Benachrichtigungen
-        whatsapp_service.save_number(number)
+        # Speichere die Telegram-Credentials
+        telegram_service.save_credentials(bot_token, chat_id)
+        
+        # Sende Test-Nachricht
+        telegram_service.send_message("🤖 Bambu Camera Viewer wurde erfolgreich mit Telegram verbunden!")
         
         return jsonify({
             'success': True,
-            'message': 'WhatsApp number saved successfully'
+            'message': 'Telegram credentials saved and tested successfully'
         })
         
     except Exception as e:
-        logger.error(f"WhatsApp error: {str(e)}")
+        logger.error(f"Telegram error: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
-@app.route('/notifications/whatsapp/login', methods=['POST', 'OPTIONS'])
-def whatsapp_login():
+@app.route('/notifications/telegram/status', methods=['GET'])
+def telegram_status():
+    try:
+        return jsonify({
+            'success': True,
+            'is_configured': telegram_service.is_configured()
+        })
+    except Exception as e:
+        logger.error(f"Telegram status error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/status', methods=['GET'])
+def notification_status():
+    try:
+        # Prüfe ob Telegram konfiguriert ist
+        telegram_configured = telegram_service.is_ready and telegram_service.config.get('chat_id') is not None
+        
+        return jsonify({
+            'success': True,
+            'telegram': telegram_configured
+        })
+    except Exception as e:
+        logger.error(f"Error getting notification status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/telegram/setup', methods=['POST', 'OPTIONS'])
+def telegram_setup():
     if request.method == 'OPTIONS':
         return '', 200
         
     try:
-        # Starte WhatsApp Login-Prozess
-        qr_code = whatsapp_service.start_login()
+        data = request.get_json()
+        token = data.get('token')
         
+        if not token:
+            return jsonify({
+                'success': False,
+                'error': 'Bot token required'
+            }), 400
+            
+        # Setze Token als Umgebungsvariable
+        os.environ['TELEGRAM_BOT_TOKEN'] = token
+        
+        # Initialisiere den Bot
+        if not telegram_service.init_bot():
+            return jsonify({
+                'success': False,
+                'error': 'Failed to initialize bot'
+            }), 500
+            
+        # Warte auf Bot-Setup
+        try:
+            telegram_service.wait_for_setup()
+        except TimeoutError as e:
+            return jsonify({
+                'success': True,
+                'botUsername': telegram_service.bot.bot.username,
+                'message': str(e)
+            })
+            
         return jsonify({
             'success': True,
-            'qr_code': qr_code,
-            'message': 'Please scan QR code with WhatsApp'
+            'botUsername': telegram_service.bot.bot.username,
+            'message': 'Bot setup successful'
         })
         
     except Exception as e:
-        logger.error(f"WhatsApp login error: {str(e)}")
+        logger.error(f"Telegram setup error: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
-@app.route('/notifications/whatsapp/status', methods=['GET'])
-def whatsapp_status():
+@app.route('/system/stats', methods=['GET'])
+def system_stats():
+    """Liefert System-Statistiken"""
     try:
+        stats = get_system_stats()
+        if stats is None:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to get system stats'
+            }), 500
+            
         return jsonify({
             'success': True,
-            'is_logged_in': whatsapp_service.is_logged_in()
+            'stats': stats
         })
+        
     except Exception as e:
-        logger.error(f"WhatsApp status error: {str(e)}")
+        logger.error(f"Error in system stats route: {e}")
         return jsonify({
             'success': False,
             'error': str(e)

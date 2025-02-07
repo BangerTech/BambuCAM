@@ -90,33 +90,28 @@ class BambuCloudService:
             return {"success": False, "error": error_msg}
 
     def get_cloud_printers(self):
-        """Get a list of available cloud devices."""
-        if not self.token:
-            return []
-        
+        """Holt die Liste der Cloud-Drucker"""
         try:
-            response = self.session.get(
-                f"{self.base_url}/v1/iot-service/api/user/bind"
-            )
-            
-            logger.info(f"Get cloud printers response: {response.status_code} - {response.text}")
-            
+            response = self.make_request('GET', 'v1/iot-service/api/user/bind')
             if response.status_code == 200:
-                devices = response.json().get("devices", [])
-                return [{
-                    "id": device["id"],
-                    "name": device.get("name", "Unnamed Printer"),
-                    "model": device.get("dev_model", "Unknown Model"),
-                    "status": device.get("print_status", "unknown"),
-                    "online": device.get("status") == "online",
-                    "streamUrl": f"rtsps://bblp:{device.get('dev_access_code')}@{device.get('dev_ip')}:322/streaming/live/1",
-                    "isCloud": True  # Markierung für Cloud-Drucker
-                } for device in devices]
+                data = response.json()
+                logger.info(f"Get cloud printers response: {response.status_code} - {data}")
                 
-            return []
-            
+                if data.get('devices'):
+                    # Formatiere die Drucker ins richtige Format
+                    return [{
+                        'id': printer['dev_id'],
+                        'name': printer['name'],
+                        'model': printer['dev_product_name'],
+                        'status': printer['print_status'],
+                        'online': printer['online'],
+                        'type': 'cloud',  # Wichtig: Markiere als Cloud-Drucker
+                        'access_code': printer['dev_access_code']
+                    } for printer in data['devices']]
+                return []
+                
         except Exception as e:
-            logger.error(f"Failed to get cloud devices: {e}")
+            logger.error(f"Error getting cloud printers: {e}")
             return []
 
     def get_profile(self):

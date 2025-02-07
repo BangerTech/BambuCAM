@@ -1,12 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Fab, Tooltip } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
-import WhatsAppDialog from './WhatsAppDialog';
+import NotificationDialog from './NotificationDialog';
+import { API_URL } from '../config';
 
 const NotificationButton = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Lade den Status beim Start
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/notifications/status`);
+        const data = await response.json();
+        if (data.success && data.telegram) {
+          setNotificationsEnabled(true);
+        }
+      } catch (error) {
+        console.error('Error checking notification status:', error);
+      }
+    };
+    checkStatus();
+  }, []);
 
   const handleToggle = () => {
     if (!notificationsEnabled) {
@@ -22,11 +39,11 @@ const NotificationButton = () => {
 
   return (
     <>
-      <Tooltip title={`${notificationsEnabled ? 'Disable' : 'Enable'} WhatsApp Notifications`}>
+      <Tooltip title={`${notificationsEnabled ? 'Disable' : 'Enable'} Telegram Notifications`}>
         <Fab
           size="small"
           onClick={handleToggle}
-          sx={{
+          sx={{ 
             position: 'fixed',
             bottom: 15,
             right: 15,
@@ -48,7 +65,7 @@ const NotificationButton = () => {
         </Fab>
       </Tooltip>
 
-      <WhatsAppDialog 
+      <NotificationDialog 
         open={dialogOpen}
         onClose={() => {
           handleDialogClose();
