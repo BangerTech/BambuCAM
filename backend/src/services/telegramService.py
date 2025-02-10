@@ -16,70 +16,57 @@ class TelegramService:
         self.load_config()
         self.bot = None
         self.is_ready = False
+        
+        # Versuche Bot neu zu starten wenn Token in der Config existiert
+        if self.config.get('token'):
+            logger.info("Found existing token, trying to restart bot...")
+            self.init_bot(self.config['token'])
 
-    def init_bot(self):
+    def init_bot(self, token=None):
         """Initialisiert den Telegram Bot"""
         try:
+            # Wenn Bot bereits läuft, nicht neu starten
+            if self.is_ready and self.bot:
+                logger.info("Bot is already running")
+                return {
+                    'success': True,
+                    'botUsername': self.bot.bot.username
+                }
+
+            if token:
+                os.environ['TELEGRAM_BOT_TOKEN'] = token
+                self.config['token'] = token
+                self.save_config()
+                logger.info("Token saved to config")
+            else:
+                # Versuche Token aus Config zu laden
+                token = self.config.get('token')
+                if token:
+                    os.environ['TELEGRAM_BOT_TOKEN'] = token
+                    logger.info("Token loaded from config")
+
             token = os.getenv('TELEGRAM_BOT_TOKEN')
             if not token:
                 logger.warning("TELEGRAM_BOT_TOKEN nicht gesetzt")
                 return False
 
-            # Extrahiere Chat-ID aus dem Token
-            try:
-                chat_id = token.split(':')[0]
-                self.config['chat_id'] = chat_id
-                self.save_config()
-            except Exception as e:
-                logger.error(f"Error extracting chat ID from token: {e}")
-                return False
-                
             self.bot = Updater(token)
-            
-            # Setze Profilbild
-            try:
-                # Angepasster Pfad zum Logo
-                logo_path = '/home/Print-Cam/frontend/public/logo.png'
-                with open(logo_path, 'rb') as photo:
-                    self.bot.bot.set_chat_photo(
-                        chat_id=f'@{self.bot.bot.get_me().username}',
-                        photo=photo
-                    )
-                logger.info("Bot profile photo updated")
-            except Exception as e:
-                logger.warning(f"Could not set bot profile photo: {e}")
+            logger.info(f"Bot username: {self.bot.bot.username}")
             
             # Kommandos registrieren
             dp = self.bot.dispatcher
             dp.add_handler(CommandHandler("help", self.help_command))
+            dp.add_handler(CommandHandler("start", self.start_command))
             
             # Bot starten
-            self.bot.start_polling()
-            logger.info("Telegram Bot gestartet")
-
-            # Sende sofort eine Willkommensnachricht
-            try:
-                welcome_message = (
-                    "🖨 *BambuCam Telegram Bot*\n\n"
-                    "Bot wurde erfolgreich eingerichtet!\n"
-                    "Sie erhalten ab jetzt Benachrichtigungen über Ihre Drucke.\n\n"
-                    "Verfügbare Befehle:\n"
-                    "/help - Zeigt diese Hilfe an"
-                )
-                
-                self.bot.bot.send_message(
-                    chat_id=chat_id,
-                    text=welcome_message,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                
-                self.is_ready = True
-                logger.info(f"Telegram Bot setup completed with chat_id: {chat_id}")
-                return True
-                
-            except Exception as e:
-                logger.error(f"Error sending welcome message: {e}")
-                return False
+            self.bot.start_polling(drop_pending_updates=True)
+            logger.info("Telegram Bot gestartet und polling aktiviert")
+            
+            self.is_ready = True
+            return {
+                'success': True,
+                'botUsername': self.bot.bot.username
+            }
             
         except Exception as e:
             logger.error(f"Telegram Bot init error: {e}")
@@ -98,6 +85,36 @@ class TelegramService:
         
         update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
+    def start_command(self, update, context):
+        """Handler für /start Kommando"""
+        try:
+            logger.info(f"Start command received from chat_id: {update.effective_chat.id}")
+            chat_id = update.effective_chat.id
+            
+            # Speichere chat_id, token und aktiviere Benachrichtigungen
+            self.config['chat_id'] = chat_id
+            self.config['token'] = os.getenv('TELEGRAM_BOT_TOKEN')  # Token speichern
+            self.config['notifications_enabled'] = True
+            self.save_config()
+            
+            welcome_message = (
+                "🖨 *BambuCam Telegram Bot*\n\n"
+                "Bot wurde erfolgreich eingerichtet!\n"
+                "Sie erhalten ab jetzt Benachrichtigungen über Ihre Drucke.\n\n"
+                "Verfügbare Befehle:\n"
+                "/help - Zeigt diese Hilfe an"
+            )
+            
+            sent = update.message.reply_text(
+                welcome_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.info(f"Welcome message sent to chat_id {chat_id}")
+            
+        except Exception as e:
+            logger.error(f"Error in start command: {e}", exc_info=True)
+            raise
+
     def load_config(self):
         """Lädt die Konfiguration"""
         if self.config_file.exists():
@@ -105,7 +122,8 @@ class TelegramService:
                 self.config = json.load(f)
         else:
             self.config = {
-                'chat_id': None
+                'chat_id': None,
+                'notifications_enabled': False  # Neues Feld für den Status
             }
 
     def save_config(self):
@@ -116,8 +134,15 @@ class TelegramService:
     def send_notification(self, message):
         """Sendet eine Telegram Nachricht"""
         try:
+            # Prüfe ob Bot initialisiert ist, wenn nicht versuche Neustart
+            if not self.is_ready or not self.bot:
+                token = self.config.get('token')  # Token aus Config laden
+                if token:
+                    logger.info("Bot nicht initialisiert, versuche Neustart...")
+                    self.init_bot(token)  # Token übergeben
+
             if not self.bot or not self.config.get('chat_id') or not self.is_ready:
-                logger.error("Telegram nicht eingerichtet")
+                logger.error("Telegram nicht eingerichtet oder Bot nicht initialisiert")
                 return False
                 
             chat_id = self.config['chat_id']
@@ -151,6 +176,41 @@ class TelegramService:
             )
         else:
             raise TimeoutError("Setup timeout - please send /start to the bot")
+
+    def is_configured(self):
+        """Prüft ob der Bot konfiguriert ist"""
+        try:
+            has_chat_id = bool(self.config.get('chat_id'))
+            is_enabled = bool(self.config.get('notifications_enabled'))
+            logger.debug(f"Bot configuration status: chat_id={has_chat_id}, enabled={is_enabled}")
+            return has_chat_id and is_enabled  # Beide Bedingungen müssen erfüllt sein
+        except Exception as e:
+            logger.error(f"Error checking configuration: {e}")
+            return False
+
+    def disable(self):
+        """Deaktiviert die Benachrichtigungen"""
+        try:
+            # Erst Nachricht senden, dann deaktivieren
+            self.send_notification("🔕 Benachrichtigungen wurden deaktiviert")
+            self.config['notifications_enabled'] = False
+            self.save_config()
+            return True
+        except Exception as e:
+            logger.error(f"Error disabling notifications: {e}")
+            return False
+
+    def enable(self):
+        """Aktiviert die Benachrichtigungen"""
+        try:
+            self.config['notifications_enabled'] = True
+            self.save_config()
+            # Nachricht nach Aktivierung senden
+            self.send_notification("🔔 Benachrichtigungen wurden wieder aktiviert!")
+            return True
+        except Exception as e:
+            logger.error(f"Error enabling notifications: {e}")
+            return False
 
 # Globale Instanz
 telegram_service = TelegramService() 

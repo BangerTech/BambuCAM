@@ -98,7 +98,6 @@ const NotificationDialog = ({ open, onClose }) => {
       setError('');
       setIsLoading(true);
       
-      // Setup Bot mit Token
       const response = await fetch(`${API_URL}/notifications/telegram/setup`, {
         method: 'POST',
         headers: {
@@ -109,13 +108,12 @@ const NotificationDialog = ({ open, onClose }) => {
 
       const data = await response.json();
       
-      if (!response.ok) {
+      if (data.success) {
+        setBotUsername(data.botUsername); // Speichere den Bot-Username
+        setActiveStep(2); // Gehe zum nächsten Schritt
+      } else {
         throw new Error(data.error || 'Failed to setup Telegram');
       }
-
-      // Bot wurde erfolgreich eingerichtet
-      setBotUsername(data.botUsername); // Vom Backend zurückgegeben
-      setActiveStep(2);
 
     } catch (error) {
       setError(error.message);

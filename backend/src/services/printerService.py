@@ -380,31 +380,45 @@ def getPrinterStatus(printer_id):
             "remaining_time": 0
         }
 
-def handle_mqtt_message(client, userdata, message):
+def handle_mqtt_message(printer_id, data):
+    """Verarbeitet MQTT Nachrichten und sendet ggf. Benachrichtigungen"""
     try:
-        printer_id = message.topic.split('/')[1]
-        data = json.loads(message.payload)
-        
-        if printer_id in stored_printers:
-            stored_printers[printer_id].update({
-                'status': data.get('print_status', 'unknown'),
-                'temperatures': {
-                    'nozzle': data.get('temperatures', {}).get('nozzle', 0),
-                    'bed': data.get('temperatures', {}).get('bed', 0),
-                    'chamber': data.get('temperatures', {}).get('chamber', 0)
+        if printer_id not in stored_printers:
+            return
+            
+        # Update Drucker Status
+        stored_printers[printer_id].update({
+            'status': {
+                'print_status': data.get('print_status'),
+                'gcode_state': data.get('gcode_state'),
+                'temperature': {
+                    'bed': data.get('bed_temp', 0),
+                    'nozzle': data.get('nozzle_temp', 0)
                 },
                 'progress': data.get('progress', 0),
                 'remaining_time': data.get('remaining_time', 0),
                 'last_update': time.time()
-            })
+            }
+        })
+        
+        # Prüfe auf wichtige Status-Änderungen für Benachrichtigungen
+        gcode_state = data.get('gcode_state', '').lower()
+        
+        # Status-spezifische Emojis und Nachrichten
+        status_messages = {
+            'finish': '✅ Druck erfolgreich beendet',
+            'failed': '❌ Druck-Fehler aufgetreten',
+            'stopped': '⚠️ Druck abgebrochen',
+            'running': None  # Keine Nachricht für laufende Drucke
+        }
+        
+        if gcode_state in status_messages and status_messages[gcode_state]:
+            printer_name = stored_printers[printer_id]['name']
+            message = f"{status_messages[gcode_state]}\n*Drucker:* {printer_name}"
             
-            # Prüfe auf wichtige Status-Änderungen für Benachrichtigungen
-            if data.get('print_status') in ['completed', 'error', 'cancelled']:
-                notification_service.send_notification(
-                    printer_id,
-                    data.get('print_status'),
-                    stored_printers[printer_id]['name']
-                )
-                
+            # Sende Benachrichtigung über Telegram
+            telegram_service.send_notification(message)
+            logger.info(f"Sending notification for state {gcode_state}: {message}")
+            
     except Exception as e:
         logger.error(f"Error handling MQTT message: {e}") 

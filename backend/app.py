@@ -244,9 +244,11 @@ def telegram_notifications():
 @app.route('/notifications/telegram/status', methods=['GET'])
 def telegram_status():
     try:
+        # Prüfe ob eine chat_id existiert, unabhängig vom notifications_enabled Status
+        has_chat_id = bool(telegram_service.config.get('chat_id'))
         return jsonify({
             'success': True,
-            'is_configured': telegram_service.is_configured()
+            'is_configured': has_chat_id  # Nur prüfen ob chat_id existiert
         })
     except Exception as e:
         logger.error(f"Telegram status error: {str(e)}")
@@ -256,14 +258,12 @@ def telegram_status():
         }), 500
 
 @app.route('/notifications/status', methods=['GET'])
-def notification_status():
+def get_notification_status():
+    """Gibt den aktuellen Status der Benachrichtigungen zurück"""
     try:
-        # Prüfe ob Telegram konfiguriert ist
-        telegram_configured = telegram_service.is_ready and telegram_service.config.get('chat_id') is not None
-        
         return jsonify({
             'success': True,
-            'telegram': telegram_configured
+            'telegram': telegram_service.is_configured()  # Prüft notifications_enabled
         })
     except Exception as e:
         logger.error(f"Error getting notification status: {e}")
@@ -338,6 +338,45 @@ def system_stats():
         
     except Exception as e:
         logger.error(f"Error in system stats route: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/disable', methods=['POST'])
+def disable_notifications():
+    """Deaktiviert die Benachrichtigungen"""
+    try:
+        success = telegram_service.disable()
+        return jsonify({
+            'success': success
+        })
+    except Exception as e:
+        logger.error(f"Error disabling notifications: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/notifications/enable', methods=['POST'])
+def enable_notifications():
+    """Aktiviert die Benachrichtigungen mit der gespeicherten chat_id"""
+    try:
+        # Prüfe ob chat_id in Config existiert
+        if not telegram_service.config.get('chat_id'):
+            return jsonify({
+                'success': False,
+                'error': 'No chat_id found. Please setup the bot first.'
+            }), 400
+            
+        # Aktiviere die gespeicherte chat_id
+        telegram_service.enable()
+        
+        return jsonify({
+            'success': True
+        })
+    except Exception as e:
+        logger.error(f"Error enabling notifications: {e}")
         return jsonify({
             'success': False,
             'error': str(e)

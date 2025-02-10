@@ -19,6 +19,9 @@ RUN pip install -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
+# Erstelle assets Verzeichnis und kopiere Logo
+COPY assets /app/assets
+
 EXPOSE 4000
 
 CMD ["python", "-m", "src.app"] 
