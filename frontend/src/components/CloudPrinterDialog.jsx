@@ -19,6 +19,8 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import styled from '@emotion/styled';
 
+const API_URL = `http://${window.location.hostname}:4000`;
+
 const GlassDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
     background: 'rgba(0, 0, 0, 0.8)',
@@ -37,6 +39,7 @@ const CloudPrinterDialog = ({ open, onClose }) => {
 
   useEffect(() => {
     if (open) {
+      console.log('Dialog opened, fetching printers...');
       fetchPrinters();
     }
   }, [open]);
@@ -44,18 +47,50 @@ const CloudPrinterDialog = ({ open, onClose }) => {
   const fetchPrinters = async () => {
     try {
       setLoading(true);
-      setError(null); // Reset error state
+      console.log('Fetching cloud printers...');
       
-      const response = await fetch(`${API_URL}/api/cloud/printers`);
+      const response = await fetch(`${API_URL}/api/cloud/printers`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Response:', {
+        status: response.status,
+        statusText: response.statusText
+      });
+      
       const data = await response.json();
+      console.log('Response data:', data);
       
-      if (data.success) {
-        setPrinters(data.printers || []);
+      // Prüfe ob data.printers existiert oder data selbst ein Array ist
+      const printersArray = data.printers || (Array.isArray(data) ? data : []);
+      
+      if (printersArray.length > 0) {
+        console.log('Found printers:', printersArray);
+        const cloudPrinters = printersArray.map(printer => {
+          console.log('Mapping printer:', printer);
+          return {
+            name: printer.name,
+            ip: null,
+            accessCode: printer.dev_access_code,
+            model: printer.dev_model_name,
+            online: printer.online,
+            isCloud: true,
+            cloudId: printer.dev_id,
+            status: printer.print_status
+          };
+        });
+        console.log('Mapped printers:', cloudPrinters);
+        setPrinters(cloudPrinters);
       } else {
-        setError(data.error || 'Failed to fetch printers');
+        console.log('No printers found');
+        setPrinters([]);
       }
     } catch (error) {
-      setError('Failed to connect to server');
+      console.error('Fetch error:', error);
+      setError('Network error');
     } finally {
       setLoading(false);
     }
@@ -70,18 +105,20 @@ const CloudPrinterDialog = ({ open, onClose }) => {
         },
         body: JSON.stringify({
           name: printer.name,
-          ip: printer.id,
-          type: 'CLOUD',
-          access_code: printer.access_code
-        }),
+          ip: printer.ip,
+          accessCode: printer.accessCode,
+          isCloud: printer.isCloud,
+          cloudId: printer.cloudId
+        })
       });
 
-      const data = await response.json();
-      if (data.success) {
-        onClose(true);  // true bedeutet Drucker wurde hinzugefügt
+      if (!response.ok) {
+        throw new Error('Failed to add printer');
       }
+
+      onClose(true);
     } catch (error) {
-      console.error('Error adding printer:', error);
+      setError(error.message);
     }
   };
 
@@ -102,28 +139,18 @@ const CloudPrinterDialog = ({ open, onClose }) => {
         ) : (
           <List>
             {printers.map((printer) => (
-              <ListItem
-                key={printer.id}
-                secondaryAction={
-                  <IconButton edge="end" onClick={() => handleAddPrinter(printer)}>
-                    <AddIcon />
-                  </IconButton>
-                }
-              >
+              <ListItem key={printer.cloudId}>
                 <ListItemText 
                   primary={printer.name}
-                  secondary={
-                    <>
-                      {printer.model} - {printer.status}
-                      <Chip
-                        size="small"
-                        label={printer.online ? "Online" : "Offline"}
-                        color={printer.online ? "success" : "error"}
-                        sx={{ ml: 1 }}
-                      />
-                    </>
-                  }
+                  secondary={`Model: ${printer.model}`}
                 />
+                <Chip 
+                  label={printer.online ? "Online" : "Offline"}
+                  color={printer.online ? "success" : "error"}
+                />
+                <IconButton onClick={() => handleAddPrinter(printer)}>
+                  <AddIcon />
+                </IconButton>
               </ListItem>
             ))}
           </List>

@@ -57,3 +57,40 @@ def addPrinter(data):
     except Exception as e:
         logger.error(f"Error adding printer: {e}")
         raise 
+
+@app.route('/printers', methods=['POST'])
+def add_printer():
+    try:
+        data = request.get_json()
+        
+        # Erstelle Drucker-Objekt
+        printer = {
+            'id': str(uuid.uuid4()),
+            'name': data['name'],
+            'ip': data.get('ip'),  # Optional für Cloud-Drucker
+            'accessCode': data['accessCode'],
+            'isCloud': data.get('isCloud', False),
+            'cloudId': data.get('cloudId')
+        }
+        
+        # Starte Stream
+        stream_url = f"rtsps://bblp:{printer['accessCode']}@{printer['ip']}:322/streaming/live/1"
+        port = getNextPort()
+        
+        if stream_service.start_stream(printer['id'], stream_url, port):
+            printer['wsPort'] = port
+            stored_printers[printer['id']] = printer
+            return jsonify({'success': True, 'printer': printer})
+        else:
+            return jsonify({
+                'success': False, 
+                'error': 'Connection error',
+                'details': 'Konnte keine Verbindung zum Drucker herstellen'
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Error adding printer: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400 
