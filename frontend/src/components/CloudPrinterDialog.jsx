@@ -28,7 +28,35 @@ const GlassDialog = styled(Dialog)(({ theme }) => ({
     border: '1px solid rgba(0, 255, 255, 0.2)',
     borderRadius: '15px',
     boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
-    minWidth: '400px'
+    minWidth: '400px',
+    color: '#fff',
+    '& .MuiDialogTitle-root': {
+      borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
+      color: '#00ffff'
+    },
+    '& .MuiListItemText-primary': {
+      color: '#fff',
+      fontSize: '1.1rem'
+    },
+    '& .MuiListItemText-secondary': {
+      color: 'rgba(255, 255, 255, 0.7)',
+      fontSize: '0.9rem'
+    },
+    '& .MuiIconButton-root': {
+      color: '#00ffff',
+      '&:hover': {
+        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+      }
+    },
+    '& .MuiButton-root': {
+      color: '#00ffff',
+      '&:hover': {
+        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+      }
+    },
+    '& .MuiChip-root': {
+      margin: '0 10px'
+    }
   }
 }));
 
@@ -64,22 +92,19 @@ const CloudPrinterDialog = ({ open, onClose }) => {
       const data = await response.json();
       console.log('Response data:', data);
       
-      // Prüfe ob data.printers existiert oder data selbst ein Array ist
-      const printersArray = data.printers || (Array.isArray(data) ? data : []);
-      
-      if (printersArray.length > 0) {
-        console.log('Found printers:', printersArray);
-        const cloudPrinters = printersArray.map(printer => {
+      if (Array.isArray(data) && data.length > 0) {
+        console.log('Found printers:', data);
+        const cloudPrinters = data.map(printer => {
           console.log('Mapping printer:', printer);
           return {
             name: printer.name,
             ip: null,
-            accessCode: printer.dev_access_code,
-            model: printer.dev_model_name,
+            accessCode: printer.access_code,
+            model: printer.model,
             online: printer.online,
             isCloud: true,
-            cloudId: printer.dev_id,
-            status: printer.print_status
+            cloudId: printer.id,
+            status: printer.status
           };
         });
         console.log('Mapped printers:', cloudPrinters);
@@ -98,26 +123,43 @@ const CloudPrinterDialog = ({ open, onClose }) => {
 
   const handleAddPrinter = async (printer) => {
     try {
+      console.log('Adding printer:', printer);
+      const printerData = {
+        name: printer.name,
+        type: 'CLOUD',
+        cloudId: printer.cloudId,
+        accessCode: printer.accessCode,
+        model: printer.model,
+        status: 'offline',
+        temperatures: {
+          nozzle: 0,
+          bed: 0,
+          chamber: 0
+        },
+        progress: 0,
+        remaining_time: 0
+      };
+
+      console.log('Sending printer data:', printerData);
       const response = await fetch(`${API_URL}/printers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: printer.name,
-          ip: printer.ip,
-          accessCode: printer.accessCode,
-          isCloud: printer.isCloud,
-          cloudId: printer.cloudId
-        })
+        body: JSON.stringify(printerData)
       });
 
       if (!response.ok) {
-        throw new Error('Failed to add printer');
+        const errorData = await response.json();
+        console.error('Error response:', errorData);
+        throw new Error(errorData.error || 'Failed to add printer');
       }
 
+      const result = await response.json();
+      console.log('Add printer result:', result);
       onClose(true);
     } catch (error) {
+      console.error('Error adding printer:', error);
       setError(error.message);
     }
   };

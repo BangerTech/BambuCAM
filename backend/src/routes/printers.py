@@ -62,31 +62,44 @@ def addPrinter(data):
 def add_printer():
     try:
         data = request.get_json()
+        logger.debug(f"Adding printer with data: {data}")
         
+        required_fields = ['name', 'type', 'accessCode']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+
         # Erstelle Drucker-Objekt
         printer = {
             'id': str(uuid.uuid4()),
             'name': data['name'],
-            'ip': data.get('ip'),  # Optional für Cloud-Drucker
+            'type': data['type'],
+            'cloudId': data.get('cloudId'),
+            'ip': data.get('ip'),
             'accessCode': data['accessCode'],
-            'isCloud': data.get('isCloud', False),
-            'cloudId': data.get('cloudId')
+            'model': data.get('model', 'X1 Carbon'),
+            'status': data.get('status', 'offline'),
+            'temperatures': data.get('temperatures', {
+                'nozzle': 0,
+                'bed': 0,
+                'chamber': 0
+            }),
+            'progress': data.get('progress', 0),
+            'remaining_time': data.get('remaining_time', 0)
         }
         
-        # Starte Stream
-        stream_url = f"rtsps://bblp:{printer['accessCode']}@{printer['ip']}:322/streaming/live/1"
-        port = getNextPort()
+        # Speichere Drucker
+        stored_printers[printer['id']] = printer
+        savePrinters()  # Speichere in JSON
         
-        if stream_service.start_stream(printer['id'], stream_url, port):
-            printer['wsPort'] = port
-            stored_printers[printer['id']] = printer
-            return jsonify({'success': True, 'printer': printer})
-        else:
-            return jsonify({
-                'success': False, 
-                'error': 'Connection error',
-                'details': 'Konnte keine Verbindung zum Drucker herstellen'
-            }), 400
+        logger.info(f"Successfully added printer: {printer['name']} ({printer['id']})")
+        return jsonify({
+            'success': True,
+            'printer': printer
+        })
             
     except Exception as e:
         logger.error(f"Error adding printer: {str(e)}")
