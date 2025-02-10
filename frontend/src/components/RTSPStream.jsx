@@ -4,46 +4,74 @@ import { Box } from '@mui/material';
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
 
-const RTSPStream = ({ printer, fullscreen }) => {
+const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   const videoRef = useRef(null);
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
-  const wsRef = useRef(null);
+  const websocketRef = useRef(null);
   const [error, setError] = useState(null);
   const bufferQueue = useRef([]);
   const isProcessing = useRef(false);
+  // Flag um zu prüfen ob Komponente mounted ist
+  const mountedRef = useRef(true);
 
-  // Effekt für Fullscreen-Änderungen - nur Fullscreen-Status ändern
+  // Separater Effekt nur für Fullscreen
   useEffect(() => {
     if (!videoRef.current) return;
 
+    const handleFullscreenChange = () => {
+      // Wenn Fullscreen beendet wird, Parent-Komponente informieren
+      if (!document.fullscreenElement && fullscreen) {
+        // Callback zum Parent um fullscreen auf false zu setzen
+        onFullscreenExit?.();
+      }
+    };
+
+    // Fullscreen-Change Event Listener
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
     if (fullscreen) {
       try {
-        if (videoRef.current.requestFullscreen) {
-          videoRef.current.requestFullscreen();
-        } else if (videoRef.current.webkitRequestFullscreen) {
-          videoRef.current.webkitRequestFullscreen();
-        }
+        videoRef.current.requestFullscreen();
       } catch (err) {
         console.warn('Fullscreen error:', err);
       }
     }
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, [fullscreen]);
 
-  // Separater Effekt für Stream-Setup - nur bei printer.id Änderung
+  // Separater Effekt für Stream-Setup
   useEffect(() => {
-    console.log('RTSPStream mounted:', { printer, fullscreen });
+    // Wenn es nur ein Fullscreen-Toggle ist, nicht neu initialisieren
+    if (videoRef.current && document.fullscreenElement === videoRef.current) {
+      console.log('Skipping stream setup - just fullscreen toggle');
+      return;
+    }
+
+    console.log('Setting up stream for printer:', printer.id);
     setupMediaSource();
 
     return () => {
-      console.log('RTSPStream unmounting, cleaning up...');
-      cleanup();
+      // Cleanup nur wenn wirklich notwendig
+      if (!document.fullscreenElement) {
+        console.log('Full stream cleanup');
+        mountedRef.current = false;
+        cleanup();
+      } else {
+        console.log('Skipping cleanup - in fullscreen mode');
+      }
     };
-  }, [printer.id]); // Nur bei Printer-ID Änderung neu verbinden
+  }, [printer.id]); // Nur von printer.id abhängig
 
   const setupMediaSource = async () => {
     try {
-      cleanup(); // Cleanup vor dem Setup
+      // Nur cleanup wenn nicht im Fullscreen
+      if (!document.fullscreenElement) {
+        cleanup();
+      }
 
       console.log('Setting up new MediaSource...');
       const mediaSource = new MediaSource();
@@ -82,17 +110,22 @@ const RTSPStream = ({ printer, fullscreen }) => {
     }
   };
 
-  const connectWebSocket = () => {
-    if (wsRef.current) return; // Verhindere doppelte Verbindungen
+  const connectWebSocket = (wsUrl = null) => {
+    if (websocketRef.current) return; // Verhindere doppelte Verbindungen
 
-    const wsUrl = `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
-    console.log('Connecting to WebSocket:', wsUrl);
+    // Nutze übergebene URL oder erstelle neue
+    const url = wsUrl || `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
+    console.log('Connecting to WebSocket:', url);
     
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+    const ws = new WebSocket(url);
+    websocketRef.current = ws;
 
     ws.onopen = () => {
       console.log('WebSocket Connected, waiting for video data...');
+      // Nur State updaten wenn noch mounted
+      if (mountedRef.current) {
+        setError(null);
+      }
     };
 
     // Funktion zum Verarbeiten der Queue
@@ -133,22 +166,29 @@ const RTSPStream = ({ printer, fullscreen }) => {
       }
     };
 
-    ws.onerror = (event) => {
-      console.error('WebSocket Error:', event);
-      setError('WebSocket connection failed');
+    ws.onerror = (e) => {
+      console.error('WebSocket Error:', e);
+      // Nur State updaten wenn noch mounted
+      if (mountedRef.current) {
+        setError('Failed to connect to video stream');
+      }
     };
 
     ws.onclose = () => {
       console.log('WebSocket Closed');
-      wsRef.current = null;
+      websocketRef.current = null;  // Reset websocket ref
+      // Reconnect wenn noch mounted
+      if (mountedRef.current) {
+        setTimeout(() => connectWebSocket(url), 1000);
+      }
     };
   };
 
   const cleanup = () => {
     // WebSocket cleanup
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (websocketRef.current) {
+      websocketRef.current.close();
+      websocketRef.current = null;
     }
 
     // SourceBuffer cleanup

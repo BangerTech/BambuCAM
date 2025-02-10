@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress } from '@mui/material';
+import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress, Chip } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -85,7 +85,18 @@ const PrinterCard = ({ printer, onRemove }) => {
           </div>
         }
         title={printer.name || 'Unnamed Printer'}
-        subheader={printer.ip}
+        subheader={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              {printer.ip}
+            </Typography>
+            <Chip 
+              size="small"
+              label={printer.type}
+              color={printer.type === 'CLOUD' ? 'primary' : 'default'}
+            />
+          </Box>
+        }
       />
       <CardContent sx={{ p: 0, flex: 1 }}>
         <Box sx={videoContainerStyle}>

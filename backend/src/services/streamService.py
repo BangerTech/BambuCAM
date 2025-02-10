@@ -10,7 +10,7 @@ import subprocess
 import threading
 from queue import Queue
 import os
-from .printerService import stored_printers, getPrinters
+from .printerService import stored_printers, getPrinters, getPrinterById as get_printer
 import logging
 from pathlib import Path
 from threading import Thread
@@ -29,7 +29,7 @@ class StreamService:
     def start_stream(self, printer_id, stream_url, port):
         """Startet einen neuen Stream"""
         try:
-            logger.info(f"Starting new stream for printer {printer_id}")
+            logger.info(f"Starting stream for {printer_id} with URL {stream_url}")
             
             # Stoppe existierenden Stream falls vorhanden
             self.stop_stream(printer_id)
@@ -49,13 +49,28 @@ class StreamService:
                 'pipe:1'
             ]
 
+            logger.info(f"Starting FFmpeg with command: {' '.join(command)}")
+            
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=10**8
+                stderr=subprocess.PIPE
             )
-
+            
+            # Prüfe ob FFmpeg erfolgreich gestartet
+            time.sleep(1)
+            if process.poll() is not None:
+                error = process.stderr.read().decode()
+                logger.error(f"FFmpeg failed to start: {error}")
+                return False
+            
+            # Lese erste Fehlerausgabe auch wenn Prozess läuft
+            error = process.stderr.read1(4096).decode()
+            if error:
+                logger.info(f"FFmpeg output: {error}")
+            
+            logger.info("FFmpeg process started successfully")
+            
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
@@ -65,12 +80,12 @@ class StreamService:
             # Starte WebSocket Server
             if not self.ws_servers.get(port):
                 self.start_websocket_server(port)
-
+            
             return port
-
+        
         except Exception as e:
             logger.error(f"Error starting stream: {e}")
-            raise e
+            return False
 
     def start_websocket_server(self, port):
         """Startet einen WebSocket Server"""
@@ -112,7 +127,8 @@ class StreamService:
         if printer_id not in self.active_streams:
             return
             
-        process = self.active_streams[printer_id]['process']
+        stream_data = self.active_streams[printer_id]
+        process = stream_data['process']
         
         try:
             while True:
@@ -143,7 +159,8 @@ class StreamService:
         """Stoppt einen Stream"""
         if printer_id in self.active_streams:
             try:
-                process = self.active_streams[printer_id]['process']
+                stream_data = self.active_streams[printer_id]
+                process = stream_data['process']
                 if process:
                     process.terminate()
                     try:

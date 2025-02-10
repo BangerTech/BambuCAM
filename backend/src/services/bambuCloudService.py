@@ -2,6 +2,8 @@ import requests
 import logging
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -13,16 +15,44 @@ class Region(Enum):
     Other = "other"
 
 class BambuCloudService:
-    def __init__(self, region="global"):
-        self.token = None
+    def __init__(self):
+        self.base_url = "https://api.bambulab.com"
         self.session = requests.Session()
-        # Base URL basierend auf Region
-        self.base_url = "https://api.bambulab.cn" if region == "china" else "https://api.bambulab.com"
-        self.session.headers.update({
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        })
-        
+        self.config_file = Path("config/bambu_cloud.json")
+        self.config_file.parent.mkdir(exist_ok=True)
+        self.load_config()
+
+    def load_config(self):
+        """Lädt die gespeicherten Cloud Credentials"""
+        try:
+            if self.config_file.exists():
+                with open(self.config_file) as f:
+                    self.config = json.load(f)
+                    # Token aus Config laden und Session wiederherstellen
+                    if self.config.get('token'):
+                        self.token = self.config['token']
+                        self.session.headers.update({
+                            "Authorization": f"Bearer {self.token}"
+                        })
+                        logger.info("Loaded cloud credentials from config")
+            else:
+                self.config = {}
+                self.token = None
+        except Exception as e:
+            logger.error(f"Error loading cloud config: {e}")
+            self.config = {}
+            self.token = None
+
+    def save_config(self):
+        """Speichert die Cloud Credentials"""
+        try:
+            self.config['token'] = self.token
+            with open(self.config_file, 'w') as f:
+                json.dump(self.config, f)
+            logger.info("Saved cloud credentials to config")
+        except Exception as e:
+            logger.error(f"Error saving cloud config: {e}")
+
     def login(self, email: str, password: str, verification_code: str = None):
         """Login mit Bambulab Account"""
         try:
@@ -75,6 +105,7 @@ class BambuCloudService:
                     self.session.headers.update({
                         "Authorization": f"Bearer {self.token}"
                     })
+                    self.save_config()  # Token speichern
                     return {"success": True, "token": self.token}
             
             error_msg = f"Login failed: Status {response.status_code} - {response.text}"
@@ -92,7 +123,19 @@ class BambuCloudService:
     def get_cloud_printers(self):
         """Holt die Liste der Cloud-Drucker"""
         try:
-            response = self.make_request('GET', 'v1/iot-service/api/user/bind')
+            if not self.token:
+                logger.warning("No token available for cloud printers request")
+                return []
+
+            headers = {
+                'Authorization': f'Bearer {self.token}'
+            }
+            
+            response = requests.get(
+                f"{self.base_url}/v1/iot-service/api/user/bind",
+                headers=headers
+            )
+            
             if response.status_code == 200:
                 data = response.json()
                 logger.info(f"Get cloud printers response: {response.status_code} - {data}")
@@ -108,8 +151,10 @@ class BambuCloudService:
                         'type': 'cloud',  # Wichtig: Markiere als Cloud-Drucker
                         'access_code': printer['dev_access_code']
                     } for printer in data['devices']]
-                return []
-                
+            
+            logger.warning(f"Failed to get cloud printers: {response.status_code}")
+            return []
+            
         except Exception as e:
             logger.error(f"Error getting cloud printers: {e}")
             return []
@@ -147,4 +192,30 @@ class BambuCloudService:
             return response.json().get("url")
         except Exception as e:
             logger.error(f"Failed to get stream URL: {e}")
-            return None 
+            return None
+
+    def get_printers(self):
+        """Holt Liste der verfügbaren Cloud-Drucker"""
+        try:
+            if not self.token:
+                return []
+
+            headers = {
+                'Authorization': f"Bearer {self.token}"
+            }
+            
+            response = requests.get(f"{self.base_url}/iot-service/api/user/printers", headers=headers)
+            data = response.json()
+            
+            if response.ok and data.get('message') == 'success':
+                return [{
+                    'name': printer.get('name', 'Cloud Printer'),
+                    'ip': printer.get('dev_id'),  # Wir nutzen dev_id als "IP"
+                    'type': 'CLOUD',
+                    'model': printer.get('model'),
+                    'online': printer.get('online', False)
+                } for printer in data.get('printers', [])]
+            return []
+        except Exception as e:
+            logger.error(f"Error getting cloud printers: {e}")
+            return [] 
