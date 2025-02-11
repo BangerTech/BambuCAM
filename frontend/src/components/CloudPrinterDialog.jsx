@@ -104,7 +104,8 @@ const CloudPrinterDialog = ({ open, onClose }) => {
             online: printer.online,
             isCloud: true,
             cloudId: printer.id,
-            status: printer.status
+            status: printer.status,
+            type: 'CLOUD'
           };
         });
         console.log('Mapped printers:', cloudPrinters);
@@ -123,21 +124,13 @@ const CloudPrinterDialog = ({ open, onClose }) => {
 
   const handleAddPrinter = async (printer) => {
     try {
-      console.log('Adding printer:', printer);
       const printerData = {
         name: printer.name,
         type: 'CLOUD',
-        cloudId: printer.cloudId,
-        accessCode: printer.accessCode,
-        model: printer.model,
-        status: 'offline',
-        temperatures: {
-          nozzle: 0,
-          bed: 0,
-          chamber: 0
-        },
-        progress: 0,
-        remaining_time: 0
+        cloudId: printer.dev_id,
+        accessCode: printer.dev_access_code,
+        model: printer.dev_product_name,
+        status: printer.online ? 'online' : 'offline'
       };
 
       console.log('Sending printer data:', printerData);
