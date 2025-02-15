@@ -4,15 +4,16 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      - /app/build
     environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
       - NODE_ENV=development
+      - REACT_APP_DEV=true
     network_mode: "host"
-    restart: unless-stopped
+    command: npm start
 
   backend:
     build:

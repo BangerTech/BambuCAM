@@ -4,6 +4,9 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RTSPStream from './RTSPStream';
+import BambuLabInfo from './BambuLabInfo';
+import CrealityInfo from './CrealityInfo';
+import GenericInfo from './GenericInfo';
 
 const PrinterCard = ({ printer, onDelete }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -80,6 +83,18 @@ const PrinterCard = ({ printer, onDelete }) => {
     textAlign: 'center'
   };
 
+  // Drucker-spezifische Rendering Logik
+  const renderPrinterInfo = () => {
+    switch(printer.type) {
+      case 'BAMBULAB':
+        return <BambuLabInfo printer={printer} />;
+      case 'CREALITY':
+        return <CrealityInfo printer={printer} />;
+      default:
+        return <GenericInfo printer={printer} />;
+    }
+  };
+
   return (
     <Card ref={cardRef} sx={cardStyle}>
       <CardHeader
@@ -142,6 +157,7 @@ const PrinterCard = ({ printer, onDelete }) => {
             )}
           </Box>
         </Box>
+        {renderPrinterInfo()}
         {isDeleting && (
           <Box sx={{
             position: 'absolute',

@@ -1,4 +1,4 @@
-FROM node:16-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -9,11 +9,10 @@ RUN npm install
 # Anwendungscode kopieren
 COPY . .
 
-# Build für Produktion
-RUN npm run build
+ENV NODE_ENV=development
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
 
-# Serve mit einem leichten Webserver
-RUN npm install -g serve
+EXPOSE 3000
 
-# Warte auf Build-Verzeichnis und starte Server
-CMD sh -c 'while [ ! -d "build" ]; do sleep 1; done && serve -s build -l 3000' 
+CMD ["npm", "start"] 
