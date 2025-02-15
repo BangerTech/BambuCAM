@@ -12,5 +12,5 @@ opencv-python-headless==4.8.1.78
 numpy==1.24.3
 paho-mqtt>=2.0.0
 bambulabs-api==2.5.8
-psutil==5.9.5
-python-telegram-bot==13.7 
+psutil==5.9.0
+python-telegram-bot==13.7

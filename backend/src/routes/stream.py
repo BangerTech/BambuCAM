@@ -1,27 +1,8 @@
 from flask import Blueprint, jsonify, request
-from flask_cors import CORS
 from src.services.streamService import stream_service
 from src.utils.logger import logger
 
 stream_bp = Blueprint('stream', __name__)
-
-# CORS für Stream Blueprint
-CORS(stream_bp, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
-
-@stream_bp.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response, 200
 
 @stream_bp.route('/<printer_id>/reset', methods=['POST'])
 def reset_stream(printer_id):

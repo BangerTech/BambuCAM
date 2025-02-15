@@ -11,6 +11,7 @@ import uuid
 import paho.mqtt.client as mqtt
 import bambulabs_api as bl
 import ssl
+from src.printer_types import PRINTER_CONFIGS
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -107,17 +108,21 @@ class PrinterService:
 # Globale Instanz des PrinterService
 printer_service = PrinterService()
 
-async def test_stream_url(url):
+async def test_stream_url(url, printer_type='BAMBULAB'):
     """Testet ob eine Stream-URL erreichbar ist"""
     try:
-        command = [
-            'ffmpeg',
-            '-rtsp_transport', 'tcp',
+        command = ['ffmpeg']
+        
+        # Füge typ-spezifische Optionen hinzu
+        if printer_type in PRINTER_CONFIGS:
+            command.extend(PRINTER_CONFIGS[printer_type]['ffmpeg_options'])
+        
+        command.extend([
             '-i', url,
             '-t', '1',
             '-f', 'null',
             '-'
-        ]
+        ])
         
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -174,12 +179,46 @@ def getPrinterById(printer_id):
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
     try:
-        printers = getPrinters()
-        if not isinstance(printers, list):
-            printers = []
-        printers.append(data)
-        savePrinters(printers)
-        return data
+        printer_type = data.get('type', 'BAMBULAB')
+        
+        # Erstelle Drucker-Objekt
+        printer = {
+            'id': str(uuid.uuid4()),
+            'name': data['name'],
+            'ip': data['ip'],
+            'type': printer_type,
+            'model': data.get('model', 'Unknown'),
+            'wsPort': getNextPort()
+        }
+        
+        # Generiere Stream-URL basierend auf Druckertyp
+        config = PRINTER_CONFIGS.get(printer_type)
+        if config:
+            if printer_type == 'BAMBULAB':
+                printer['accessCode'] = data['accessCode']
+                printer['streamUrl'] = config['stream_url_template'].format(
+                    ip=data['ip'],
+                    access_code=data['accessCode']
+                )
+            elif printer_type == 'CREALITY':
+                printer['streamUrl'] = config['stream_url_template'].format(
+                    ip=data['ip']
+                )
+            else:  # CUSTOM
+                printer['streamUrl'] = data['streamUrl']
+        
+        # Teste die Verbindung
+        testStream = startStream(printer['id'], printer['streamUrl'], printer_type)
+        if not testStream:
+            raise Exception("Konnte keine Verbindung zum Drucker herstellen")
+            
+        # Speichere Drucker
+        current_printers = getPrinters()
+        current_printers.append(printer)
+        savePrinters(current_printers)
+        
+        return printer
+        
     except Exception as e:
         logger.error(f"Fehler beim Hinzufügen des Druckers: {str(e)}")
         raise e

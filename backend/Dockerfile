@@ -1,27 +1,28 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Installiere Systemabhängigkeiten
+WORKDIR /app
+
+# System-Abhängigkeiten
 RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     ffmpeg \
     gcc \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
-
-# Copy requirements first for better caching
+# Python-Abhängigkeiten
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies
-RUN pip install -r requirements.txt
-
-# Copy the rest of the application
+# Anwendungscode kopieren
 COPY . .
 
-# Erstelle assets Verzeichnis und kopiere Logo
-COPY assets /app/assets
+# Berechtigungen für Daten- und Log-Verzeichnisse
+RUN mkdir -p /app/data/printers /app/data/streams /app/logs \
+    && chmod -R 777 /app/data /app/logs
 
-EXPOSE 4000
+ENV FLASK_APP=src.app
+ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "src.app"] 
+CMD ["flask", "run", "--host=0.0.0.0", "--port=4000"] 

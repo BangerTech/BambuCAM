@@ -6,6 +6,7 @@ import { Box } from '@mui/material';
 import styled from '@emotion/styled';
 import CloudLoginDialog from './components/CloudLoginDialog';
 import CloudPrinterDialog from './components/CloudPrinterDialog';
+import { API_URL } from './config';
 
 const PageBackground = styled(Box)(({ theme }) => ({
   position: 'relative',
@@ -31,9 +32,6 @@ const ContentWrapper = styled(Box)({
   zIndex: 1,
   padding: 24
 });
-
-// Dynamische API_URL basierend auf dem aktuellen Host
-const API_URL = `${window.location.protocol}//${window.location.hostname}:4000`;
 
 function App() {
   // Theme aus localStorage laden
@@ -63,23 +61,23 @@ function App() {
 
   // Lade LAN Drucker
   useEffect(() => {
-    let isMounted = true;  // Prevent memory leak
+    let isMounted = true;
 
     if (mode === 'lan') {
-      fetch(`${API_URL}/printers`)
-        .then(res => res.json())
-        .then(data => {
-          if (isMounted) {
-            setLanPrinters(data);
-          }
-        })
-        .catch(err => console.error('Error loading LAN printers:', err));
+        fetch(`${API_URL}/printers`)
+            .then(res => res.json())
+            .then(data => {
+                if (isMounted) {
+                    setLanPrinters(data);
+                }
+            })
+            .catch(err => console.error('Error loading LAN printers:', err));
     }
 
     return () => {
-      isMounted = false;  // Cleanup
+        isMounted = false;
     };
-  }, [mode]);
+}, [mode]);
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
@@ -137,7 +135,7 @@ function App() {
   // Cloud-Drucker laden
   const loadCloudPrinters = async (token) => {
     try {
-      const response = await fetch(`${API_URL}/api/cloud/printers`, {
+      const response = await fetch(`${API_URL}/cloud/printers`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -169,8 +167,7 @@ function App() {
       if (loginData.success && loginData.token) {
         localStorage.setItem('cloudToken', loginData.token);
         
-        // Hole verfügbare Cloud-Drucker
-        const response = await fetch(`${API_URL}/api/cloud/printers`, {
+        const response = await fetch(`${API_URL}/cloud/printers`, {
           headers: {
             'Authorization': `Bearer ${loginData.token}`
           }

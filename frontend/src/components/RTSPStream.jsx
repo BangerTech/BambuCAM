@@ -16,6 +16,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   const mountedRef = useRef(true);
   const resetTimerRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const retryCount = useRef(0);
 
   // Funktion zum Neustarten des Stream-Stacks
   const resetStreamStack = useCallback(async () => {
@@ -69,31 +70,6 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         setLoading(false);
     }
   }, [printer.id]);
-
-  // Reset-Timer Setup
-  useEffect(() => {
-    // Wenn es nur ein Fullscreen-Toggle ist, Timer nicht neu starten
-    if (videoRef.current && document.fullscreenElement === videoRef.current) {
-      return;
-    }
-
-    // Alten Timer aufräumen
-    if (resetTimerRef.current) {
-      clearInterval(resetTimerRef.current);
-    }
-
-    // Neuen Timer setzen (4 Minuten = 240000 ms)
-    resetTimerRef.current = setInterval(() => {
-      resetStreamStack();
-    }, 240000);
-
-    return () => {
-      if (resetTimerRef.current) {
-        clearInterval(resetTimerRef.current);
-        resetTimerRef.current = null;
-      }
-    };
-  }, [printer.id, resetStreamStack]);
 
   // Separater Effekt nur für Fullscreen
   useEffect(() => {
@@ -190,110 +166,73 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     }
   };
 
-  const connectWebSocket = (wsUrl = null) => {
-    if (!mountedRef.current) return;
-
-    if (websocketRef.current) {
-        try {
-            websocketRef.current.onclose = null; // Prevent auto-reconnect
-            websocketRef.current.close();
-            console.log("Previous WebSocket closed");
-        } catch (err) {
-            console.error("Error closing WebSocket:", err);
-        }
-        websocketRef.current = null;
-    }
-
-    const backoff = (retries) => {
-        return Math.min(1000 * Math.pow(2, retries), 10000);
+  const connectWebSocket = () => {
+    // Neue WebSocket URL ohne Port
+    const url = `ws://${window.location.hostname}/stream/${printer.id}`;
+    
+    // Exponentieller Backoff
+    const reconnect = (attempt = 0) => {
+        if (attempt > 3) return;
+        
+        setTimeout(() => {
+            if (!mountedRef.current) return;
+            console.log(`Reconnect attempt ${attempt + 1}`);
+            connectWebSocket();
+        }, Math.pow(2, attempt) * 1000);
     };
 
-    let retryCount = 0;
-    const maxRetries = 3;
+    const ws = new WebSocket(url);
+    
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+        setError(null);
+    };
+    
+    ws.onclose = () => reconnect(0);
+    ws.onerror = () => reconnect(0);
+    
+    // Funktion zum Verarbeiten der Queue
+    const processBufferQueue = async () => {
+        if (isProcessing.current || !sourceBufferRef.current || bufferQueue.current.length === 0) {
+            return;
+        }
 
-    const tryConnect = () => {
-        const url = wsUrl || `ws://${window.location.hostname}:${printer.wsPort}/stream/${printer.id}`;
-        console.log(`Connecting to WebSocket (attempt ${retryCount + 1}/${maxRetries}):`, url);
+        isProcessing.current = true;
         
-        const ws = new WebSocket(url);
-        websocketRef.current = ws;
-
-        ws.onopen = () => {
-            console.log('WebSocket Connected');
-            retryCount = 0;
-            setError(null);
-        };
-
-        ws.onclose = (e) => {
-            if (retryCount < maxRetries) {
-                const delay = backoff(retryCount++);
-                console.log(`Reconnecting in ${delay}ms...`);
-                setTimeout(tryConnect, delay);
+        try {
+            while (bufferQueue.current.length > 0 && !sourceBufferRef.current.updating) {
+                const data = bufferQueue.current.shift();
+                sourceBufferRef.current.appendBuffer(data);
+                await new Promise(resolve => {
+                    sourceBufferRef.current.addEventListener('updateend', resolve, { once: true });
+                });
             }
-        };
-
-        // Funktion zum Verarbeiten der Queue
-        const processBufferQueue = async () => {
-            if (isProcessing.current || !sourceBufferRef.current || bufferQueue.current.length === 0) {
-                return;
-            }
-
-            isProcessing.current = true;
+        } catch (err) {
+            console.error('Error processing buffer queue:', err);
+        } finally {
+            isProcessing.current = false;
             
-            try {
-                while (bufferQueue.current.length > 0 && !sourceBufferRef.current.updating) {
-                    const data = bufferQueue.current.shift();
-                    sourceBufferRef.current.appendBuffer(data);
-                    await new Promise(resolve => {
-                        sourceBufferRef.current.addEventListener('updateend', resolve, { once: true });
-                    });
-                }
-            } catch (err) {
-                console.error('Error processing buffer queue:', err);
-            } finally {
-                isProcessing.current = false;
-                
-                // Falls noch Daten in der Queue sind, weiter verarbeiten
-                if (bufferQueue.current.length > 0) {
-                    processBufferQueue();
-                }
-            }
-        };
-
-        ws.onmessage = async (event) => {
-            try {
-                const data = await event.data.arrayBuffer();
-                bufferQueue.current.push(data);
+            // Falls noch Daten in der Queue sind, weiter verarbeiten
+            if (bufferQueue.current.length > 0) {
                 processBufferQueue();
-                
-                // Setze Loading erst nach mehreren Frames zurück
-                if (bufferQueue.current.length > 5) {
-                    setLoading(false);
-                    
-                    // Reset Timer erst wenn Stream wirklich läuft
-                    if (resetTimerRef.current) {
-                        clearInterval(resetTimerRef.current);
-                    }
-                    resetTimerRef.current = setInterval(() => {
-                        resetStreamStack();
-                    }, 240000);
-                }
-            } catch (err) {
-                console.error('Error handling WebSocket message:', err);
             }
-        };
+        }
+    };
 
-        ws.onerror = (e) => {
-            console.error('WebSocket Error:', e);
-            // Detailliertere Fehlermeldung
-            if (mountedRef.current) {
-                setError(`Failed to connect to video stream (${e.type})`);
+    ws.onmessage = async (event) => {
+        try {
+            const data = await event.data.arrayBuffer();
+            bufferQueue.current.push(data);
+            processBufferQueue();
+            
+            // Setze Loading erst nach mehreren Frames zurück
+            if (bufferQueue.current.length > 5) {
                 setLoading(false);
             }
-        };
+        } catch (err) {
+            console.error('Error handling WebSocket message:', err);
+        }
     };
-
-    tryConnect();
   };
 
   const cleanup = () => {
@@ -336,6 +275,18 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     bufferQueue.current = [];
     isProcessing.current = false;
   };
+
+  const handleWebSocketError = useCallback(() => {
+    if (retryCount.current < 3) {
+        const delay = Math.pow(2, retryCount.current) * 1000;
+        retryCount.current += 1;
+        setTimeout(() => {
+            initializeWebSocket();
+        }, delay);
+    } else {
+        setError('Connection failed after 3 attempts');
+    }
+  }, [initializeWebSocket]);
 
   return (
     <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>

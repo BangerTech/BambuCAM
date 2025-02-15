@@ -1,4 +1,4 @@
-from .telegramService import telegram_service
+from src.services.telegramService import telegram_service
 import logging
 
 logger = logging.getLogger(__name__)

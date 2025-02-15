@@ -2,21 +2,18 @@ FROM node:16-alpine
 
 WORKDIR /app
 
-# Kopiere package.json und package-lock.json
+# Dependencies installieren
 COPY package*.json ./
+RUN npm install
 
-# Installiere Abhängigkeiten und react-scripts global
-RUN npm install -g react-scripts && npm install
-
-# Kopiere den Rest des Codes (inkl. Assets)
+# Anwendungscode kopieren
 COPY . .
 
-# Setze Umgebungsvariablen
-ENV NODE_ENV=development
-ENV REACT_APP_API_URL=http://backend:4000
+# Build für Produktion
+RUN npm run build
 
-# Exponiere Port 3000
-EXPOSE 3000
+# Serve mit einem leichten Webserver
+RUN npm install -g serve
 
-# Starte die Entwicklungsumgebung
-CMD ["npm", "start"] 
+# Warte auf Build-Verzeichnis und starte Server
+CMD sh -c 'while [ ! -d "build" ]; do sleep 1; done && serve -s build -l 3000' 

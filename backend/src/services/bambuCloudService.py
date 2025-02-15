@@ -218,4 +218,7 @@ class BambuCloudService:
             return []
         except Exception as e:
             logger.error(f"Error getting cloud printers: {e}")
-            return [] 
+            return []
+
+# Globale Instanz
+bambu_cloud_service = BambuCloudService() 

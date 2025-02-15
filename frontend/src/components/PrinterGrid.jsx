@@ -22,6 +22,24 @@ import { API_URL } from '../config';
 console.log('Using API URL:', API_URL);  // Debug log
 
 const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [] }) => {
+  // State Definitionen
+  const [open, setOpen] = useState(false);
+  const [addMethod, setAddMethod] = useState(0);
+  const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
+  const [scannedPrinters, setScannedPrinters] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);  // isAdding State hinzufügen
+  const [fullscreenPrinter, setFullscreenPrinter] = useState(null);
+  const [error, setError] = useState(null);  // Error State hinzufügen
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+  const [showGuide, setShowGuide] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+
   // Stelle sicher, dass printers immer ein Array ist
   const printerList = Array.isArray(printers) ? printers : [];
   const [localPrinters, setLocalPrinters] = useState([]);
@@ -47,9 +65,15 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         }
         const data = await response.json();
         setLocalPrinters(data);
-      } catch (error) {
-        console.error('Error loading printers:', error);
-        setError('Failed to load printers');
+        setError(null);  // Fehler zurücksetzen wenn erfolgreich
+      } catch (err) {
+        console.error('Error loading printers:', err);
+        setError(err.message);
+        setSnackbar({
+          open: true,
+          message: 'Failed to load printers',
+          severity: 'error'
+        });
       }
     };
 
@@ -94,23 +118,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   }, [mode]);
 
-  const [open, setOpen] = useState(false);
-  const [newPrinter, setNewPrinter] = useState({ name: '', ip: '', accessCode: '' });
-  const [isScanning, setIsScanning] = useState(false);
   const [scanTimer, setScanTimer] = useState(10);
   const [foundPrinters, setFoundPrinters] = useState([]);
   const [printerStatus, setPrinterStatus] = useState({});
-  const [fullscreenPrinter, setFullscreenPrinter] = useState(null);
-  const [showGuide, setShowGuide] = useState(false);
-  const [isAdding, setIsAdding] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: '',
-    severity: 'success'
-  });
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [scannedPrinters, setScannedPrinters] = useState([]);
-  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -146,59 +156,40 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   // Modifizierte handleAddPrinter Funktion
-  const handleAddPrinter = async (selectedPrinter) => {
+  const handleAddPrinter = async (printer) => {
+    setIsAdding(true);  // Start loading
     try {
-      setIsAdding(true);
-      console.log('Füge Drucker hinzu:', selectedPrinter);
-      
-      // Unterschiedliche Behandlung für Cloud- und lokale Drucker
-      const printerData = selectedPrinter.isCloud ? {
-        ...selectedPrinter,
-        type: 'BAMBULAB_CLOUD'
-      } : {
-        ...selectedPrinter,
-        type: 'BAMBULAB',
-        streamUrl: `rtsps://bblp:${selectedPrinter.accessCode}@${selectedPrinter.ip}:322/streaming/live/1`
-      };
-      
       const response = await fetch(`${API_URL}/printers`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(printerData)
+        body: JSON.stringify(printer)
       });
 
+      if (!response.ok) {
+        throw new Error('Failed to add printer');
+      }
+
       const data = await response.json();
-      console.log('Server Response:', data);
-
-      if (!data.success) {
-        throw new Error(data.error || 'Unknown error');
-      }
-
-      if (data.success && data.printer) {
-        const updatedPrinters = [...localPrinters, data.printer];
-        setLocalPrinters(updatedPrinters);
-        // Neue Position am Ende hinzufügen
-        updatePrinterOrder(updatedPrinters);
-        setOpen(false);
-        setNewPrinter({ name: '', ip: '', accessCode: '' });
-        
-        setSnackbar({
-          open: true,
-          message: `Printer "${data.printer.name}" added successfully`,
-          severity: 'success'
-        });
-      }
-    } catch (error) {
-      console.error('Fehler beim Hinzufügen:', error);
+      setLocalPrinters([...localPrinters, data.printer]);
+      setOpen(false);
+      setNewPrinter({ name: '', ip: '', accessCode: '' });
+      
       setSnackbar({
         open: true,
-        message: `Error: ${error.message}`,
+        message: 'Printer added successfully',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error adding printer:', err);
+      setSnackbar({
+        open: true,
+        message: 'Failed to add printer',
         severity: 'error'
       });
     } finally {
-      setIsAdding(false);
+      setIsAdding(false);  // End loading
     }
   };
 
@@ -451,11 +442,14 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Überwache Statusänderungen für Benachrichtigungen
   useEffect(() => {
-    printers.forEach(printer => {
-      if (['failed', 'error', 'finished'].includes(printer.status)) {
-        showNotification(printer, printer.status);
-      }
-    });
+    // Prüfe ob printers ein Array ist und nicht null/undefined
+    if (Array.isArray(printers)) {
+        printers.forEach(printer => {
+            if (['failed', 'error', 'finished'].includes(printer.status)) {
+                showNotification(printer, printer.status);
+            }
+        });
+    }
   }, [printers]);
 
   // Status-Management für alle Drucker
@@ -485,7 +479,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         </IconButton>
         <PrinterCard 
           printer={printerWithStatus}  // Übergebe Drucker mit Status
-          onDelete={handleDelete}
+          onRemove={handleDelete}
           isFullscreen={true}
           onFullscreenToggle={handleFullscreenToggle}
         />

@@ -1,24 +1,45 @@
-services:
-  backend:
-    build: ./backend
-    network_mode: "host"
-    volumes:
-      - ./backend:/app
-      - /app/__pycache__
-    environment:
-      - FLASK_APP=app.py
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-    command: flask run --host=0.0.0.0 --port=4000
-    privileged: true
+version: '3.8'
 
+services:
   frontend:
-    build: ./frontend
-    network_mode: "host"  # Auch das Frontend auf host networking
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      - /app/build
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://${HOST_IP:-localhost}
+    network_mode: "host"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+      - bambucam_data:/app/data
+      - bambucam_logs:/app/logs
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - HOST_IP=${HOST_IP:-localhost}
+    network_mode: "host"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    network_mode: "host"
+    restart: unless-stopped
     depends_on:
       - backend
+      - frontend
 
-# Networks-Section entfernen, da wir host networking verwenden 
+volumes:
+  bambucam_data:
+  bambucam_logs: 
