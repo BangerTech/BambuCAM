@@ -47,3 +47,34 @@ Thumbs.db
 !/backend/logs/.gitkeep
 /frontend/build
 /frontend/dist
+
+# Sensitive data
+backend/config/bambu_cloud.json
+backend/config/*.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Log files
+backend/logs/
+*.log
+
+# Data directories
+backend/data/
+data/
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependencies
+__pycache__/
+*.pyc
+
+# Build files
+frontend/build/
+dist/

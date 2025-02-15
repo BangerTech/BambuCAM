@@ -1,9 +1,10 @@
 const isDev = process.env.NODE_ENV === 'development';
 const hostname = window.location.hostname;
+const port = process.env.NODE_ENV === 'development' ? ':80' : '';  // Optional Port
 
 export const config = {
     // Wir nutzen die Nginx-Proxy-URL (Port 80)
-    API_URL: `http://${hostname}/api`,  // Kein Port nötig, da Nginx auf 80 läuft
+    API_URL: `http://${hostname}/api`,
     WS_URL: `ws://${hostname}/stream`,
     API_HOST: hostname,
     

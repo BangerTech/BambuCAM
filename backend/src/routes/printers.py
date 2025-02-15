@@ -3,10 +3,14 @@ from src.services.streamService import stream_service
 from src.services.printerService import removePrinter, getPrinters, addPrinter
 from src.services import scanNetwork
 from src.utils.logger import logger
+from flask_cors import cross_origin
+import logging
 
+logger = logging.getLogger(__name__)
 printers_bp = Blueprint('printers', __name__)
 
 @printers_bp.route('/printers', methods=['GET'])
+@cross_origin()
 def get_printers():
     try:
         printers = getPrinters()

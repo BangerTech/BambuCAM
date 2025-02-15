@@ -24,6 +24,12 @@ CORS(app, resources={
 # Blueprints registrieren
 register_blueprints(app)
 
+@app.before_request
+def log_request_info():
+    logger.debug('Headers: %s', request.headers)
+    logger.debug('Body: %s', request.get_data())
+    logger.debug('URL: %s', request.url)
+
 @app.route('/stream/<printer_id>/stop', methods=['POST'])
 def stop_stream(printer_id):
     """Stoppt einen laufenden Stream"""
@@ -41,5 +47,16 @@ def not_found(e):
         'error': 'Route not found'
     }), 404
 
+@app.route('/debug/routes')
+def list_routes():
+    routes = []
+    for rule in app.url_map.iter_rules():
+        routes.append({
+            'endpoint': rule.endpoint,
+            'methods': list(rule.methods),
+            'path': str(rule)
+        })
+    return jsonify(routes)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4000, debug=True)  # debug=True aktiviert Auto-Reload 
+    app.run(host='0.0.0.0', port=4000, debug=True)  # Wichtig: host='0.0.0.0' 
