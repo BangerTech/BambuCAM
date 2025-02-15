@@ -25,8 +25,15 @@ RTSP_PORT = 322
 # Globale Variable für gespeicherte Drucker
 stored_printers = {}
 
-# Pfad zur JSON-Datei
-PRINTERS_FILE = Path(os.getenv('PRINTERS_FILE', 'printers.json'))
+# Definiere Basis-Verzeichnis (das Backend-Verzeichnis)
+BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DATA_DIR = BASE_DIR / 'data'
+PRINTERS_DIR = DATA_DIR / 'printers'
+STREAMS_DIR = DATA_DIR / 'streams'
+
+# Stelle sicher, dass die Verzeichnisse existieren
+os.makedirs(PRINTERS_DIR, exist_ok=True)
+os.makedirs(STREAMS_DIR, exist_ok=True)
 
 class PrinterService:
     def __init__(self):
@@ -105,6 +112,28 @@ class PrinterService:
             self.mqtt_clients.clear()
             self.printer_data.clear()
 
+    def connect_printer(self, printer_id: str, printer_type: str, ip: str):
+        """Verbindet einen Drucker basierend auf seinem Typ"""
+        try:
+            # Prüfe ob bereits eine Verbindung besteht
+            if printer_id in self.mqtt_clients:
+                if self.mqtt_clients[printer_id].is_connected():
+                    logger.info(f"Printer {printer_id} already connected")
+                    return
+                self.mqtt_clients[printer_id].disconnect()
+                
+            # Verbinde basierend auf Drucker-Typ
+            if printer_type == 'BAMBULAB':
+                self.connect_mqtt(printer_id, ip)
+            elif printer_type == 'CREALITY':
+                client = setup_creality_mqtt(printer_id, ip)
+                if client:
+                    self.mqtt_clients[printer_id] = client
+                    logger.info(f"Successfully connected Creality printer {printer_id}")
+                    
+        except Exception as e:
+            logger.error(f"Error connecting printer {printer_id}: {e}", exc_info=True)
+
 # Globale Instanz des PrinterService
 printer_service = PrinterService()
 
@@ -141,99 +170,104 @@ async def test_stream_url(url, printer_type='BAMBULAB'):
         logger.debug(f"Error testing stream URL {url}: {e}")
         return False
 
-def getPrinters():
-    """Lädt die gespeicherten Drucker"""
-    try:
-        if PRINTERS_FILE.exists():
-            with open(PRINTERS_FILE, 'r') as f:
-                data = json.load(f)
-                # Stelle sicher, dass wir eine Liste zurückgeben
-                return data if isinstance(data, list) else []
-        return []
-    except Exception as e:
-        logger.error(f"Fehler beim Laden der Drucker: {str(e)}")
-        return []
-
-def savePrinters(printers):
-    """Speichert die Drucker-Liste"""
-    try:
-        # Stelle sicher, dass wir eine Liste speichern
-        if not isinstance(printers, list):
-            printers = list(printers.values()) if isinstance(printers, dict) else []
-            
-        with open(PRINTERS_FILE, 'w') as f:
-            json.dump(printers, f, indent=2)
-    except Exception as e:
-        logger.error(f"Fehler beim Speichern der Drucker: {str(e)}")
-        raise e
-
-def getPrinterById(printer_id):
-    """Findet einen Drucker anhand seiner ID"""
-    printers = getPrinters()
-    if isinstance(printers, list):
-        for printer in printers:
-            if printer.get('id') == printer_id:
-                return printer
-    return None
-
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
     try:
-        printer_type = data.get('type', 'BAMBULAB')
-        
-        # Erstelle Drucker-Objekt
+        # Erstelle Drucker-Objekt mit UUID
         printer = {
             'id': str(uuid.uuid4()),
             'name': data['name'],
             'ip': data['ip'],
-            'type': printer_type,
-            'model': data.get('model', 'Unknown'),
-            'wsPort': getNextPort()
+            'type': data.get('type', 'BAMBULAB'),
+            'status': 'offline',
+            'temperatures': {
+                'nozzle': 0,
+                'bed': 0
+            },
+            'progress': 0,
+            'port': getNextPort(),
+            'accessCode': data.get('accessCode', '')
         }
         
-        # Generiere Stream-URL basierend auf Druckertyp
-        config = PRINTER_CONFIGS.get(printer_type)
-        if config:
-            if printer_type == 'BAMBULAB':
-                printer['accessCode'] = data['accessCode']
-                printer['streamUrl'] = config['stream_url_template'].format(
-                    ip=data['ip'],
-                    access_code=data['accessCode']
-                )
-            elif printer_type == 'CREALITY':
-                printer['streamUrl'] = config['stream_url_template'].format(
-                    ip=data['ip']
-                )
-            else:  # CUSTOM
-                printer['streamUrl'] = data['streamUrl']
-        
-        # Teste die Verbindung
-        testStream = startStream(printer['id'], printer['streamUrl'], printer_type)
-        if not testStream:
-            raise Exception("Konnte keine Verbindung zum Drucker herstellen")
+        # Speichere in JSON-Datei
+        printer_file = os.path.join(PRINTERS_DIR, f"{printer['id']}.json")
+        with open(printer_file, 'w') as f:
+            json.dump(printer, f, indent=2)
             
-        # Speichere Drucker
-        current_printers = getPrinters()
-        current_printers.append(printer)
-        savePrinters(current_printers)
-        
+        # MQTT-Verbindung über PrinterService einrichten
+        printer_service.connect_printer(
+            printer_id=printer['id'],
+            printer_type=printer['type'],
+            ip=printer['ip']
+        )
+            
         return printer
         
     except Exception as e:
-        logger.error(f"Fehler beim Hinzufügen des Druckers: {str(e)}")
-        raise e
+        logger.error(f"Error adding printer: {e}", exc_info=True)
+        raise
+
+def getPrinters():
+    """Lädt alle Drucker aus den einzelnen JSON-Dateien"""
+    printers = []
+    
+    try:
+        # Stelle sicher, dass das Verzeichnis existiert
+        os.makedirs(PRINTERS_DIR, exist_ok=True)
+        
+        logger.info(f"Loading printers from directory: {PRINTERS_DIR}")
+        
+        # Lade jeden Drucker aus seiner JSON-Datei
+        for printer_file in os.listdir(PRINTERS_DIR):
+            if printer_file.endswith('.json'):
+                file_path = PRINTERS_DIR / printer_file
+                try:
+                    with open(file_path, 'r') as f:
+                        printer = json.load(f)
+                        printers.append(printer)
+                        logger.debug(f"Loaded printer: {printer.get('name')} from {file_path}")
+                except Exception as e:
+                    logger.error(f"Error loading printer from {file_path}: {e}")
+                    continue
+                    
+        logger.info(f"Successfully loaded {len(printers)} printers")
+        return printers
+    except Exception as e:
+        logger.error(f"Error getting printers: {e}", exc_info=True)
+        return []
+
+def getPrinterById(printer_id):
+    """Lädt einen spezifischen Drucker aus seiner JSON-Datei"""
+    try:
+        printer_file = PRINTERS_DIR / f"{printer_id}.json"
+        with open(printer_file, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        logger.error(f"Error getting printer {printer_id}: {e}")
+        return None
 
 def removePrinter(printer_id):
-    """Entfernt einen Drucker anhand seiner ID"""
+    """Löscht einen Drucker und seine Stream-Daten"""
     try:
-        printers = getPrinters()
-        if isinstance(printers, list):
-            printers = [p for p in printers if p.get('id') != printer_id]
-            savePrinters(printers)
-            return True
-        return False
+        # Lösche Drucker-Datei
+        printer_file = PRINTERS_DIR / f"{printer_id}.json"
+        try:
+            os.remove(printer_file)
+        except FileNotFoundError:
+            pass
+
+        # Lösche zugehörige Stream-Datei falls vorhanden
+        stream_file = STREAMS_DIR / f"{printer_id}.json"
+        try:
+            os.remove(stream_file)
+        except FileNotFoundError:
+            pass
+
+        return True
     except Exception as e:
-        logger.error(f"Fehler beim Entfernen des Druckers: {str(e)}")
+        logger.error(f"Error removing printer {printer_id}: {e}")
         return False
 
 def scanNetwork():
@@ -460,4 +494,138 @@ def handle_mqtt_message(printer_id, data):
             logger.info(f"Sending notification for state {gcode_state}: {message}")
             
     except Exception as e:
-        logger.error(f"Error handling MQTT message: {e}") 
+        logger.error(f"Error handling MQTT message: {e}")
+
+def update_printer_status(printer_id: str, status_data: dict) -> None:
+    """Aktualisiert den Status eines Druckers."""
+    try:
+        printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
+        
+        if not os.path.exists(printer_file):
+            logger.error(f"Printer file not found: {printer_file}")
+            return
+            
+        with open(printer_file, 'r') as f:
+            printer_data = json.load(f)
+            
+        # Update nur die Status-relevanten Felder
+        printer_data.update({
+            'status': status_data.get('status', printer_data.get('status')),
+            'temperatures': status_data.get('temperatures', printer_data.get('temperatures', {})),
+            'progress': status_data.get('progress', printer_data.get('progress', 0))
+        })
+        
+        with open(printer_file, 'w') as f:
+            json.dump(printer_data, f, indent=2)
+            
+        logger.debug(f"Updated status for printer {printer_id}")
+        
+    except Exception as e:
+        logger.error(f"Error updating printer status: {e}", exc_info=True)
+
+def get_creality_status(printer_ip: str) -> dict:
+    """Holt den Status eines Creality K1 Druckers"""
+    try:
+        # Versuche zuerst den MJPG-Streamer Port
+        try:
+            response = requests.get(f"http://{printer_ip}:8080/?action=status", timeout=2)
+            if response.ok:
+                data = response.json()
+                return {
+                    'status': 'online' if data.get('connected', False) else 'offline',
+                    'temperatures': {
+                        'nozzle': data.get('temperature', {}).get('tool0', 0),
+                        'bed': data.get('temperature', {}).get('bed', 0)
+                    },
+                    'progress': data.get('progress', 0)
+                }
+        except:
+            pass
+            
+        # Wenn keine Verbindung möglich war
+        return {
+            'status': 'offline',
+            'temperatures': {
+                'nozzle': 0,
+                'bed': 0
+            },
+            'progress': 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting printer status: {e}", exc_info=True)
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
+
+def setup_creality_mqtt(printer_id: str, printer_ip: str):
+    """Richtet MQTT für einen Creality K1 Drucker ein"""
+    try:
+        logger.info(f"Setting up MQTT for Creality K1 printer {printer_id} at {printer_ip}")
+        client = mqtt.Client(f"print-cam-{printer_id}")
+        
+        def on_connect(client, userdata, flags, rc):
+            logger.info(f"Connected to K1 MQTT broker with result code {rc}")
+            # K1 spezifische Topics
+            topics = [
+                ("printer/status", 0),
+                ("printer/temperature", 0),
+                ("printer/progress", 0)
+            ]
+            try:
+                client.subscribe(topics)
+                logger.info(f"Subscribed to topics: {topics}")
+            except Exception as e:
+                logger.error(f"Error subscribing to topics: {e}")
+            
+        def on_message(client, userdata, msg):
+            try:
+                logger.info(f"Received K1 MQTT message: {msg.topic}")
+                logger.debug(f"Message payload: {msg.payload}")
+                
+                data = json.loads(msg.payload)
+                updates = {}
+                
+                if msg.topic == "printer/temperature":
+                    updates['temperatures'] = {
+                        'nozzle': data.get('tool0', {}).get('actual', 0),
+                        'bed': data.get('bed', {}).get('actual', 0)
+                    }
+                    logger.info(f"Temperature update: {updates['temperatures']}")
+                elif msg.topic == "printer/status":
+                    updates['status'] = data.get('status', 'offline')
+                    logger.info(f"Status update: {updates['status']}")
+                elif msg.topic == "printer/progress":
+                    updates['progress'] = data.get('progress', 0)
+                    logger.info(f"Progress update: {updates['progress']}")
+                    
+                if updates:
+                    update_printer_status(printer_id, updates)
+                    
+            except Exception as e:
+                logger.error(f"Error handling K1 MQTT message: {e}", exc_info=True)
+        
+        def on_disconnect(client, userdata, rc):
+            logger.warning(f"Disconnected from K1 MQTT broker with code {rc}")
+            if rc != 0:
+                logger.info("Attempting to reconnect...")
+                try:
+                    client.reconnect()
+                except Exception as e:
+                    logger.error(f"Reconnect failed: {e}")
+        
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.on_disconnect = on_disconnect
+        
+        # Verbinde zum MQTT Broker
+        logger.info(f"Connecting to MQTT broker at {printer_ip}:1883...")
+        client.connect(printer_ip, 1883, 60)
+        client.loop_start()
+        
+        return client
+        
+    except Exception as e:
+        logger.error(f"Error setting up MQTT for K1 printer: {e}", exc_info=True)
+        return None 

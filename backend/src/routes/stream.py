@@ -1,6 +1,7 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 from src.services.streamService import stream_service
 from src.utils.logger import logger
+import requests
 
 stream_bp = Blueprint('stream', __name__)
 
@@ -36,3 +37,37 @@ def reset_stream(printer_id):
             'success': False,
             'error': str(e)
         }), 500 
+
+@stream_bp.route('/stream/mjpeg/<printer_id>')
+def proxy_mjpeg_stream(printer_id):
+    try:
+        # Lade Drucker-Daten
+        printer = getPrinterById(printer_id)
+        if not printer:
+            return jsonify({'error': 'Printer not found'}), 404
+            
+        # Stream-URL für Creality
+        stream_url = f"http://{printer['ip']}:8080/?action=stream"
+        
+        def generate():
+            try:
+                response = requests.get(stream_url, stream=True)
+                if response.ok:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Error proxying MJPEG stream: {e}")
+                
+        return Response(
+            generate(),
+            mimetype='multipart/x-mixed-replace;boundary=boundarydonotcross',
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'no-store, no-cache, must-revalidate, pre-check=0, post-check=0, max-age=0',
+                'Pragma': 'no-cache'
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error setting up MJPEG proxy: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500 

@@ -1,16 +1,30 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
+from src.services import (
+    scanNetwork,
+    startStream,
+    addPrinter,
+    getPrinters,
+    removePrinter,
+    stream_service
+)
 from src.routes.system import system_bp
 from src.routes.notifications import notifications_bp
 from src.routes.stream import stream_bp
 from src.routes.printers import printers_bp
 from src.utils.logger import logger
-from src.services.streamService import stream_service
 from src.routes import register_blueprints
+import os
+from pathlib import Path
 
 app = Flask(__name__)
 logger.info("Starting Flask application...")
+
+# Definiere Basis-Verzeichnis
+BASE_DIR = Path(os.path.dirname(os.path.dirname(__file__)))
+DATA_DIR = BASE_DIR / 'data'
+PRINTERS_DIR = DATA_DIR / 'printers'
+STREAMS_DIR = DATA_DIR / 'streams'
 
 # CORS mit erweiterten Optionen konfigurieren
 CORS(app, resources={
@@ -23,6 +37,13 @@ CORS(app, resources={
 
 # Blueprints registrieren
 register_blueprints(app)
+
+# Stelle sicher, dass die Verzeichnisse existieren
+os.makedirs(PRINTERS_DIR, exist_ok=True)
+os.makedirs(STREAMS_DIR, exist_ok=True)
+
+app.register_blueprint(printers_bp)
+app.register_blueprint(stream_bp, url_prefix='/api')
 
 @app.before_request
 def log_request_info():
@@ -58,5 +79,12 @@ def list_routes():
         })
     return jsonify(routes)
 
+@app.route('/api/test', methods=['GET'])
+def test_route():
+    return jsonify({
+        'status': 'ok',
+        'message': 'Backend is running'
+    })
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4000, debug=True)  # Wichtig: host='0.0.0.0' 
+    app.run(host='0.0.0.0', port=4000, debug=True) 

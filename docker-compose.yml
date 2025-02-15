@@ -4,6 +4,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -14,6 +15,8 @@ services:
       - REACT_APP_DEV=true
     network_mode: "host"
     command: npm start
+    ports:
+      - "3000:3000"
 
   backend:
     build:
@@ -21,13 +24,14 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./backend:/app
-      - bambucam_data:/app/data
+      - ./backend/data:/app/data
       - bambucam_logs:/app/logs
+    ports:
+      - "4000:4000"
     environment:
+      - FLASK_APP=src/app.py
       - FLASK_ENV=development
-      - FLASK_DEBUG=1
-    network_mode: "host"
-    restart: unless-stopped
+    command: flask run --host=0.0.0.0 --port=4000
 
   nginx:
     image: nginx:alpine

@@ -8,15 +8,21 @@ class MQTTService:
     def __init__(self):
         self.clients = {}
         
-    def connect_printer(self, printer_id, printer_type, ip):
-        if printer_type == 'BAMBULAB':
-            # Existierende Bambu Lab MQTT Logik
-            client = self.connect_bambulab(printer_id, ip)
-        elif printer_type == 'CREALITY':
-            # Neue Creality MQTT Logik
-            client = self.connect_creality(printer_id, ip)
+    def connect_printer(self, printer_id: str, printer_type: str, ip: str):
+        try:
+            logger.info(f"Connecting MQTT for printer {printer_id} ({printer_type}) at {ip}")
             
-        self.clients[printer_id] = client
+            if printer_type == 'BAMBULAB':
+                client = self.connect_bambulab(printer_id, ip)
+            elif printer_type == 'CREALITY':
+                client = self.connect_creality(printer_id, ip)
+            
+            self.clients[printer_id] = client
+            logger.info(f"Successfully connected MQTT for printer {printer_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to connect MQTT for printer {printer_id}: {e}", exc_info=True)
+            raise
         
     def connect_creality(self, printer_id, ip):
         # Creality verwendet Port 1883

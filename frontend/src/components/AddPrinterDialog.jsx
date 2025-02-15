@@ -3,6 +3,9 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, S
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
 
+// Dynamische API URL basierend auf dem aktuellen Host
+const API_URL = `http://${window.location.hostname}:4000`;
+
 const PRINTER_TYPES = {
   BAMBULAB: {
     name: 'Bambu Lab',
@@ -67,9 +70,14 @@ const AddPrinterDialog = ({
     accessCode: '',
     type: ''
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  console.log('Current printer type:', printerType);  // Debug-Log
 
   const handleTypeChange = (event) => {
     const type = event.target.value;
+    console.log('Setting printer type to:', type);  // Debug-Log
     setPrinterType(type);
     setNewPrinter(prev => ({
       ...prev,
@@ -105,6 +113,47 @@ const AddPrinterDialog = ({
     }));
   };
 
+  const handleAddPrinter = async () => {
+    try {
+      setSubmitting(true);
+      const printerData = {
+        name: newPrinter.name,
+        ip: newPrinter.ip,
+        type: printerType,
+        accessCode: newPrinter.accessCode || ''
+      };
+
+      console.log('Sending printer data:', printerData);
+
+      const response = await fetch('/api/printers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(printerData)
+      });
+
+      const data = await response.json();
+      console.log('Server response:', data);
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add printer');
+      }
+
+      if (data.success && data.printer) {
+        onAdd(data.printer);
+        onClose();
+      } else {
+        throw new Error('Invalid server response');
+      }
+    } catch (error) {
+      console.error('Error in handleAddPrinter:', error);
+      setError(error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <GlassDialog open={open} onClose={onClose}>
       <DialogTitle sx={{ 
@@ -134,17 +183,17 @@ const AddPrinterDialog = ({
               <li>Connect the printer to your network via LAN cable</li>
               <li>Enable LAN Mode Liveview:
                 <ul>
-                  <li>Go to "Settings" (gear icon) > "General"</li>
-                  <li>Enable "LAN Mode Liveview"</li>
+                  <li>Go to &quot;Settings&quot; (gear icon) {'->'} &quot;General&quot;</li>
+                  <li>Enable &quot;LAN Mode Liveview&quot;</li>
                   <li>Note down the Access Code</li>
                 </ul>
               </li>
               <li>Find the IP address under:
                 <ul>
-                  <li>Settings > Network > IP Address</li>
+                  <li>Settings {'->'} Network {'->'} IP Address</li>
                 </ul>
               </li>
-              <li>Click "Scan Network" or enter the IP manually</li>
+              <li>Click &quot;Scan Network&quot; or enter the IP manually</li>
             </ol>
           </Box>
         </Collapse>
@@ -254,14 +303,19 @@ const AddPrinterDialog = ({
       <DialogActions>
         <NeonButton onClick={onClose}>CANCEL</NeonButton>
         <NeonButton 
-          onClick={() => onAdd(newPrinter)}
-          disabled={isAdding || !newPrinter.name || !newPrinter.ip || 
+          onClick={handleAddPrinter}
+          disabled={submitting || !newPrinter.name || !newPrinter.ip || 
                    (printerType === 'BAMBULAB' && !newPrinter.accessCode) ||
                    !printerType}
         >
-          ADD
+          {submitting ? 'ADDING...' : 'ADD'}
         </NeonButton>
       </DialogActions>
+      {error && (
+        <Box sx={{ p: 2, color: 'error.main' }}>
+          {error}
+        </Box>
+      )}
     </GlassDialog>
   );
 };

@@ -12,11 +12,129 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   const [error, setError] = useState(null);
   const bufferQueue = useRef([]);
   const isProcessing = useRef(false);
-  // Flag um zu prüfen ob Komponente mounted ist
   const mountedRef = useRef(true);
   const resetTimerRef = useRef(null);
-  const [loading, setLoading] = useState(false);
-  const retryCount = useRef(0);
+  const [loading, setLoading] = useState(true);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 3;
+
+  const processNextBuffer = useCallback(() => {
+    if (!sourceBufferRef.current || !bufferQueue.current.length) {
+      isProcessing.current = false;
+      return;
+    }
+
+    isProcessing.current = true;
+    try {
+      if (!sourceBufferRef.current.updating) {
+        const nextBuffer = bufferQueue.current.shift();
+        sourceBufferRef.current.appendBuffer(nextBuffer);
+      }
+    } catch (error) {
+      console.error('Error processing buffer:', error);
+      isProcessing.current = false;
+    }
+  }, []);
+
+  const handleWebSocketError = useCallback(() => {
+    if (reconnectAttempts.current < maxReconnectAttempts) {
+      const delay = Math.pow(2, reconnectAttempts.current) * 1000;
+      reconnectAttempts.current += 1;
+      setTimeout(() => {
+        if (printer.type === 'BAMBULAB') {
+          const streamUrl = `rtsps://bblp:${printer.accessCode}@${printer.ip}:322/streaming/live/1`;
+          initializeWebSocket(streamUrl);
+        }
+      }, delay);
+    } else {
+      setError('Connection failed after 3 attempts');
+    }
+  }, [printer]);
+
+  const initializeWebSocket = useCallback((streamUrl) => {
+    cleanup();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const ms = new MediaSource();
+      mediaSourceRef.current = ms;
+      videoRef.current.src = URL.createObjectURL(ms);
+
+      ms.addEventListener('sourceopen', () => {
+        try {
+          sourceBufferRef.current = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
+          sourceBufferRef.current.mode = 'segments';
+          sourceBufferRef.current.addEventListener('updateend', processNextBuffer);
+
+          const wsUrl = `ws://${window.location.hostname}:4000/stream/${printer.id}/ws?url=${encodeURIComponent(streamUrl)}`;
+          const ws = new WebSocket(wsUrl);
+          websocketRef.current = ws;
+
+          ws.onopen = () => {
+            console.log('WebSocket connected');
+            setLoading(false);
+            reconnectAttempts.current = 0;
+          };
+
+          ws.onmessage = (event) => {
+            if (mountedRef.current) {
+              const data = new Uint8Array(event.data);
+              bufferQueue.current.push(data);
+              if (!isProcessing.current) {
+                processNextBuffer();
+              }
+            }
+          };
+
+          ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            handleWebSocketError();
+          };
+
+          ws.onclose = () => {
+            console.log('WebSocket closed');
+            if (mountedRef.current) {
+              handleWebSocketError();
+            }
+          };
+
+        } catch (error) {
+          console.error('Error in sourceopen:', error);
+          setError('Failed to initialize stream');
+          setLoading(false);
+        }
+      });
+
+    } catch (error) {
+      console.error('Error initializing WebSocket:', error);
+      setError('Failed to initialize stream');
+      setLoading(false);
+    }
+  }, [processNextBuffer, handleWebSocketError, printer.id]);
+
+  // Neue handleStreamError Funktion
+  const handleStreamError = useCallback(() => {
+    if (reconnectAttempts.current < maxReconnectAttempts) {
+      reconnectAttempts.current++;
+      console.log(`Reconnect attempt ${reconnectAttempts.current}/${maxReconnectAttempts}`);
+      
+      setError(`Connection failed (Attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+      setLoading(true);
+
+      // Versuche nach einer Verzögerung neu zu verbinden
+      setTimeout(() => {
+        if (videoRef.current) {
+          const streamUrl = `http://${printer.ip}:8080/?action=stream`;
+          videoRef.current.src = streamUrl;
+          videoRef.current.load();
+        }
+      }, 2000 * reconnectAttempts.current);
+    } else {
+      setError('Failed to connect after multiple attempts');
+      setLoading(false);
+    }
+  }, [printer.ip, maxReconnectAttempts]);
 
   // Funktion zum Neustarten des Stream-Stacks
   const resetStreamStack = useCallback(async () => {
@@ -120,7 +238,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         console.log('Skipping cleanup - in fullscreen mode');
       }
     };
-  }, [printer.id]); // Nur von printer.id abhängig
+  }, [printer.id]);
 
   const setupMediaSource = async () => {
     try {
@@ -236,7 +354,13 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   };
 
   const cleanup = () => {
-    console.log('Performing cleanup...');
+    console.log('Starting cleanup...');
+    
+    if (videoRef.current) {
+      console.log('Cleaning up video element');
+      videoRef.current.src = '';
+      videoRef.current.load();
+    }
     
     // WebSocket cleanup
     if (websocketRef.current) {
@@ -276,17 +400,51 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     isProcessing.current = false;
   };
 
-  const handleWebSocketError = useCallback(() => {
-    if (retryCount.current < 3) {
-        const delay = Math.pow(2, retryCount.current) * 1000;
-        retryCount.current += 1;
-        setTimeout(() => {
-            initializeWebSocket();
-        }, delay);
-    } else {
-        setError('Connection failed after 3 attempts');
+  useEffect(() => {
+    console.log(`Initializing stream for printer:`, printer);
+    
+    if (printer.type === 'BAMBULAB') {
+      console.log('Setting up Bambu Lab RTSP stream');
+      const streamUrl = `rtsps://bblp:${printer.accessCode}@${printer.ip}:322/streaming/live/1`;
+      initializeWebSocket(streamUrl);
+    } else if (printer.type === 'CREALITY') {
+      console.log('Setting up Creality MJPEG stream');
+      if (videoRef.current) {
+        // Stream über nginx proxy
+        const streamUrl = `/stream/?action=stream`;
+        videoRef.current.src = streamUrl;
+        
+        videoRef.current.onloadstart = () => {
+          console.log('Video load started');
+          setLoading(true);
+        };
+        
+        videoRef.current.onloadeddata = () => {
+          console.log('Video data loaded');
+          setLoading(false);
+          reconnectAttempts.current = 0;
+        };
+        
+        videoRef.current.onerror = (e) => {
+          console.error('Video error:', e.target.error);
+          handleStreamError();
+        };
+      }
     }
-  }, [initializeWebSocket]);
+
+    return () => {
+      console.log('Cleaning up stream component');
+      if (videoRef.current) {
+        console.log('Cleaning up video element');
+        videoRef.current.onloadstart = null;
+        videoRef.current.onloadeddata = null;
+        videoRef.current.onerror = null;
+        videoRef.current.src = '';
+        videoRef.current.load();
+      }
+      reconnectAttempts.current = 0;
+    };
+  }, [printer.id, handleStreamError]);
 
   return (
     <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -321,11 +479,16 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
             <>
               <CircularProgress size={24} />
               <Typography>
-                {error ? 'Reconnecting...' : 'Connecting...'}
+                {error ? `Reconnecting (${reconnectAttempts.current}/${maxReconnectAttempts})...` : 'Connecting...'}
               </Typography>
             </>
           )}
-          {error && !loading && error}
+          {error && !loading && (
+            <Typography>
+              {error}
+              {reconnectAttempts.current >= maxReconnectAttempts && ' (Max retries reached)'}
+            </Typography>
+          )}
         </Box>
       )}
     </Box>

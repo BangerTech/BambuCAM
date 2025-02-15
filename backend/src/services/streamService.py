@@ -18,110 +18,93 @@ import time
 from flask import jsonify
 from flask import current_app as app
 from src.printer_types import PRINTER_CONFIGS
+import signal
 
 logger = logging.getLogger(__name__)
 
 class StreamService:
     def __init__(self):
+        self.streams_dir = 'data/streams'
+        os.makedirs(self.streams_dir, exist_ok=True)
         self.active_streams = {}
         self.ws_servers = {}
         self.BASE_PORT = 9000
         self.monitor_thread = Thread(target=self.monitor_streams, daemon=True)
         self.monitor_thread.start()
 
-    def start_stream(self, printer_id, stream_url, port, printer_type='BAMBULAB'):
-        """Startet einen neuen Stream"""
-        try:
-            logger.info(f"Starting {printer_type} stream for {printer_id}")
-            
-            # Extra Sicherheitscheck
-            if port in self.ws_servers:
-                logger.warning(f"Port {port} already has a server, forcing cleanup...")
-                try:
-                    server_info = self.ws_servers[port]
-                    server_info['loop'].stop()
-                    server_info['thread'].join(timeout=1)
-                    del self.ws_servers[port]
-                    time.sleep(1)  # Extra wait
-                except Exception as e:
-                    logger.error(f"Error cleaning up old server: {e}")
-                    return False
-            
-            # Stoppe existierenden Stream falls vorhanden
-            self.stop_stream(printer_id)
-            
-            # Extra check für WebSocket server
-            if port in self.ws_servers:
-                logger.warning(f"WebSocket server on port {port} still exists after cleanup")
-                try:
-                    server_info = self.ws_servers[port]
-                    server_info['loop'].stop()
-                    server_info['thread'].join(timeout=1)
-                    del self.ws_servers[port]
-                    # Extra Wartezeit für Port-Freigabe
-                    time.sleep(1)
-                except Exception as e:
-                    logger.error(f"Error cleaning up existing WebSocket server: {e}")
-                    return False
-            
-            # Basis-Kommando
-            command = ['ffmpeg']
-            
-            # Füge typ-spezifische Optionen hinzu
-            if printer_type in PRINTER_CONFIGS:
-                command.extend(PRINTER_CONFIGS[printer_type]['ffmpeg_options'])
-            
-            # Füge Stream-URL und Output-Optionen hinzu
-            command.extend([
-                '-i', stream_url,
-                '-f', 'mpegts',
-                '-c:v', 'copy',
-                '-flush_packets', '1',
-                'pipe:1'
-            ])
+    def start_stream(self, printer_id: str, stream_url: str) -> dict:
+        """Startet einen neuen Stream für einen Drucker"""
+        stream_file = os.path.join(self.streams_dir, f"{printer_id}.json")
+        
+        stream_data = {
+            'printer_id': printer_id,
+            'url': stream_url,
+            'started_at': datetime.now().isoformat(),
+            'status': 'active',
+            'websocket_port': self._get_next_ws_port(),
+            'process_id': None
+        }
 
-            logger.info(f"FFmpeg command: {' '.join(command)}")
-            
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=10*1024*1024
-            )
-            
-            # Prüfe ob FFmpeg erfolgreich gestartet
-            time.sleep(1)
-            if process.poll() is not None:
-                error = process.stderr.read().decode()
-                logger.error(f"FFmpeg failed to start: {error}")
-                return False
-            
-            # Lese erste Fehlerausgabe auch wenn Prozess läuft
-            error = process.stderr.read1(4096).decode()
-            if error:
-                logger.info(f"FFmpeg output: {error}")
-            
-            logger.info("FFmpeg process started successfully")
-            
-            self.active_streams[printer_id] = {
-                'process': process,
-                'port': port,
-                'url': stream_url
+        # Speichere Stream-Informationen
+        with open(stream_file, 'w') as f:
+            json.dump(stream_data, f, indent=2)
+
+        return stream_data
+
+    def stop_stream(self, printer_id: str) -> bool:
+        """Stoppt einen aktiven Stream"""
+        stream_file = os.path.join(self.streams_dir, f"{printer_id}.json")
+        
+        try:
+            # Lade Stream-Daten
+            with open(stream_file, 'r') as f:
+                stream_data = json.load(f)
+
+            # Beende den Stream-Prozess
+            if stream_data.get('process_id'):
+                try:
+                    os.kill(stream_data['process_id'], signal.SIGTERM)
+                except ProcessLookupError:
+                    pass  # Prozess existiert nicht mehr
+
+            # Lösche Stream-Datei
+            os.remove(stream_file)
+            return True
+
+        except FileNotFoundError:
+            return False  # Stream existiert nicht
+        except Exception as e:
+            logger.error(f"Error stopping stream: {e}")
+            return False
+
+    def get_stream_status(self, printer_id: str) -> dict:
+        """Gibt den Status eines Streams zurück"""
+        stream_file = os.path.join(self.streams_dir, f"{printer_id}.json")
+        
+        try:
+            with open(stream_file, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {
+                'status': 'inactive',
+                'printer_id': printer_id
             }
 
-            # Starte WebSocket Server
-            try:
-                self.start_websocket_server(port)
-                logger.info(f"WebSocket server started successfully on port {port}")
-                return port
-            except Exception as e:
-                logger.error(f"Failed to start WebSocket server: {e}")
-                self.stop_stream(printer_id)
-                return False
+    def _get_next_ws_port(self) -> int:
+        """Findet den nächsten freien WebSocket Port"""
+        used_ports = []
+        for file in os.listdir(self.streams_dir):
+            if file.endswith('.json'):
+                try:
+                    with open(os.path.join(self.streams_dir, file), 'r') as f:
+                        data = json.load(f)
+                        used_ports.append(data.get('websocket_port', 0))
+                except:
+                    continue
         
-        except Exception as e:
-            logger.error(f"Error starting stream: {e}")
-            return False
+        if not used_ports:
+            return 9000  # Startport für WebSocket
+        return max(used_ports) + 1
 
     def start_websocket_server(self, port):
         """Startet einen WebSocket Server"""
@@ -179,92 +162,21 @@ class StreamService:
         finally:
             await websocket.close()
 
-    def stop_stream(self, printer_id, force=False):
-        """Stoppt einen Stream mit verbessertem Cleanup"""
-        if printer_id in self.active_streams:
-            try:
-                logger.info(f"Stopping stream for printer {printer_id} (force={force})")
-                stream_data = self.active_streams[printer_id]
-                process = stream_data['process']
-                port = stream_data['port']
-                
-                # Wichtig: Erst WebSocket Server stoppen, dann FFmpeg
-                if port in self.ws_servers:
-                    logger.info(f"Cleaning up WebSocket server on port {port}")
-                    try:
-                        server_info = self.ws_servers[port]
-                        # Event Loop in Thread stoppen
-                        server_info['loop'].call_soon_threadsafe(server_info['loop'].stop)
-                        # Thread beenden
-                        server_info['thread'].join(timeout=1)
-                        del self.ws_servers[port]
-                        logger.info(f"WebSocket server cleanup completed for port {port}")
-                    except Exception as e:
-                        logger.error(f"Error during WebSocket cleanup: {e}")
-                        # Force cleanup
-                        if port in self.ws_servers:
-                            del self.ws_servers[port]
-
-                # 2. Then cleanup FFmpeg process
-                if process:
-                    if force:
-                        logger.info("Force killing FFmpeg process")
-                        process.kill()
-                    else:
-                        logger.info("Gracefully stopping FFmpeg process")
-                        process.terminate()
-                        
-                    try:
-                        process.wait(timeout=1)
-                    except:
-                        logger.warning("Process timeout, force killing")
-                        process.kill()
-                        process.wait()
-
-                # 3. Final cleanup
-                del self.active_streams[printer_id]
-                logger.info(f"Stream cleanup completed for printer {printer_id}")
-                
-            except Exception as e:
-                logger.error(f"Error during stream cleanup: {e}")
-                # Force cleanup
-                if printer_id in self.active_streams:
-                    del self.active_streams[printer_id]
-
-    async def _close_websocket_connections(self, port):
-        """Hilfsfunktion zum sauberen Schließen aller WebSocket Verbindungen"""
-        try:
-            if port in self.ws_servers:
-                server_info = self.ws_servers[port]
-                # Hier könnten wir alle aktiven WebSocket Verbindungen schließen
-                # Wenn wir sie in einer Liste speichern würden
-                logger.info(f"Closing all connections for port {port}")
-        except Exception as e:
-            logger.error(f"Error closing WebSocket connections: {e}")
-
     def restart_stream(self, printer_id):
         """Vereinfachter automatischer Restart"""
         if printer_id in self.active_streams:
             stream_url = self.active_streams[printer_id]['url']
             port = self.active_streams[printer_id]['port']
             self.stop_stream(printer_id)
-            return self.start_stream(printer_id, stream_url, port)
+            return self.start_stream(printer_id, stream_url)
         return False
-
-    def get_next_free_port(self):
-        """Findet den nächsten freien Port"""
-        used_ports = set(stream['port'] for stream in self.active_streams.values())
-        for port in range(9000, 9100):  # Port-Range 9000-9099
-            if port not in used_ports:
-                return port
-        raise Exception("No free ports available")
 
     def monitor_streams(self):
         """Überwacht und restartet abgestürzte Streams"""
         while True:
             for printer_id in list(self.active_streams.keys()):
                 stream = self.active_streams[printer_id]
-                if stream['process'].poll() is not None:
+                if stream['process'] is not None and stream['process'].poll() is not None:
                     logger.warning(f"Stream {printer_id} crashed, restarting...")
                     self.restart_stream(printer_id)
             time.sleep(10)  # Check alle 10 Sekunden
@@ -278,7 +190,7 @@ class StreamService:
         process = stream['process']
         
         # Prüfe ob Prozess noch läuft
-        if process.poll() is not None:
+        if process is None or process.poll() is not None:
             return False
         
         # Prüfe auf FFmpeg-Fehler
@@ -316,7 +228,7 @@ def startStream(printer_id, stream_url=None):
             stream_url = printer['streamUrl']
             
         port = getNextPort()
-        return stream_service.start_stream(printer_id, stream_url, port)
+        return stream_service.start_stream(printer_id, stream_url)
         
     except Exception as e:
         logger.error(f"Fehler beim Starten des Streams: {str(e)}")
