@@ -1,7 +1,10 @@
 from flask import Blueprint, jsonify, request, Response
 from src.services.streamService import stream_service
-from src.utils.logger import logger
+import logging
 import requests
+
+# Einfacher Logger statt des spezialisierten Loggers
+logger = logging.getLogger(__name__)
 
 stream_bp = Blueprint('stream', __name__)
 

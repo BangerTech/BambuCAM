@@ -1,4 +1,5 @@
 from flask import jsonify, Blueprint, request
+from flask_cors import cross_origin
 from src.services.streamService import stream_service
 from src.services import (
     addPrinter,

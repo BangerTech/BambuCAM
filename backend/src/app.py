@@ -12,10 +12,13 @@ from src.routes.system import system_bp
 from src.routes.notifications import notifications_bp
 from src.routes.stream import stream_bp
 from src.routes.printers import printers_bp
-from src.utils.logger import logger
+import logging  # Standard Python logging
 from src.routes import register_blueprints
 import os
 from pathlib import Path
+
+# Logger konfigurieren
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 logger.info("Starting Flask application...")
@@ -35,15 +38,12 @@ CORS(app, resources={
     }
 })
 
-# Blueprints registrieren
-register_blueprints(app)
-
 # Stelle sicher, dass die Verzeichnisse existieren
 os.makedirs(PRINTERS_DIR, exist_ok=True)
 os.makedirs(STREAMS_DIR, exist_ok=True)
 
-app.register_blueprint(printers_bp)
-app.register_blueprint(stream_bp, url_prefix='/api')
+# Blueprints nur einmal registrieren
+register_blueprints(app)
 
 @app.before_request
 def log_request_info():

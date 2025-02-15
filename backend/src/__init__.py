@@ -1,8 +1,9 @@
 from flask import Flask
 from flask_cors import CORS
-from src.config import config
-from src.routes import register_blueprints
-from src.utils.logger import logger
+import logging
+
+# Standard Logger Setup
+logger = logging.getLogger(__name__)
 
 def create_app():
     app = Flask(__name__)
@@ -11,7 +12,7 @@ def create_app():
     # CORS konfigurieren
     CORS(app)
     
-    # Blueprints registrieren
+    from src.routes import register_blueprints
     register_blueprints(app)
     
     return app 
