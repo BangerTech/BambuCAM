@@ -1,16 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress, Chip } from '@mui/material';
+import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress, Chip, CircularProgress } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RTSPStream from './RTSPStream';
 
-const PrinterCard = ({ printer, onRemove }) => {
+const PrinterCard = ({ printer, onDelete }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const cardRef = useRef(null);
 
   const handleFullscreenClick = () => {
     setIsFullscreen(prev => !prev);
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete(printer.id);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Höre auf Fullscreen-Änderungen vom Browser
@@ -79,7 +89,7 @@ const PrinterCard = ({ printer, onRemove }) => {
             <IconButton onClick={handleFullscreenClick} sx={{ color: '#00ffff' }}>
               {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
             </IconButton>
-            <IconButton onClick={() => onRemove(printer.id)} sx={{ color: '#00ffff' }}>
+            <IconButton onClick={handleDelete} sx={{ color: '#00ffff' }}>
               <DeleteIcon />
             </IconButton>
           </div>
@@ -132,6 +142,27 @@ const PrinterCard = ({ printer, onRemove }) => {
             )}
           </Box>
         </Box>
+        {isDeleting && (
+          <Box sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1,
+            zIndex: 9999
+          }}>
+            <CircularProgress sx={{ color: '#00ffff' }} />
+            <Typography color="#00ffff">
+              Deleting printer...
+            </Typography>
+          </Box>
+        )}
       </CardContent>
     </Card>
   );

@@ -3,10 +3,12 @@ from flask_cors import CORS
 from src.services import scanNetwork, getPrinterStatus, startStream, addPrinter, getPrinters, removePrinter
 from src.routes.system import system_bp
 from src.routes.notifications import notifications_bp
-import logging
+from src.routes.stream import stream_bp
+from src.utils.logger import logger
+from src.services.streamService import stream_service
 
-logger = logging.getLogger(__name__)
 app = Flask(__name__)
+logger.info("Starting Flask application...")
 
 # Einfachste CORS-Konfiguration
 CORS(app, resources={
@@ -20,6 +22,7 @@ CORS(app, resources={
 # Blueprints registrieren
 app.register_blueprint(system_bp)
 app.register_blueprint(notifications_bp)
+app.register_blueprint(stream_bp, url_prefix='/stream')
 
 # Globaler CORS Handler für OPTIONS requests
 @app.before_request
@@ -42,4 +45,25 @@ def delete_printer(printer_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/stream/<printer_id>/stop', methods=['POST'])
+def stop_stream(printer_id):
+    """Stoppt einen laufenden Stream"""
+    try:
+        stream_service.stop_stream(printer_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Füge diese Route auch hinzu
+@app.errorhandler(404)
+def not_found(e):
+    """Handler für 404 Fehler - gibt JSON statt HTML zurück"""
+    return jsonify({
+        'success': False,
+        'error': 'Route not found'
+    }), 404
+
 # ... andere Routes ... 
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=4000) 

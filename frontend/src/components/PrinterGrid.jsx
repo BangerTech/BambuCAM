@@ -485,7 +485,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         </IconButton>
         <PrinterCard 
           printer={printerWithStatus}  // Übergebe Drucker mit Status
-          onRemove={handleDelete}
+          onDelete={handleDelete}
           isFullscreen={true}
           onFullscreenToggle={handleFullscreenToggle}
         />
