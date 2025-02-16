@@ -4,80 +4,55 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import NotificationDialog from './NotificationDialog';
 import { API_URL } from '../config';
+import logger from '../utils/logger';
 
 const NotificationButton = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // checkStatus in den Komponenten-Scope verschieben
   const checkStatus = async () => {
     try {
-      const response = await fetch(`${API_URL}/notifications/status`);
+      const response = await fetch(`${API_URL}/notifications/telegram/status`);
       const data = await response.json();
       
-      if (response.ok && data.success) {
-        setNotificationsEnabled(data.telegram);
-        console.log('Notification status:', data.telegram);
-      } else {
-        console.warn('Failed to get notification status:', data);
+      if (response.ok) {
+        setNotificationsEnabled(data.enabled);
+        logger.notification('Checking notification status:', data);
       }
     } catch (error) {
-      console.error('Error checking notification status:', error);
+      logger.error('Error checking notification status:', error);
     }
   };
 
-  // useEffect verwendet jetzt die Funktion aus dem Komponenten-Scope
   useEffect(() => {
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+    const interval = setInterval(checkStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const handleToggle = async () => {
     if (notificationsEnabled) {
-      // Deaktiviere Benachrichtigungen
       try {
-        const response = await fetch(`${API_URL}/notifications/disable`, {
+        const response = await fetch(`${API_URL}/notifications/telegram/disable`, {
           method: 'POST'
         });
         const data = await response.json();
         if (data.success) {
           setNotificationsEnabled(false);
+          logger.notification('Notifications disabled');
         }
       } catch (error) {
-        console.error('Error disabling notifications:', error);
+        logger.error('Error disabling notifications:', error);
       }
     } else {
-      // Prüfe ob Bot schon eingerichtet wurde
-      try {
-        // Prüfe ob eine chat_id existiert
-        const response = await fetch(`${API_URL}/notifications/telegram/status`);
-        const data = await response.json();
-        
-        if (data.success && data.is_configured) {
-          // Bot ist schon eingerichtet, aktiviere einfach wieder
-          const enableResponse = await fetch(`${API_URL}/notifications/enable`, {
-            method: 'POST'
-          });
-          const enableData = await enableResponse.json();
-          if (enableData.success) {
-            setNotificationsEnabled(true);
-          }
-        } else {
-          // Bot muss erst eingerichtet werden
-          setDialogOpen(true);
-        }
-      } catch (error) {
-        console.error('Error checking telegram status:', error);
-        setDialogOpen(true);
-      }
+      setDialogOpen(true);
     }
   };
 
   const handleDialogClose = (success = false) => {
     setDialogOpen(false);
     if (success) {
-      checkStatus(); // Jetzt ist checkStatus verfügbar
+      checkStatus();
     }
   };
 
@@ -111,7 +86,7 @@ const NotificationButton = () => {
 
       <NotificationDialog 
         open={dialogOpen}
-        onClose={(success) => handleDialogClose(success)}
+        onClose={handleDialogClose}
       />
     </>
   );

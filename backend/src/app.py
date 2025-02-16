@@ -17,7 +17,15 @@ from src.routes import register_blueprints
 import os
 from pathlib import Path
 
-# Logger konfigurieren
+# Logging-Konfiguration
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Stelle sicher, dass auch die requests-Bibliothek Debug-Logs ausgibt
+logging.getLogger('urllib3').setLevel(logging.DEBUG)
+
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -47,9 +55,8 @@ register_blueprints(app)
 
 @app.before_request
 def log_request_info():
-    logger.debug('Headers: %s', request.headers)
-    logger.debug('Body: %s', request.get_data())
-    logger.debug('URL: %s', request.url)
+    if request.path.startswith('/api/'):  # Nur API-Anfragen loggen
+        logger.info(f"API Request: {request.method} {request.url}")
 
 @app.route('/stream/<printer_id>/stop', methods=['POST'])
 def stop_stream(printer_id):

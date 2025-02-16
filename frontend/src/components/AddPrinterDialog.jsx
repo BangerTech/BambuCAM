@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse } from '@mui/material';
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
+import logger from '../utils/logger';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -73,11 +74,8 @@ const AddPrinterDialog = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  console.log('Current printer type:', printerType);  // Debug-Log
-
   const handleTypeChange = (event) => {
     const type = event.target.value;
-    console.log('Setting printer type to:', type);  // Debug-Log
     setPrinterType(type);
     setNewPrinter(prev => ({
       ...prev,
@@ -124,33 +122,29 @@ const AddPrinterDialog = ({
       };
 
       console.log('Sending printer data:', printerData);
-
-      const response = await fetch('/api/printers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(printerData)
-      });
-
-      const data = await response.json();
-      console.log('Server response:', data);
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add printer');
-      }
-
-      if (data.success && data.printer) {
-        onAdd(data.printer);
-        onClose();
-      } else {
-        throw new Error('Invalid server response');
-      }
+      
+      // Übergebe die Daten an den Parent ohne API-Call
+      onAdd(printerData);
+      onClose();
+      
     } catch (error) {
       console.error('Error in handleAddPrinter:', error);
       setError(error.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleScan = async () => {
+    try {
+      setIsScanning(true);
+      logger.info('Starting network scan...');
+      const response = await fetch(`${API_URL}/scan`);
+      const data = await response.json();
+      logger.info('Scan results:', data);
+      setScannedPrinters(data.printers);
+    } catch (error) {
+      logger.error('Scan error:', error);
     }
   };
 
@@ -219,7 +213,7 @@ const AddPrinterDialog = ({
                 <MenuItem key={key} value={key}>{value.name}</MenuItem>
               ))}
             </Select>
-          </FormControl>
+</FormControl>
 
           {/* SCAN NETWORK Button */}
           <Button
@@ -286,7 +280,7 @@ const AddPrinterDialog = ({
             label="IP Address"
             value={newPrinter.ip}
             onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
-            fullWidth
+      fullWidth
           />
 
           {/* Access Code nur für Bambu Lab */}
@@ -295,7 +289,7 @@ const AddPrinterDialog = ({
               label="Access Code"
               value={newPrinter.accessCode}
               onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
-              fullWidth
+      fullWidth
             />
           )}
         </Box>

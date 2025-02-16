@@ -7,6 +7,7 @@ import RTSPStream from './RTSPStream';
 import BambuLabInfo from './BambuLabInfo';
 import CrealityInfo from './CrealityInfo';
 import GenericInfo from './GenericInfo';
+import logger from '../utils/logger';
 
 const PrinterCard = ({ printer, onDelete }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -44,6 +45,16 @@ const PrinterCard = ({ printer, onDelete }) => {
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, [isFullscreen]);
+
+  useEffect(() => {
+    logger.printer('Printer data updated:', {
+      id: printer.id,
+      name: printer.name,
+      status: printer.status,
+      temps: printer.temperatures,
+      state: printer.state
+    });
+  }, [printer]);
 
   const cardStyle = isFullscreen ? {
     position: 'fixed',
@@ -85,13 +96,74 @@ const PrinterCard = ({ printer, onDelete }) => {
 
   // Drucker-spezifische Rendering Logik
   const renderPrinterInfo = () => {
+    logger.debug('Rendering printer info:', {
+      type: printer.type,
+      temps: printer.temperatures,
+      state: printer.state
+    });
+    
+    const infoStyle = {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10
+    };
+    
     switch(printer.type) {
       case 'BAMBULAB':
-        return <BambuLabInfo printer={printer} />;
+        return <Box sx={infoStyle}><BambuLabInfo printer={printer} /></Box>;
       case 'CREALITY':
-        return <CrealityInfo printer={printer} />;
+        return <Box sx={infoStyle}><CrealityInfo printer={printer} /></Box>;
       default:
-        return <GenericInfo printer={printer} />;
+        return null;
+    }
+  };
+
+  // Temperaturanzeige
+  const renderTemperatures = () => {
+    const temps = printer.temperatures || {};
+    const targets = printer.targets || {};
+    
+    // Unterschiedliches Rendering je nach Druckertyp
+    if (printer.type === 'BAMBULAB') {
+      // Original Bambulab-Anzeige beibehalten
+      return (
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Nozzle: {temps.nozzle || 0}°C
+            {targets.nozzle > 0 && ` / ${targets.nozzle}°C`}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Bed: {temps.bed || 0}°C
+            {targets.bed > 0 && ` / ${targets.bed}°C`}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Chamber: {temps.chamber || 0}°C
+          </Typography>
+        </Box>
+      );
+    }
+    
+    // Neue Creality-Anzeige
+    if (printer.type === 'CREALITY') {
+      return (
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Typography variant="body2" sx={{ color: '#00ffff' }}>
+            Hotend: {temps.hotend?.toFixed(1) || '0.0'}°C
+            {targets.hotend > 0 && ` / ${targets.hotend}°C`}
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#00ffff' }}>
+            Bed: {temps.bed?.toFixed(1) || '0.0'}°C
+            {targets.bed > 0 && ` / ${targets.bed}°C`}
+          </Typography>
+          {temps.chamber !== undefined && (
+            <Typography variant="body2" sx={{ color: '#00ffff' }}>
+              Chamber: {temps.chamber?.toFixed(1) || '0.0'}°C
+            </Typography>
+          )}
+        </Box>
+      );
     }
   };
 
@@ -130,34 +202,8 @@ const PrinterCard = ({ printer, onDelete }) => {
             fullscreen={isFullscreen} 
             key={`${printer.id}-${isFullscreen}`}
           />
-          <Box sx={statusStyle}>
-            <Typography variant="body2" sx={{ mb: printer.progress ? 1 : 0 }}>
-              Status: {printer.status || 'connecting'} | 
-              Nozzle: {printer.temperatures?.nozzle || 0}°C | 
-              Bed: {printer.temperatures?.bed || 0}°C | 
-              Chamber: {printer.temperatures?.chamber || 0}°C
-            </Typography>
-            {printer.progress > 0 && (
-              <>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={printer.progress} 
-                  sx={{
-                    backgroundColor: 'rgba(0, 255, 255, 0.2)',
-                    '& .MuiLinearProgress-bar': {
-                      backgroundColor: '#00ffff'
-                    }
-                  }}
-                />
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Progress: {printer.progress}%
-                  {printer.remaining_time && ` | Remaining: ${printer.remaining_time}min`}
-                </Typography>
-              </>
-            )}
-          </Box>
+          {renderPrinterInfo()}
         </Box>
-        {renderPrinterInfo()}
         {isDeleting && (
           <Box sx={{
             position: 'absolute',

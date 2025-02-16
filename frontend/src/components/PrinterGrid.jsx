@@ -19,6 +19,8 @@ import SystemStatsButton from './SystemStatsButton';
 import SystemStatsDialog from './SystemStatsDialog';
 import { API_URL } from '../config';
 import AddPrinterDialog from './AddPrinterDialog';
+import { printerApi } from '../api/printerApi';
+import logger from '../utils/logger';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
@@ -123,29 +125,34 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [foundPrinters, setFoundPrinters] = useState([]);
   const [printerStatus, setPrinterStatus] = useState({});
 
+  // Status-Polling für alle Drucker
   useEffect(() => {
-    const fetchStatus = async () => {
-      const newStatus = {};
+    const updatePrinterStatus = async () => {
       for (const printer of localPrinters) {
         try {
-          const response = await fetch(`${API_URL}/printers/${printer.id}/status`);
-          if (response.ok) {
-            const data = await response.json();
-            newStatus[printer.id] = data;
-          }
+          const data = await printerApi.fetchStatus(printer.id);
+          setPrinterStatus(prev => ({
+            ...prev,
+            [printer.id]: data
+          }));
         } catch (error) {
-          console.error(`Fehler beim Abrufen des Status für Drucker ${printer.id}:`, error);
+          logger.error('Error updating printer status:', error);
         }
       }
-      setPrinterStatus(newStatus);
     };
 
     if (localPrinters.length > 0) {
-      fetchStatus();
-      const interval = setInterval(fetchStatus, 5000);
+      updatePrinterStatus();
+      const interval = setInterval(updatePrinterStatus, 5000);
       return () => clearInterval(interval);
     }
   }, [localPrinters]);
+
+  // Kombiniere Drucker mit ihrem Status
+  const printersWithStatus = localPrinters.map(printer => ({
+    ...printer,
+    ...printerStatus[printer.id]
+  }));
 
   // Funktion zum Aktualisieren der Positionen
   const updatePrinterOrder = (printers) => {
@@ -158,39 +165,39 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Modifizierte handleAddPrinter Funktion
   const handleAddPrinter = async (printer) => {
-    setIsAdding(true);  // Start loading
+    setIsAdding(true);
     try {
-      const response = await fetch(`${API_URL}/printers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(printer)
-      });
+        const response = await fetch(`${API_URL}/printers`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(printer)
+        });
 
-      if (!response.ok) {
-        throw new Error('Failed to add printer');
-      }
+        if (!response.ok) {
+            throw new Error('Failed to add printer');
+        }
 
-      const data = await response.json();
-      setLocalPrinters([...localPrinters, data.printer]);
-      setOpen(false);
-      setNewPrinter({ name: '', ip: '', accessCode: '' });
-      
-      setSnackbar({
-        open: true,
-        message: 'Printer added successfully',
-        severity: 'success'
-      });
+        const data = await response.json();
+        setLocalPrinters([...localPrinters, data.printer]);
+        setOpen(false);
+        setNewPrinter({ name: '', ip: '', accessCode: '' });
+        
+        setSnackbar({
+            open: true,
+            message: 'Printer added successfully',
+            severity: 'success'
+        });
     } catch (err) {
-      console.error('Error adding printer:', err);
-      setSnackbar({
-        open: true,
-        message: 'Failed to add printer',
-        severity: 'error'
-      });
+        console.error('Error adding printer:', err);
+        setSnackbar({
+            open: true,
+            message: 'Failed to add printer',
+            severity: 'error'
+        });
     } finally {
-      setIsAdding(false);  // End loading
+        setIsAdding(false);
     }
   };
 
@@ -318,25 +325,35 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Status-Anzeige Funktionen
   const getTemperature = (printer, type) => {
-    if (!printer) return '-.--';  // Early return wenn kein Drucker
-
-    if (printer.isCloud) {
-      return '-.--';
-    }
+    if (!printer) return '-.--';
 
     try {
       const temps = printerStatus[printer.id]?.temperatures;
       if (!temps) return '-.--';
       
-      switch(type) {
-        case 'nozzle':
-          return temps.nozzle?.toFixed(1) || '-.--';
-        case 'bed':
-          return temps.bed?.toFixed(1) || '-.--';
-        case 'chamber':
-          return temps.chamber?.toFixed(1) || '-.--';
-        default:
-          return '-.--';
+      // Unterscheide zwischen Bambulab und Creality
+      if (printer.type === 'BAMBULAB') {
+        switch(type) {
+          case 'nozzle':
+            return temps.nozzle?.toFixed(1) || '-.--';
+          case 'bed':
+            return temps.bed?.toFixed(1) || '-.--';
+          case 'chamber':
+            return temps.chamber?.toFixed(1) || '-.--';
+          default:
+            return '-.--';
+        }
+      } else if (printer.type === 'CREALITY') {
+        switch(type) {
+          case 'nozzle':
+            return temps.hotend?.toFixed(1) || '-.--';  // Creality nutzt 'hotend' statt 'nozzle'
+          case 'bed':
+            return temps.bed?.toFixed(1) || '-.--';
+          case 'chamber':
+            return temps.chamber?.toFixed(1) || '-.--';
+          default:
+            return '-.--';
+        }
       }
     } catch (e) {
       return '-.--';
@@ -344,34 +361,55 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   };
 
   const getPrintStatus = (printer) => {
-    if (printer.isCloud) {
-      return {
-        text: printer.print_status || 'Unknown',
-        color: printer.online ? '#4caf50' : '#9e9e9e'
-      };
-    }
-
-    const status = printerStatus[printer.id]?.status?.toLowerCase() || 'unknown';
-    
-    switch(status.toLowerCase()) {
-      case 'running':  // MQTT sendet "RUNNING" statt "printing"
-        return { text: 'Printing', color: '#4caf50' };
-      case 'ready':    // Drucker ist bereit aber inaktiv
-        return { text: 'Ready', color: '#2196f3' };
-      case 'idle':
-        return { text: 'Idle', color: '#2196f3' };
-      case 'paused':
-        return { text: 'Paused', color: '#ff9800' };
-      case 'finished':
-        return { text: 'Finished', color: '#4caf50' };
-      case 'error':
-        return { text: 'Error', color: '#f44336' };
-      case 'offline':
-        return { text: 'Offline', color: '#9e9e9e' };
-      case 'unknown':
-        return { text: 'Connecting...', color: '#9e9e9e' };
-      default:
-        return { text: status, color: '#9e9e9e' };
+    if (printer.type === 'BAMBULAB') {
+      if (printer.isCloud) {
+        return {
+          text: printer.print_status || 'Unknown',
+          color: printer.online ? '#4caf50' : '#9e9e9e'
+        };
+      }
+      // Original Bambulab Status-Logik
+      const status = printerStatus[printer.id]?.status?.toLowerCase() || 'unknown';
+      
+      switch(status.toLowerCase()) {
+        case 'running':  // MQTT sendet "RUNNING" statt "printing"
+          return { text: 'Printing', color: '#4caf50' };
+        case 'ready':    // Drucker ist bereit aber inaktiv
+          return { text: 'Ready', color: '#2196f3' };
+        case 'idle':
+          return { text: 'Idle', color: '#2196f3' };
+        case 'paused':
+          return { text: 'Paused', color: '#ff9800' };
+        case 'finished':
+          return { text: 'Finished', color: '#4caf50' };
+        case 'error':
+          return { text: 'Error', color: '#f44336' };
+        case 'offline':
+          return { text: 'Offline', color: '#9e9e9e' };
+        case 'unknown':
+          return { text: 'Connecting...', color: '#9e9e9e' };
+        default:
+          return { text: status, color: '#9e9e9e' };
+      }
+    } else if (printer.type === 'CREALITY') {
+      const status = printerStatus[printer.id]?.state?.toLowerCase() || 'unknown';
+      
+      switch(status) {
+        case 'standby':
+          return { text: 'Ready', color: '#2196f3' };
+        case 'printing':
+          return { text: 'Printing', color: '#4caf50' };
+        case 'paused':
+          return { text: 'Paused', color: '#ff9800' };
+        case 'complete':
+          return { text: 'Finished', color: '#4caf50' };
+        case 'error':
+          return { text: 'Error', color: '#f44336' };
+        case 'offline':
+          return { text: 'Offline', color: '#9e9e9e' };
+        default:
+          return { text: status, color: '#9e9e9e' };
+      }
     }
   };
 
@@ -648,7 +686,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                           }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                               <Typography variant="body2">
-                                Hotend: {getTemperature(printerWithStatus, 'nozzle')}°C
+                                {printer.type === 'BAMBULAB' ? 'Nozzle' : 'Hotend'}: {getTemperature(printerWithStatus, 'nozzle')}°C
                               </Typography>
                               <Typography variant="body2">
                                 Bed: {getTemperature(printerWithStatus, 'bed')}°C

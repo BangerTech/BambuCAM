@@ -35,6 +35,29 @@ STREAMS_DIR = DATA_DIR / 'streams'
 os.makedirs(PRINTERS_DIR, exist_ok=True)
 os.makedirs(STREAMS_DIR, exist_ok=True)
 
+def getNextPort() -> int:
+    """
+    Findet den nächsten freien Port für einen neuen Drucker.
+    Startet bei 8554 und erhöht um 1 bis ein freier Port gefunden wird.
+    """
+    try:
+        used_ports = []
+        
+        # Durchsuche alle Drucker-Dateien
+        for printer_file in os.listdir(PRINTERS_DIR):
+            if printer_file.endswith('.json'):
+                with open(os.path.join(PRINTERS_DIR, printer_file), 'r') as f:
+                    printer = json.load(f)
+                    used_ports.append(printer.get('port', 0))
+                    
+        if not used_ports:
+            return 8554  # Startport wenn keine Drucker existieren
+        return max(used_ports) + 1
+    except FileNotFoundError:
+        return 8554  # Startport wenn Verzeichnis nicht existiert
+    except json.JSONDecodeError:
+        return 8554  # Startport wenn JSON ungültig
+
 class PrinterService:
     def __init__(self):
         self.mqtt_clients = {}
@@ -115,21 +138,30 @@ class PrinterService:
     def connect_printer(self, printer_id: str, printer_type: str, ip: str):
         """Verbindet einen Drucker basierend auf seinem Typ"""
         try:
+            logger.info(f"Connecting printer {printer_id} of type {printer_type} at IP {ip}")
+            
             # Prüfe ob bereits eine Verbindung besteht
             if printer_id in self.mqtt_clients:
-                if self.mqtt_clients[printer_id].is_connected():
+                if isinstance(self.mqtt_clients[printer_id], mqtt.Client) and self.mqtt_clients[printer_id].is_connected():
                     logger.info(f"Printer {printer_id} already connected")
                     return
-                self.mqtt_clients[printer_id].disconnect()
+                # Cleanup alte Verbindung
+                if isinstance(self.mqtt_clients[printer_id], mqtt.Client):
+                    self.mqtt_clients[printer_id].disconnect()
+                del self.mqtt_clients[printer_id]
                 
             # Verbinde basierend auf Drucker-Typ
             if printer_type == 'BAMBULAB':
                 self.connect_mqtt(printer_id, ip)
             elif printer_type == 'CREALITY':
-                client = setup_creality_mqtt(printer_id, ip)
-                if client:
-                    self.mqtt_clients[printer_id] = client
-                    logger.info(f"Successfully connected Creality printer {printer_id}")
+                logger.info(f"Setting up Creality polling for printer {printer_id}")
+                # Starte Polling statt MQTT
+                polling_thread = setup_creality_polling(printer_id, ip)
+                if polling_thread:
+                    self.mqtt_clients[printer_id] = polling_thread
+                    logger.info(f"Successfully started polling for Creality printer {printer_id}")
+                else:
+                    logger.error(f"Failed to start polling for Creality printer {printer_id}")
                     
         except Exception as e:
             logger.error(f"Error connecting printer {printer_id}: {e}", exc_info=True)
@@ -173,6 +205,9 @@ async def test_stream_url(url, printer_type='BAMBULAB'):
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
     try:
+        # Debug-Logging hinzufügen
+        logger.info(f"Adding printer with data: {data}")
+        
         # Erstelle Drucker-Objekt mit UUID
         printer = {
             'id': str(uuid.uuid4()),
@@ -189,12 +224,15 @@ def addPrinter(data):
             'accessCode': data.get('accessCode', '')
         }
         
-        # Speichere in JSON-Datei
+        # Debug-Logging für Datei-Operationen
         printer_file = os.path.join(PRINTERS_DIR, f"{printer['id']}.json")
+        logger.info(f"Saving printer to file: {printer_file}")
+        
         with open(printer_file, 'w') as f:
             json.dump(printer, f, indent=2)
             
         # MQTT-Verbindung über PrinterService einrichten
+        logger.info(f"Setting up MQTT connection for printer {printer['id']}")
         printer_service.connect_printer(
             printer_id=printer['id'],
             printer_type=printer['type'],
@@ -501,131 +539,128 @@ def update_printer_status(printer_id: str, status_data: dict) -> None:
     try:
         printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
         
-        if not os.path.exists(printer_file):
-            logger.error(f"Printer file not found: {printer_file}")
+        # Prüfe ob die Datei existiert und nicht leer ist
+        if not os.path.exists(printer_file) or os.path.getsize(printer_file) == 0:
+            logger.error(f"Printer file not found or empty: {printer_file}")
             return
             
-        with open(printer_file, 'r') as f:
-            printer_data = json.load(f)
+        try:
+            with open(printer_file, 'r') as f:
+                printer_data = json.load(f)
+        except json.JSONDecodeError:
+            logger.error(f"Invalid JSON in printer file: {printer_file}")
+            printer_data = {
+                'id': printer_id,
+                'status': 'offline',
+                'temperatures': {},
+                'targets': {},
+                'power': {},
+                'progress': 0,
+                'is_active': False,
+                'layer': {'current': 0, 'total': 0},
+                'filename': '',
+                'state': 'offline',
+                'print_duration': 0,
+                'message': ''
+            }
             
-        # Update nur die Status-relevanten Felder
+        # Update alle Status-Felder
         printer_data.update({
             'status': status_data.get('status', printer_data.get('status')),
             'temperatures': status_data.get('temperatures', printer_data.get('temperatures', {})),
-            'progress': status_data.get('progress', printer_data.get('progress', 0))
+            'targets': status_data.get('targets', printer_data.get('targets', {})),
+            'power': status_data.get('power', printer_data.get('power', {})),
+            'progress': status_data.get('progress', printer_data.get('progress', 0)),
+            'is_active': status_data.get('is_active', printer_data.get('is_active', False)),
+            'layer': status_data.get('layer', printer_data.get('layer', {'current': 0, 'total': 0})),
+            'filename': status_data.get('filename', printer_data.get('filename', '')),
+            'state': status_data.get('state', printer_data.get('state', 'offline')),
+            'print_duration': status_data.get('print_duration', printer_data.get('print_duration', 0)),
+            'message': status_data.get('message', printer_data.get('message', ''))
         })
         
+        # Direkte Speicherung statt temporärer Datei
         with open(printer_file, 'w') as f:
             json.dump(printer_data, f, indent=2)
             
-        logger.debug(f"Updated status for printer {printer_id}")
+        logger.debug('Updated status for printer %s', printer_id)
         
     except Exception as e:
         logger.error(f"Error updating printer status: {e}", exc_info=True)
 
-def get_creality_status(printer_ip: str) -> dict:
-    """Holt den Status eines Creality K1 Druckers"""
+def setup_creality_polling(printer_id: str, printer_ip: str):
+    """Richtet Polling für einen Creality K1 Drucker ein"""
     try:
-        # Versuche zuerst den MJPG-Streamer Port
-        try:
-            response = requests.get(f"http://{printer_ip}:8080/?action=status", timeout=2)
-            if response.ok:
-                data = response.json()
-                return {
-                    'status': 'online' if data.get('connected', False) else 'offline',
-                    'temperatures': {
-                        'nozzle': data.get('temperature', {}).get('tool0', 0),
-                        'bed': data.get('temperature', {}).get('bed', 0)
-                    },
-                    'progress': data.get('progress', 0)
-                }
-        except:
-            pass
+        def poll_status():
+            while True:
+                try:
+                    status = get_creality_status(printer_ip)
+                    update_printer_status(printer_id, status)
+                    time.sleep(2)  # Poll alle 2 Sekunden
+                except Exception as e:
+                    logger.error(f"Error polling printer status: {e}")
+                    time.sleep(5)  # Längere Pause bei Fehler
+        
+        # Starte Polling in eigenem Thread
+        import threading
+        polling_thread = threading.Thread(target=poll_status, daemon=True)
+        polling_thread.start()
+        
+        return polling_thread
+        
+    except Exception as e:
+        logger.error(f"Error setting up status polling: {e}")
+        return None
+
+def get_creality_status(printer_ip: str) -> dict:
+    try:
+        url = f"http://{printer_ip}:7125/printer/objects/query"
+        params = {
+            "objects": {
+                "extruder": None,
+                "heater_bed": None,
+                "temperature_sensor chamber": None,
+                "print_stats": None,
+                "virtual_sdcard": None
+            }
+        }
+        
+        response = requests.post(url, json=params, timeout=2)
+        
+        if response.ok:
+            data = response.json()
+            status = data.get('result', {}).get('status', {})
             
-        # Wenn keine Verbindung möglich war
+            result = {
+                'status': 'online',
+                'temperatures': {
+                    'hotend': status.get('extruder', {}).get('temperature', 0),
+                    'bed': status.get('heater_bed', {}).get('temperature', 0),
+                    'chamber': status.get('temperature_sensor chamber', {}).get('temperature', 0)
+                },
+                'targets': {
+                    'hotend': status.get('extruder', {}).get('target', 0),
+                    'bed': status.get('heater_bed', {}).get('target', 0)
+                },
+                'progress': status.get('virtual_sdcard', {}).get('progress', 0) * 100,
+                'state': status.get('print_stats', {}).get('state', 'offline')
+            }
+            
+            return result
+            
         return {
             'status': 'offline',
-            'temperatures': {
-                'nozzle': 0,
-                'bed': 0
-            },
-            'progress': 0
+            'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+            'targets': {'hotend': 0, 'bed': 0},
+            'progress': 0,
+            'state': 'offline'
         }
-        
     except Exception as e:
-        logger.error(f"Error getting printer status: {e}", exc_info=True)
+        logger.error(f"Error getting Creality status: {e}")
         return {
             'status': 'error',
-            'error': str(e)
-        }
-
-def setup_creality_mqtt(printer_id: str, printer_ip: str):
-    """Richtet MQTT für einen Creality K1 Drucker ein"""
-    try:
-        logger.info(f"Setting up MQTT for Creality K1 printer {printer_id} at {printer_ip}")
-        client = mqtt.Client(f"print-cam-{printer_id}")
-        
-        def on_connect(client, userdata, flags, rc):
-            logger.info(f"Connected to K1 MQTT broker with result code {rc}")
-            # K1 spezifische Topics
-            topics = [
-                ("printer/status", 0),
-                ("printer/temperature", 0),
-                ("printer/progress", 0)
-            ]
-            try:
-                client.subscribe(topics)
-                logger.info(f"Subscribed to topics: {topics}")
-            except Exception as e:
-                logger.error(f"Error subscribing to topics: {e}")
-            
-        def on_message(client, userdata, msg):
-            try:
-                logger.info(f"Received K1 MQTT message: {msg.topic}")
-                logger.debug(f"Message payload: {msg.payload}")
-                
-                data = json.loads(msg.payload)
-                updates = {}
-                
-                if msg.topic == "printer/temperature":
-                    updates['temperatures'] = {
-                        'nozzle': data.get('tool0', {}).get('actual', 0),
-                        'bed': data.get('bed', {}).get('actual', 0)
-                    }
-                    logger.info(f"Temperature update: {updates['temperatures']}")
-                elif msg.topic == "printer/status":
-                    updates['status'] = data.get('status', 'offline')
-                    logger.info(f"Status update: {updates['status']}")
-                elif msg.topic == "printer/progress":
-                    updates['progress'] = data.get('progress', 0)
-                    logger.info(f"Progress update: {updates['progress']}")
-                    
-                if updates:
-                    update_printer_status(printer_id, updates)
-                    
-            except Exception as e:
-                logger.error(f"Error handling K1 MQTT message: {e}", exc_info=True)
-        
-        def on_disconnect(client, userdata, rc):
-            logger.warning(f"Disconnected from K1 MQTT broker with code {rc}")
-            if rc != 0:
-                logger.info("Attempting to reconnect...")
-                try:
-                    client.reconnect()
-                except Exception as e:
-                    logger.error(f"Reconnect failed: {e}")
-        
-        client.on_connect = on_connect
-        client.on_message = on_message
-        client.on_disconnect = on_disconnect
-        
-        # Verbinde zum MQTT Broker
-        logger.info(f"Connecting to MQTT broker at {printer_ip}:1883...")
-        client.connect(printer_ip, 1883, 60)
-        client.loop_start()
-        
-        return client
-        
-    except Exception as e:
-        logger.error(f"Error setting up MQTT for K1 printer: {e}", exc_info=True)
-        return None 
+            'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+            'targets': {'hotend': 0, 'bed': 0},
+            'progress': 0,
+            'state': 'error'
+        } 

@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, Response
 from src.services.streamService import stream_service
+from src.services.printerService import getPrinterById
 import logging
 import requests
 
@@ -41,21 +42,23 @@ def reset_stream(printer_id):
             'error': str(e)
         }), 500 
 
-@stream_bp.route('/stream/mjpeg/<printer_id>')
+@stream_bp.route('/mjpeg/<printer_id>')
 def proxy_mjpeg_stream(printer_id):
     try:
-        # Lade Drucker-Daten
         printer = getPrinterById(printer_id)
         if not printer:
+            logger.error(f"Printer {printer_id} not found")
             return jsonify({'error': 'Printer not found'}), 404
             
-        # Stream-URL für Creality
         stream_url = f"http://{printer['ip']}:8080/?action=stream"
+        logger.info(f"Proxying stream from: {stream_url}")
         
         def generate():
             try:
-                response = requests.get(stream_url, stream=True)
+                response = requests.get(stream_url, stream=True, timeout=5)
                 if response.ok:
+                    headers = response.headers
+                    logger.debug(f"Original headers: {headers}")
                     for chunk in response.iter_content(chunk_size=8192):
                         yield chunk
             except Exception as e:
@@ -63,14 +66,15 @@ def proxy_mjpeg_stream(printer_id):
                 
         return Response(
             generate(),
-            mimetype='multipart/x-mixed-replace;boundary=boundarydonotcross',
+            mimetype='multipart/x-mixed-replace; boundary=boundarydonotcross',
+            direct_passthrough=True,  # Wichtig für Streaming
             headers={
-                'Access-Control-Allow-Origin': '*',
-                'Cache-Control': 'no-store, no-cache, must-revalidate, pre-check=0, post-check=0, max-age=0',
-                'Pragma': 'no-cache'
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'Connection': 'close',
             }
         )
-        
     except Exception as e:
         logger.error(f"Error setting up MJPEG proxy: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500 

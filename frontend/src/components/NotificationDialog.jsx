@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   Button,
   Typography,
   Alert,
@@ -16,6 +17,7 @@ import {
 } from '@mui/material';
 import { API_URL } from '../config';
 import { styled } from '@mui/material/styles';
+import logger from '../utils/logger';
 
 // Styled Components
 const NeonDialog = styled(Dialog)(({ theme }) => ({
@@ -98,6 +100,9 @@ const NotificationDialog = ({ open, onClose }) => {
       setError('');
       setIsLoading(true);
       
+      // Debug-Log hinzufügen
+      logger.notification('Sending token:', { token });
+      
       const response = await fetch(`${API_URL}/notifications/telegram/setup`, {
         method: 'POST',
         headers: {
@@ -109,8 +114,8 @@ const NotificationDialog = ({ open, onClose }) => {
       const data = await response.json();
       
       if (data.success) {
-        setBotUsername(data.botUsername); // Speichere den Bot-Username
-        setActiveStep(2); // Gehe zum nächsten Schritt
+        setBotUsername(data.botUsername);
+        setActiveStep(2);
       } else {
         throw new Error(data.error || 'Failed to setup Telegram');
       }
@@ -188,34 +193,20 @@ const NotificationDialog = ({ open, onClose }) => {
               value={token}
               onChange={(e) => setToken(e.target.value)}
               margin="normal"
-              variant="outlined"
-              disabled={isLoading}
+              error={!!error}
+              helperText={error}
             />
-            {error && (
-              <Alert 
-                severity="error" 
-                sx={{ 
-                  mt: 2,
-                  backgroundColor: 'rgba(211, 47, 47, 0.3)',
-                  color: '#ff4444',
-                  border: '1px solid #ff4444'
-                }}
-              >
-                {error}
-              </Alert>
-            )}
             <Box sx={{ mt: 2, display: 'flex', gap: 2, justifyContent: 'center' }}>
               <NeonButton 
                 variant="outlined"
                 onClick={() => setActiveStep(0)}
-                disabled={isLoading}
               >
                 Zurück
               </NeonButton>
               <NeonButton 
                 variant="outlined"
                 onClick={handleSave}
-                disabled={!token || isLoading}
+                disabled={!token}
               >
                 {isLoading ? <CircularProgress size={24} sx={{ color: '#00ffff' }} /> : 'Speichern'}
               </NeonButton>
@@ -244,7 +235,7 @@ const NotificationDialog = ({ open, onClose }) => {
               rel="noopener noreferrer"
               sx={{ marginBottom: 2 }}
             >
-              Bot starten
+              BOT STARTEN
             </NeonButton>
 
             <Typography variant="body2" sx={{ color: '#888' }}>

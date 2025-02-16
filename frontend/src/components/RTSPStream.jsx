@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
+import logger from '../utils/logger';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -17,6 +18,11 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   const [loading, setLoading] = useState(true);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 3;
+
+  // Bestimme die Stream-URL basierend auf dem Druckertyp
+  const streamUrl = printer.type === 'CREALITY' 
+    ? `http://${printer.ip}:8080/?action=stream`
+    : null;
 
   const processNextBuffer = useCallback(() => {
     if (!sourceBufferRef.current || !bufferQueue.current.length) {
@@ -217,16 +223,23 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     };
   }, [fullscreen]);
 
-  // Separater Effekt für Stream-Setup
+  // Behalte nur diesen einen useEffect für Stream-Setup
   useEffect(() => {
+    logger.info('Initializing stream for printer:', printer);
+    
     // Wenn es nur ein Fullscreen-Toggle ist, nicht neu initialisieren
     if (videoRef.current && document.fullscreenElement === videoRef.current) {
       console.log('Skipping stream setup - just fullscreen toggle');
       return;
     }
-
-    console.log('Setting up stream for printer:', printer.id);
-    setupMediaSource();
+    
+    if (printer.type === 'BAMBULAB') {
+      console.log('Setting up Bambu Lab RTSP stream');
+      setupBambuStream();
+    } else if (printer.type === 'CREALITY') {
+      console.log('Setting up Creality MJPEG stream');
+      setupCrealityStream();
+    }
 
     return () => {
       // Cleanup nur wenn wirklich notwendig
@@ -240,51 +253,72 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     };
   }, [printer.id]);
 
-  const setupMediaSource = async () => {
-    try {
-      // Nur cleanup wenn nicht im Fullscreen
-      if (!document.fullscreenElement) {
-        cleanup();
-      }
+  const setupBambuStream = () => {
+    const mediaSource = new MediaSource();
+    mediaSourceRef.current = mediaSource;
+    
+    mediaSource.addEventListener('sourceopen', () => {
+      console.log('MediaSource opened');
+      setupSourceBuffer();
+    });
 
-      console.log('Setting up new MediaSource...');
-      const mediaSource = new MediaSource();
-      mediaSourceRef.current = mediaSource;
+    if (videoRef.current) {
       videoRef.current.src = URL.createObjectURL(mediaSource);
+    }
+  };
 
-      mediaSource.addEventListener('sourceopen', () => {
-        console.log('MediaSource opened');
-        setupSourceBuffer();
-      });
-
-    } catch (err) {
-      console.error('Error setting up MediaSource:', err);
-      setError(err.message);
+  const setupCrealityStream = () => {
+    if (videoRef.current) {
+      // Erstelle ein img Element für MJPEG
+      const img = document.createElement('img');
+      const streamUrl = `http://${printer.ip}:8080/?action=stream`;
+      console.log('Using stream URL:', streamUrl);
+      
+      img.src = streamUrl;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'contain';
+      
+      // Event Handler für Fehler
+      img.onerror = () => {
+        console.error('Error loading MJPEG stream');
+        setError(true);
+        setLoading(false);
+      };
+      
+      // Event Handler für erfolgreiches Laden
+      img.onload = () => {
+        console.log('MJPEG stream loaded');
+        setLoading(false);
+        setError(false);
+      };
+      
+      // Ersetze das video Element mit dem img Element
+      if (videoRef.current.parentNode) {
+        videoRef.current.parentNode.replaceChild(img, videoRef.current);
+        videoRef.current = img;
+      }
     }
   };
 
   const setupSourceBuffer = () => {
+    if (printer.type !== 'BAMBULAB') return;
+    
+    console.log('Setting up SourceBuffer...');
     try {
-      if (sourceBufferRef.current) return; // Verhindere doppeltes Setup
-
-      console.log('Setting up SourceBuffer...');
-      const mimeType = 'video/mp2t; codecs="avc1.640029"';
-      sourceBufferRef.current = mediaSourceRef.current.addSourceBuffer(mimeType);
+      const sourceBuffer = mediaSourceRef.current.addSourceBuffer('video/mp4; codecs="avc1.64001f"');
+      sourceBufferRef.current = sourceBuffer;
       
-      // Konfiguriere SourceBuffer
-      sourceBufferRef.current.mode = 'sequence';
-      sourceBufferRef.current.addEventListener('error', (e) => {
-        console.error('SourceBuffer error:', e);
-      });
-
-      connectWebSocket();
+      // Starte WebSocket nur für Bambu Lab
+      const streamUrl = `rtsps://bblp:${printer.accessCode}@${printer.ip}:322/streaming/live/1`;
+      connectWebSocket(streamUrl);
     } catch (err) {
-      console.error('Error setting up SourceBuffer:', err);
-      setError(err.message);
+      console.error('Error setting up source buffer:', err);
+      setError('Failed to initialize video stream');
     }
   };
 
-  const connectWebSocket = () => {
+  const connectWebSocket = (streamUrl) => {
     // Neue WebSocket URL ohne Port
     const url = `ws://${window.location.hostname}/stream/${printer.id}`;
     
@@ -295,7 +329,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         setTimeout(() => {
             if (!mountedRef.current) return;
             console.log(`Reconnect attempt ${attempt + 1}`);
-            connectWebSocket();
+            connectWebSocket(streamUrl);
         }, Math.pow(2, attempt) * 1000);
     };
 
@@ -354,112 +388,83 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   };
 
   const cleanup = () => {
-    console.log('Starting cleanup...');
-    
+    console.log('Cleaning up stream component');
     if (videoRef.current) {
-      console.log('Cleaning up video element');
-      videoRef.current.src = '';
-      videoRef.current.load();
-    }
-    
-    // WebSocket cleanup
-    if (websocketRef.current) {
-        try {
-            websocketRef.current.onclose = null; // Verhindere auto-reconnect
-            websocketRef.current.onerror = null; // Verhindere Error Events
-            websocketRef.current.onmessage = null;
-            websocketRef.current.close();
-        } catch (err) {
-            console.warn('Error closing WebSocket:', err);
-        }
-        websocketRef.current = null;
-    }
-
-    // SourceBuffer cleanup
-    if (sourceBufferRef.current && mediaSourceRef.current) {
-        try {
-            mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-        } catch (err) {
-            console.warn('Error removing source buffer:', err);
-        }
-        sourceBufferRef.current = null;
-    }
-
-    // MediaSource cleanup
-    if (mediaSourceRef.current && videoRef.current) {
-        try {
-            URL.revokeObjectURL(videoRef.current.src);
-        } catch (err) {
-            console.warn('Error revoking object URL:', err);
-        }
-        mediaSourceRef.current = null;
-    }
-
-    // Buffer Queue leeren
-    bufferQueue.current = [];
-    isProcessing.current = false;
-  };
-
-  useEffect(() => {
-    console.log(`Initializing stream for printer:`, printer);
-    
-    if (printer.type === 'BAMBULAB') {
-      console.log('Setting up Bambu Lab RTSP stream');
-      const streamUrl = `rtsps://bblp:${printer.accessCode}@${printer.ip}:322/streaming/live/1`;
-      initializeWebSocket(streamUrl);
-    } else if (printer.type === 'CREALITY') {
-      console.log('Setting up Creality MJPEG stream');
-      if (videoRef.current) {
-        // Stream über nginx proxy
-        const streamUrl = `/stream/?action=stream`;
-        videoRef.current.src = streamUrl;
-        
-        videoRef.current.onloadstart = () => {
-          console.log('Video load started');
-          setLoading(true);
-        };
-        
-        videoRef.current.onloadeddata = () => {
-          console.log('Video data loaded');
-          setLoading(false);
-          reconnectAttempts.current = 0;
-        };
-        
-        videoRef.current.onerror = (e) => {
-          console.error('Video error:', e.target.error);
-          handleStreamError();
-        };
-      }
-    }
-
-    return () => {
-      console.log('Cleaning up stream component');
-      if (videoRef.current) {
-        console.log('Cleaning up video element');
+      console.log('Cleaning up video/image element');
+      if (videoRef.current instanceof HTMLImageElement) {
+        videoRef.current.src = '';
+        videoRef.current.onerror = null;
+        videoRef.current.onload = null;
+      } else {
         videoRef.current.onloadstart = null;
         videoRef.current.onloadeddata = null;
         videoRef.current.onerror = null;
         videoRef.current.src = '';
         videoRef.current.load();
+        
+        // Cleanup WebSocket nur für Bambu Lab
+        if (printer.type === 'BAMBULAB' && websocketRef.current) {
+          try {
+            websocketRef.current.onclose = null;
+            websocketRef.current.onerror = null;
+            websocketRef.current.onmessage = null;
+            websocketRef.current.close();
+          } catch (err) {
+            console.warn('Error closing WebSocket:', err);
+          }
+          websocketRef.current = null;
+        }
+
+        // Cleanup MediaSource nur für Bambu Lab
+        if (printer.type === 'BAMBULAB' && mediaSourceRef.current) {
+          try {
+            URL.revokeObjectURL(videoRef.current.src);
+          } catch (err) {
+            console.warn('Error revoking object URL:', err);
+          }
+          mediaSourceRef.current = null;
+        }
       }
-      reconnectAttempts.current = 0;
-    };
-  }, [printer.id, handleStreamError]);
+    }
+  };
 
   return (
-    <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: fullscreen ? 'contain' : 'cover',
-          backgroundColor: 'black'
-        }}
-      />
+    <Box sx={{
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      zIndex: 1
+    }}>
+      {printer.type === 'CREALITY' ? (
+        <img 
+          src={streamUrl} 
+          alt="RTSP Stream" 
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: fullscreen ? 'contain' : 'cover'
+          }}
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            setError('Failed to load stream');
+            setLoading(false);
+          }}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: fullscreen ? 'contain' : 'cover',
+            backgroundColor: 'black'
+          }}
+        />
+      )}
+      
       {(loading || error) && (
         <Box sx={{
           position: 'absolute',
@@ -475,20 +480,8 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
           alignItems: 'center',
           gap: 1
         }}>
-          {loading && (
-            <>
-              <CircularProgress size={24} />
-              <Typography>
-                {error ? `Reconnecting (${reconnectAttempts.current}/${maxReconnectAttempts})...` : 'Connecting...'}
-              </Typography>
-            </>
-          )}
-          {error && !loading && (
-            <Typography>
-              {error}
-              {reconnectAttempts.current >= maxReconnectAttempts && ' (Max retries reached)'}
-            </Typography>
-          )}
+          {loading && <CircularProgress size={24} />}
+          {error && <Typography>{error}</Typography>}
         </Box>
       )}
     </Box>

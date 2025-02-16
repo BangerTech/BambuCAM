@@ -15,9 +15,12 @@ import json
 import uuid
 import requests
 import os
+from src.config import Config  # Importiere Config
 
 logger = logging.getLogger(__name__)
 printers_bp = Blueprint('printers', __name__, url_prefix='/api')
+
+PRINTERS_DIR = Config.PRINTERS_DATA_DIR  # Nutze den Pfad aus der Config
 
 def getNextPort() -> int:
     """
@@ -101,14 +104,14 @@ def add_printer():
             return jsonify({
                 'success': True,
                 'printer': new_printer
-            }), 200  # Wichtig: Status 200 für erfolgreiche Anfrage
+            }), 200
             
         except Exception as e:
             logger.error(f"Error in printer creation process: {str(e)}", exc_info=True)
             return jsonify({
                 'error': f'Error creating printer: {str(e)}',
                 'success': False
-            }), 500  # Server Error für interne Fehler
+            }), 500
 
     except Exception as e:
         logger.error(f"Error in request processing: {str(e)}", exc_info=True)
@@ -140,86 +143,23 @@ def scan_network():
 
 @printers_bp.route('/printers/<printer_id>/status', methods=['GET'])
 def get_printer_status(printer_id):
+    """Get printer status"""
     try:
-        logger.info(f"Getting status for printer: {printer_id}")
-        
-        # Lade den spezifischen Drucker
-        printer_file = f'data/printers/{printer_id}.json'
-        try:
-            with open(printer_file, 'r') as f:
-                printer = json.load(f)
-                logger.debug(f"Loaded printer data: {printer}")
-        except FileNotFoundError:
-            logger.error(f"Printer file not found: {printer_file}")
-            return jsonify({'error': 'Printer not found'}), 404
-
-        # Für Creality/Klipper Drucker
-        if printer['type'] == 'CREALITY':
-            try:
-                logger.debug(f"Attempting to connect to Creality printer at: {printer['ip']}")
-                response = requests.get(f"http://{printer['ip']}:80/printer/info", timeout=5)
-                if response.ok:
-                    printer_data = response.json()
-                    logger.debug(f"Received printer data: {printer_data}")
-                    status_data = {
-                        'status': 'online',
-                        'temperatures': {
-                            'nozzle': printer_data.get('temperature', {}).get('tool0', 0),
-                            'bed': printer_data.get('temperature', {}).get('bed', 0)
-                        },
-                        'progress': printer_data.get('progress', {}).get('completion', 0)
-                    }
-                    
-                    # Update die Drucker-Datei mit den neuen Status-Daten
-                    printer.update(status_data)
-                    with open(printer_file, 'w') as f:
-                        json.dump(printer, f, indent=2)
-                        
-                    return jsonify(status_data)
-            except:
-                pass
-
-            # Wenn keine Verbindung möglich ist
-            status_data = {
-                'status': 'offline',
-                'temperatures': {
-                    'nozzle': 0,
-                    'bed': 0
-                },
-                'progress': 0
-            }
+        printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
+        with open(printer_file, 'r') as f:
+            printer_data = json.load(f)
             
-            # Update die Drucker-Datei
-            printer.update(status_data)
-            with open(printer_file, 'w') as f:
-                json.dump(printer, f, indent=2)
-                
-            return jsonify(status_data)
-
-        # Für Bambu Lab Drucker
-        elif printer['type'] == 'BAMBULAB':
-            # Hier die existierende Bambu Lab Status-Logik
-            return jsonify({
-                'status': printer.get('status', 'offline'),
-                'temperatures': printer.get('temperatures', {
-                    'nozzle': 0,
-                    'bed': 0,
-                    'chamber': 0
-                }),
-                'progress': printer.get('progress', 0)
-            })
-
-        return jsonify({
-            'status': 'unknown',
-            'temperatures': {
-                'nozzle': 0,
-                'bed': 0
-            },
-            'progress': 0
-        })
-
+        if printer_data['type'] == 'CREALITY':
+            printer_service.connect_printer(
+                printer_id=printer_id,
+                printer_type=printer_data['type'],
+                ip=printer_data['ip']
+            )
+            
+        return jsonify(printer_data)
+        
     except Exception as e:
-        logger.error(f"Error getting printer status: {str(e)}", exc_info=True)
+        logger.error(f"Error getting printer status: {e}")
         return jsonify({'error': str(e)}), 500
 
 @printers_bp.route('/printers/<printer_id>/status', methods=['PUT'])
