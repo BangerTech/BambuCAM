@@ -37,6 +37,9 @@ STREAMS_DIR = DATA_DIR / 'streams'
 os.makedirs(PRINTERS_DIR, exist_ok=True)
 os.makedirs(STREAMS_DIR, exist_ok=True)
 
+# Ändere die Konfiguration am Anfang der Datei
+PRINTERS_FILE = Path(os.getenv('PRINTERS_FILE', 'printers.json'))
+
 def getNextPort() -> int:
     """
     Findet den nächsten freien Port für einen neuen Drucker.
@@ -111,6 +114,16 @@ class PrinterService:
                 try:
                     data = json.loads(msg.payload)
                     self.printer_data[printer_id] = data
+                    # Update printer status
+                    self.update_printer_status(printer_id, {
+                        'status': data.get('print', {}).get('gcode_state', 'unknown'),
+                        'temperatures': {
+                            'nozzle': data.get('print', {}).get('nozzle_temper', 0),
+                            'bed': data.get('print', {}).get('bed_temper', 0)
+                        },
+                        'progress': data.get('print', {}).get('mc_percent', 0),
+                        'state': data.get('print', {}).get('gcode_state', 'unknown')
+                    })
                 except Exception as e:
                     logger.error(f"Error processing MQTT message: {e}")
 
@@ -435,30 +448,14 @@ def scanNetwork():
         ).encode()
 
         # Erstelle UDP Socket mit Broadcast
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        
-        # Set multicast TTL
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-        
-        # Join multicast group
-        group = socket.inet_aton('239.255.255.250')
-        mreq = struct.pack('4sL', group, socket.INADDR_ANY)
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        sock.settimeout(5)  # 5 Sekunden Timeout
 
-        # Hole lokale IP
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
+        # Bind to all interfaces
+        sock.bind(('', 0))
 
-        # Bind to specific interface
-        sock.bind((local_ip, 0))
-
-        # Sammle Antworten
-        printers = []
-        
         # Sende an beide Discovery Ports
         discovery_ports = [1990, 2021]
         for port in discovery_ports:
@@ -472,20 +469,21 @@ def scanNetwork():
             except Exception as e:
                 logger.error(f"Error sending to port {port}: {e}")
 
-        # Warte auf Antworten
+        # Sammle Antworten
+        printers = []
         start_time = time.time()
+        
         while time.time() - start_time < 5:  # 5 Sekunden warten
             try:
                 data, addr = sock.recvfrom(4096)
                 response = data.decode()
-                logger.debug(f"Received from {addr}: {response}")
                 
                 # Parse SSDP Response
                 if 'bambulab' in response.lower():
                     printer_info = {
                         'id': str(uuid.uuid4()),
                         'ip': addr[0],
-                        'type': 'bambulab',
+                        'type': 'BAMBULAB',
                         'status': 'online'
                     }
                     
@@ -495,13 +493,9 @@ def scanNetwork():
                             printer_info['name'] = line.split(':', 1)[1].strip()
                         elif 'DevModel.bambu.com:' in line:
                             printer_info['model'] = line.split(':', 1)[1].strip()
-                        elif 'DevVersion.bambu.com:' in line:
-                            printer_info['version'] = line.split(':', 1)[1].strip()
                     
                     # Prüfe ob der Drucker bereits gefunden wurde
                     if not any(p['ip'] == addr[0] for p in printers):
-                        if 'name' not in printer_info:
-                            printer_info['name'] = f"Bambu Lab Printer ({addr[0]})"
                         printers.append(printer_info)
                         logger.info(f"Found printer: {printer_info}")
                         
@@ -570,7 +564,21 @@ def on_connect(client, userdata, flags, rc):
         client.subscribe("device/+/report")
 
 def on_message(client, userdata, msg):
-    logger.debug(f"MQTT Message received: {msg.topic} {msg.payload}")
+    try:
+        data = json.loads(msg.payload)
+        self.printer_data[printer_id] = data
+        # Update printer status
+        self.update_printer_status(printer_id, {
+            'status': data.get('print', {}).get('gcode_state', 'unknown'),
+            'temperatures': {
+                'nozzle': data.get('print', {}).get('nozzle_temper', 0),
+                'bed': data.get('print', {}).get('bed_temper', 0)
+            },
+            'progress': data.get('print', {}).get('mc_percent', 0),
+            'state': data.get('print', {}).get('gcode_state', 'unknown')
+        })
+    except Exception as e:
+        logger.error(f"Error processing MQTT message: {e}")
 
 # Lade gespeicherte Drucker beim Start
 stored_printers = getPrinters()
