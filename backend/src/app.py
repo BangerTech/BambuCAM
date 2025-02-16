@@ -51,7 +51,7 @@ CORS(app, resources={
 os.makedirs(PRINTERS_DIR, exist_ok=True)
 os.makedirs(STREAMS_DIR, exist_ok=True)
 
-# Blueprints nur einmal registrieren
+# Blueprints nur EINMAL registrieren
 register_blueprints(app)
 
 @app.before_request

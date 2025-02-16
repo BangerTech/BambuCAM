@@ -13,6 +13,7 @@ import bambulabs_api as bl
 import ssl
 from src.printer_types import PRINTER_CONFIGS
 import threading
+import struct
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -221,11 +222,10 @@ class PrinterService:
                 del self.mqtt_clients[printer_id]
                 
             # Verbinde basierend auf Drucker-Typ
-            if printer_type == 'BAMBULAB':
+            if printer_type.upper() == 'BAMBULAB':
                 self.connect_mqtt(printer_id, ip)
-            elif printer_type == 'CREALITY':
+            elif printer_type.upper() == 'CREALITY':
                 logger.info(f"Setting up Creality polling for printer {printer_id}")
-                # Starte Polling statt MQTT
                 polling_thread = setup_creality_polling(printer_id, ip)
                 if polling_thread:
                     self.mqtt_clients[printer_id] = polling_thread
@@ -319,10 +319,8 @@ async def test_stream_url(url, printer_type='BAMBULAB'):
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
     try:
-        # Debug-Logging hinzufügen
         logger.info(f"Adding printer with data: {data}")
         
-        # Erstelle Drucker-Objekt mit UUID
         printer = {
             'id': str(uuid.uuid4()),
             'name': data['name'],
@@ -335,18 +333,17 @@ def addPrinter(data):
             },
             'progress': 0,
             'port': getNextPort(),
-            'accessCode': data.get('accessCode', '')
+            'accessCode': data.get('accessCode', ''),
+            'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
         }
         
-        # Debug-Logging für Datei-Operationen
         printer_file = os.path.join(PRINTERS_DIR, f"{printer['id']}.json")
         logger.info(f"Saving printer to file: {printer_file}")
         
         with open(printer_file, 'w') as f:
             json.dump(printer, f, indent=2)
             
-        # MQTT-Verbindung über PrinterService einrichten
-        logger.info(f"Setting up MQTT connection for printer {printer['id']}")
+        # MQTT-Verbindung einrichten
         printer_service.connect_printer(
             printer_id=printer['id'],
             printer_type=printer['type'],
@@ -438,14 +435,30 @@ def scanNetwork():
         ).encode()
 
         # Erstelle UDP Socket mit Broadcast
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(5)  # 5 Sekunden Timeout
+        
+        # Set multicast TTL
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+        
+        # Join multicast group
+        group = socket.inet_aton('239.255.255.250')
+        mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-        # Bind to all interfaces
-        sock.bind(('', 0))
+        # Hole lokale IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
 
+        # Bind to specific interface
+        sock.bind((local_ip, 0))
+
+        # Sammle Antworten
+        printers = []
+        
         # Sende an beide Discovery Ports
         discovery_ports = [1990, 2021]
         for port in discovery_ports:
@@ -459,15 +472,13 @@ def scanNetwork():
             except Exception as e:
                 logger.error(f"Error sending to port {port}: {e}")
 
-        # Sammle Antworten
-        printers = []
+        # Warte auf Antworten
         start_time = time.time()
-        
         while time.time() - start_time < 5:  # 5 Sekunden warten
             try:
                 data, addr = sock.recvfrom(4096)
                 response = data.decode()
-                logger.debug(f"Received from {addr}: {response}")  # Debug-Level für weniger Spam
+                logger.debug(f"Received from {addr}: {response}")
                 
                 # Parse SSDP Response
                 if 'bambulab' in response.lower():
@@ -489,8 +500,10 @@ def scanNetwork():
                     
                     # Prüfe ob der Drucker bereits gefunden wurde
                     if not any(p['ip'] == addr[0] for p in printers):
+                        if 'name' not in printer_info:
+                            printer_info['name'] = f"Bambu Lab Printer ({addr[0]})"
                         printers.append(printer_info)
-                        logger.info(f"Found printer: {printer_info}")  # Info-Level für gefundene Drucker
+                        logger.info(f"Found printer: {printer_info}")
                         
             except socket.timeout:
                 continue
@@ -498,11 +511,11 @@ def scanNetwork():
                 logger.error(f"Error receiving response: {e}")
 
         logger.info(f"Scan complete. Found {len(printers)} printers")
-        return printers
+        return {'printers': printers}
 
     except Exception as e:
         logger.error(f"Error during network scan: {str(e)}")
-        return []
+        return {'printers': []}
     finally:
         try:
             sock.close()
@@ -722,4 +735,34 @@ def get_creality_status(printer_ip: str) -> dict:
             'targets': {'hotend': 0, 'bed': 0},
             'progress': 0,
             'state': 'error'
-        } 
+        }
+
+def parse_ssdp_response(response, ip):
+    """Extrahiert Drucker-Informationen aus der SSDP-Antwort"""
+    try:
+        printer_info = {
+            'id': str(uuid.uuid4()),
+            'ip': ip,
+            'type': 'BAMBULAB',
+            'status': 'online'
+        }
+        
+        # Extrahiere Details aus Response
+        for line in response.split('\r\n'):
+            if 'DevName.bambu.com:' in line:
+                printer_info['name'] = line.split(':', 1)[1].strip()
+            elif 'DevModel.bambu.com:' in line:
+                printer_info['model'] = line.split(':', 1)[1].strip()
+            elif 'DevVersion.bambu.com:' in line:
+                printer_info['version'] = line.split(':', 1)[1].strip()
+                
+        # Prüfe ob alle notwendigen Informationen vorhanden sind
+        if 'name' not in printer_info:
+            printer_info['name'] = f"Bambu Lab Printer ({ip})"
+            
+        logger.debug(f"Parsed printer info: {printer_info}")
+        return printer_info
+        
+    except Exception as e:
+        logger.error(f"Error parsing SSDP response: {e}")
+        return None 

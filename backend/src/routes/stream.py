@@ -78,3 +78,20 @@ def proxy_mjpeg_stream(printer_id):
     except Exception as e:
         logger.error(f"Error setting up MJPEG proxy: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500 
+
+@stream_bp.route('/<printer_id>', methods=['GET'])
+def get_stream(printer_id):
+    try:
+        printer = getPrinterById(printer_id)
+        if not printer:
+            return jsonify({'error': 'Printer not found'}), 404
+            
+        stream_url = printer.get('streamUrl')
+        if not stream_url:
+            return jsonify({'error': 'No stream URL configured'}), 400
+            
+        return stream_service.start_stream(printer_id, stream_url)
+        
+    except Exception as e:
+        logger.error(f"Error starting stream: {e}")
+        return jsonify({'error': str(e)}), 500 

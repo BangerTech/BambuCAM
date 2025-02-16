@@ -73,7 +73,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
           sourceBufferRef.current.mode = 'segments';
           sourceBufferRef.current.addEventListener('updateend', processNextBuffer);
 
-          const wsUrl = `ws://${window.location.hostname}:4000/stream/${printer.id}/ws?url=${encodeURIComponent(streamUrl)}`;
+          const wsUrl = `ws://${window.location.hostname}:${window.location.port}/api/stream/${printer.id}?url=${encodeURIComponent(streamUrl)}`;
           const ws = new WebSocket(wsUrl);
           websocketRef.current = ws;
 
@@ -319,72 +319,72 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   };
 
   const connectWebSocket = (streamUrl) => {
-    // Neue WebSocket URL ohne Port
-    const url = `ws://${window.location.hostname}/stream/${printer.id}`;
-    
-    // Exponentieller Backoff
-    const reconnect = (attempt = 0) => {
-        if (attempt > 3) return;
+    try {
+        const wsUrl = `ws://${window.location.hostname}:${window.location.port}/api/stream/${printer.id}?url=${encodeURIComponent(streamUrl)}`;
+        console.log('Connecting to WebSocket:', wsUrl);
         
-        setTimeout(() => {
-            if (!mountedRef.current) return;
-            console.log(`Reconnect attempt ${attempt + 1}`);
-            connectWebSocket(streamUrl);
-        }, Math.pow(2, attempt) * 1000);
-    };
-
-    const ws = new WebSocket(url);
-    
-    ws.onopen = () => {
-        console.log('WebSocket connected');
-        setError(null);
-    };
-    
-    ws.onclose = () => reconnect(0);
-    ws.onerror = () => reconnect(0);
-    
-    // Funktion zum Verarbeiten der Queue
-    const processBufferQueue = async () => {
-        if (isProcessing.current || !sourceBufferRef.current || bufferQueue.current.length === 0) {
-            return;
-        }
-
-        isProcessing.current = true;
+        const ws = new WebSocket(wsUrl);
         
-        try {
-            while (bufferQueue.current.length > 0 && !sourceBufferRef.current.updating) {
-                const data = bufferQueue.current.shift();
-                sourceBufferRef.current.appendBuffer(data);
-                await new Promise(resolve => {
-                    sourceBufferRef.current.addEventListener('updateend', resolve, { once: true });
-                });
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            setLoading(false);
+        };
+        
+        ws.onclose = () => {
+            console.log('WebSocket closed');
+            handleWebSocketError();
+        };
+        
+        ws.onerror = () => {
+            console.error('WebSocket error:', error);
+            handleWebSocketError();
+        };
+        
+        // Funktion zum Verarbeiten der Queue
+        const processBufferQueue = async () => {
+            if (isProcessing.current || !sourceBufferRef.current || bufferQueue.current.length === 0) {
+                return;
             }
-        } catch (err) {
-            console.error('Error processing buffer queue:', err);
-        } finally {
-            isProcessing.current = false;
+
+            isProcessing.current = true;
             
-            // Falls noch Daten in der Queue sind, weiter verarbeiten
-            if (bufferQueue.current.length > 0) {
+            try {
+                while (bufferQueue.current.length > 0 && !sourceBufferRef.current.updating) {
+                    const data = bufferQueue.current.shift();
+                    sourceBufferRef.current.appendBuffer(data);
+                    await new Promise(resolve => {
+                        sourceBufferRef.current.addEventListener('updateend', resolve, { once: true });
+                    });
+                }
+            } catch (err) {
+                console.error('Error processing buffer queue:', err);
+            } finally {
+                isProcessing.current = false;
+                
+                // Falls noch Daten in der Queue sind, weiter verarbeiten
+                if (bufferQueue.current.length > 0) {
+                    processBufferQueue();
+                }
+            }
+        };
+
+        ws.onmessage = async (event) => {
+            try {
+                const data = await event.data.arrayBuffer();
+                bufferQueue.current.push(data);
                 processBufferQueue();
+                
+                // Setze Loading erst nach mehreren Frames zurück
+                if (bufferQueue.current.length > 5) {
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Error handling WebSocket message:', err);
             }
-        }
-    };
-
-    ws.onmessage = async (event) => {
-        try {
-            const data = await event.data.arrayBuffer();
-            bufferQueue.current.push(data);
-            processBufferQueue();
-            
-            // Setze Loading erst nach mehreren Frames zurück
-            if (bufferQueue.current.length > 5) {
-                setLoading(false);
-            }
-        } catch (err) {
-            console.error('Error handling WebSocket message:', err);
-        }
-    };
+        };
+    } catch (error) {
+        console.error('WebSocket connection error:', error);
+    }
   };
 
   const cleanup = () => {

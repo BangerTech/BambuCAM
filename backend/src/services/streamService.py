@@ -33,23 +33,56 @@ class StreamService:
         self.monitor_thread.start()
 
     def start_stream(self, printer_id: str, stream_url: str) -> dict:
-        """Startet einen neuen Stream für einen Drucker"""
-        stream_file = os.path.join(self.streams_dir, f"{printer_id}.json")
-        
-        stream_data = {
-            'printer_id': printer_id,
-            'url': stream_url,
-            'started_at': datetime.now().isoformat(),
-            'status': 'active',
-            'websocket_port': self._get_next_ws_port(),
-            'process_id': None
-        }
-
-        # Speichere Stream-Informationen
-        with open(stream_file, 'w') as f:
-            json.dump(stream_data, f, indent=2)
-
-        return stream_data
+        """Startet einen neuen Stream"""
+        try:
+            logger.info(f"Starting stream for printer {printer_id} with URL {stream_url}")
+            
+            if printer_id in self.active_streams:
+                logger.info(f"Stream already exists for printer {printer_id}")
+                return {
+                    'success': True,
+                    'port': self.active_streams[printer_id]['port']
+                }
+            
+            # Hole Drucker-Konfiguration
+            printer = get_printer(printer_id)
+            if not printer:
+                raise Exception("Printer not found")
+            
+            # Starte FFmpeg Prozess
+            command = [
+                'ffmpeg',
+                '-rtsp_transport', 'tcp',
+                '-i', stream_url,
+                '-c:v', 'copy',
+                '-f', 'mpegts',
+                f'http://127.0.0.1:{printer["port"]}'
+            ]
+            
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # Speichere Stream-Informationen
+            self.active_streams[printer_id] = {
+                'process': process,
+                'port': printer['port'],
+                'url': stream_url
+            }
+            
+            return {
+                'success': True,
+                'port': printer['port']
+            }
+            
+        except Exception as e:
+            logger.error(f"Error starting stream: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
 
     def stop_stream(self, printer_id: str) -> bool:
         """Stoppt einen aktiven Stream"""
