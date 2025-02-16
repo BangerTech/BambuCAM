@@ -24,18 +24,28 @@ logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 class Config:
-    BASE_DIR = BASE_DIR
-    DATA_DIR = DATA_DIR
+    # Base directories
+    BASE_DIR = Path(os.path.dirname(os.path.dirname(__file__)))
+    DATA_DIR = BASE_DIR / 'data'
     PRINTERS_DIR = DATA_DIR / 'printers'
     NOTIFICATIONS_DIR = DATA_DIR / 'notifications'
     BAMBU_CLOUD_DIR = DATA_DIR / 'bambu-cloud'
-    LOGS_DIR = LOGS_DIR
+    LOGS_DIR = BASE_DIR / 'logs'
 
-    # Stelle sicher, dass alle Verzeichnisse existieren
-    os.makedirs(PRINTERS_DIR, exist_ok=True)
-    os.makedirs(NOTIFICATIONS_DIR, exist_ok=True)
-    os.makedirs(BAMBU_CLOUD_DIR, exist_ok=True)
-    os.makedirs(LOGS_DIR, exist_ok=True)
+    # Ensure all required directories exist
+    REQUIRED_DIRS = [
+        DATA_DIR,
+        PRINTERS_DIR,
+        NOTIFICATIONS_DIR,
+        BAMBU_CLOUD_DIR,
+        LOGS_DIR
+    ]
+    
+    @classmethod
+    def init_directories(cls):
+        """Initialize all required directories"""
+        for directory in cls.REQUIRED_DIRS:
+            os.makedirs(directory, exist_ok=True)
 
     # Dateipfade
     BAMBU_CLOUD_FILE = BAMBU_CLOUD_DIR / 'bambu_cloud.json'

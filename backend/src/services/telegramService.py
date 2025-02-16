@@ -7,156 +7,112 @@ from telegram.ext import Updater, CommandHandler
 from telegram import ParseMode
 import time
 from src.config import Config
+import telegram
 
 logger = logging.getLogger(__name__)
 
 class TelegramService:
     def __init__(self):
-        self.config_file = Path("config/telegram.json")
-        self.config_file.parent.mkdir(exist_ok=True)
-        self.load_config()
+        """Initializes the Telegram Service"""
+        self.config_file = Path('data/notifications/notifications.json')
+        self.notifications_file = 'data/notifications/notifications.json'
         self.bot = None
+        self.updater = None
         self.is_ready = False
         
-        # Versuche Bot neu zu starten wenn Token in der Config existiert
-        if self.config.get('token'):
-            logger.info("Found existing token, trying to restart bot...")
-            self.init_bot(self.config['token'])
-
-        self.notifications_file = os.path.join(Config.DATA_DIR, 'notifications', 'notifications.json')
-
-    def init_bot(self, token=None):
-        """Initialisiert den Telegram Bot"""
+        # Try to initialize bot if configuration exists
         try:
-            # Wenn Bot bereits läuft, nicht neu starten
-            if self.is_ready and self.bot:
-                logger.info("Bot is already running")
-                return {
-                    'success': True,
-                    'botUsername': self.bot.bot.username
-                }
+            settings = self.get_settings()
+            if settings.get('token'):
+                self.initialize_bot(settings['token'])
+        except Exception as e:
+            logger.error(f"Error initializing telegram bot: {e}")
 
-            if token:
-                os.environ['TELEGRAM_BOT_TOKEN'] = token
-                self.config['token'] = token
-                self.save_config()
-                logger.info("Token saved to config")
-            else:
-                # Versuche Token aus Config zu laden
-                token = self.config.get('token')
-                if token:
-                    os.environ['TELEGRAM_BOT_TOKEN'] = token
-                    logger.info("Token loaded from config")
-
-            token = os.getenv('TELEGRAM_BOT_TOKEN')
-            if not token:
-                logger.warning("TELEGRAM_BOT_TOKEN nicht gesetzt")
-                return False
-
-            self.bot = Updater(token)
-            logger.info(f"Bot username: {self.bot.bot.username}")
+    def initialize_bot(self, token):
+        """Initializes the bot with the given token"""
+        try:
+            self.bot = telegram.Bot(token=token)
+            self.updater = Updater(token, use_context=True)
             
-            # Kommandos registrieren
-            dp = self.bot.dispatcher
-            dp.add_handler(CommandHandler("help", self.help_command))
+            # Register handlers
+            dp = self.updater.dispatcher
             dp.add_handler(CommandHandler("start", self.start_command))
+            dp.add_handler(CommandHandler("help", self.help_command))
             
-            # Bot starten
-            self.bot.start_polling(drop_pending_updates=True)
-            logger.info("Telegram Bot gestartet und polling aktiviert")
-            
+            # Start bot
+            self.updater.start_polling()
             self.is_ready = True
-            return {
-                'success': True,
-                'botUsername': self.bot.bot.username
-            }
+            logger.info("Telegram bot initialized successfully")
             
         except Exception as e:
-            logger.error(f"Telegram Bot init error: {e}")
-            return False
+            logger.error(f"Failed to initialize telegram bot: {e}")
+            self.is_ready = False
 
     def help_command(self, update, context):
-        """Handler für /help Kommando"""
+        """Handler for /help command"""
         message = (
-            "🔍 *Verfügbare Befehle:*\n\n"
-            "/help - Diese Hilfe anzeigen\n\n"
-            "Sie erhalten automatisch Benachrichtigungen über:\n"
-            "✅ Abgeschlossene Drucke\n"
-            "❌ Fehlgeschlagene Drucke\n" 
-            "⚠️ Drucker-Fehler"
+            "🔍 *Available Commands:*\n\n"
+            "/help - Show this help\n\n"
+            "You will receive automatic notifications for:\n"
+            "✅ Completed prints\n"
+            "❌ Failed prints\n" 
+            "⚠️ Printer errors"
         )
         
         update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
     def start_command(self, update, context):
-        """Handler für /start Kommando"""
+        """Handler for /start command"""
         try:
             chat_id = update.effective_chat.id
             logger.info(f"Start command received from chat_id: {chat_id}")
             
-            # Lade aktuelle Einstellungen
-            if not os.path.exists(self.notifications_file):
-                logger.error("Notifications file not found")
-                return
+            # Sende sofort die Willkommensnachricht
+            welcome_message = (
+                "🖨 *BambuCam Telegram Bot*\n\n"
+                "Bot setup successful!\n"
+                "You will now receive notifications about your prints.\n\n"
+                "Available Commands:\n"
+                "/help - Show available commands"
+            )
             
-            try:
+            update.message.reply_text(
+                welcome_message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            logger.info(f"Welcome message sent to chat_id {chat_id}")
+            
+            # Dann speichere die chat_id
+            if os.path.exists(self.notifications_file):
                 with open(self.notifications_file, 'r') as f:
                     settings = json.load(f)
                     
-                # Stelle sicher dass die Telegram-Struktur existiert
                 if 'telegram' not in settings:
                     settings['telegram'] = {}
-                    
-                # Initialisiere chat_ids wenn nicht vorhanden
                 if 'chat_ids' not in settings['telegram']:
                     settings['telegram']['chat_ids'] = []
-                    
-                # Füge chat_id hinzu wenn noch nicht vorhanden
                 if chat_id not in settings['telegram']['chat_ids']:
                     settings['telegram']['chat_ids'].append(chat_id)
-                    logger.info(f"Added new chat_id: {chat_id}")
                     
-                    # Speichere die aktualisierten Einstellungen
-                    with open(self.notifications_file, 'w') as f:
-                        json.dump(settings, f, indent=2)
-                    logger.info("Updated notifications.json with new chat_id")
+                with open(self.notifications_file, 'w') as f:
+                    json.dump(settings, f, indent=2)
                     
-                # Sende Willkommensnachricht
-                welcome_message = (
-                    "🖨 *BambuCam Telegram Bot*\n\n"
-                    "Bot wurde erfolgreich eingerichtet!\n"
-                    "Sie erhalten ab jetzt Benachrichtigungen über Ihre Drucke.\n\n"
-                    "Verfügbare Befehle:\n"
-                    "/help - Zeigt diese Hilfe an"
-                )
-                
-                update.message.reply_text(
-                    welcome_message,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                logger.info(f"Welcome message sent to chat_id {chat_id}")
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Error reading notifications file: {e}")
-            except Exception as e:
-                logger.error(f"Error in start command: {e}")
-                
         except Exception as e:
-            logger.error(f"Critical error in start command: {e}", exc_info=True)
+            logger.error(f"Error in start command: {e}", exc_info=True)
 
     def load_config(self):
-        """Lädt die Konfiguration"""
+        """Loads the configuration"""
         if self.config_file.exists():
             with open(self.config_file) as f:
                 self.config = json.load(f)
         else:
             self.config = {
                 'chat_id': None,
-                'notifications_enabled': False  # Neues Feld für den Status
+                'notifications_enabled': False  # New field for status
             }
 
     def save_config(self):
-        """Speichert die Konfiguration"""
+        """Saves the configuration"""
         with open(self.config_file, 'w') as f:
             json.dump(self.config, f)
 
@@ -210,14 +166,14 @@ class TelegramService:
             return False
             
     def send_welcome_message(self, chat_id):
-        """Sendet Willkommensnachricht wenn Bot gestartet wird"""
+        """Sends welcome message when bot starts"""
         welcome_msg = """🖨 BambuCam Telegram Bot
 
-Bot wurde erfolgreich eingerichtet!
-Sie erhalten ab jetzt Benachrichtigungen über Ihre Drucke.
+Bot setup successful!
+You will now receive notifications about your prints.
 
-Verfügbare Befehle:
-/help - Zeigt diese Hilfe an"""
+Available Commands:
+/help - Show available commands"""
         
         try:
             settings = self.get_settings()
@@ -235,7 +191,7 @@ Verfügbare Befehle:
             logger.error(f"Error sending welcome message: {e}")
             
     def send_status_notification(self, enabled: bool):
-        """Sendet eine Benachrichtigung wenn der Status geändert wird"""
+        """Sends a notification when status changes"""
         try:
             if not os.path.exists(self.notifications_file):
                 return
@@ -246,8 +202,9 @@ Verfügbare Befehle:
             if 'chat_ids' not in settings.get('telegram', {}):
                 return
             
-            message = "�� Benachrichtigungen wurden aktiviert" if enabled else "🔕 Benachrichtigungen wurden deaktiviert"
+            message = "🔔 Notifications enabled" if enabled else "🔕 Notifications disabled"
             
+            # Direkt die Nachricht an alle chat_ids senden
             for chat_id in settings['telegram']['chat_ids']:
                 try:
                     self.bot.send_message(
@@ -263,14 +220,14 @@ Verfügbare Befehle:
             logger.error(f"Error sending status notification: {e}")
 
     def wait_for_setup(self, timeout=30):
-        """Wartet bis der Bot eingerichtet ist"""
+        """Waits until the bot is set up"""
         start_time = time.time()
         while not self.is_ready and time.time() - start_time < timeout:
             time.sleep(1)
             if self.is_ready:
                 return True
                 
-        # Timeout - gib hilfreiche Fehlermeldung zurück
+        # Timeout - return helpful error message
         bot_info = self.bot.bot.get_me() if self.bot else None
         if bot_info:
             raise TimeoutError(
@@ -281,10 +238,10 @@ Verfügbare Befehle:
             raise TimeoutError("Setup timeout - please send /start to the bot")
 
     def disable(self):
-        """Deaktiviert die Benachrichtigungen"""
+        """Disables notifications"""
         try:
-            # Erst Nachricht senden, dann deaktivieren
-            self.send_notification("🔕 Benachrichtigungen wurden deaktiviert")
+            # First send message, then disable
+            self.send_notification("🔕 Notifications disabled")
             self.config['notifications_enabled'] = False
             self.save_config()
             return True
@@ -293,16 +250,16 @@ Verfügbare Befehle:
             return False
 
     def enable(self):
-        """Aktiviert die Benachrichtigungen"""
+        """Enables notifications"""
         try:
             self.config['notifications_enabled'] = True
             self.save_config()
-            # Nachricht nach Aktivierung senden
-            self.send_notification("🔔 Benachrichtigungen wurden wieder aktiviert!")
+            # Message after enabling
+            self.send_notification("🔔 Notifications enabled!")
             return True
         except Exception as e:
             logger.error(f"Error enabling notifications: {e}")
             return False
 
-# Globale Instanz
+# Global instance
 telegram_service = TelegramService() 

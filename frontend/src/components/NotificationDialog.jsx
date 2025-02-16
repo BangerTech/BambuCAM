@@ -94,9 +94,9 @@ const NotificationDialog = ({ open, onClose }) => {
   const [showGuide, setShowGuide] = useState(false);
 
   const steps = [
-    'Bot erstellen',
-    'Token eingeben',
-    'Fertig!'
+    'Create Bot',
+    'Enter Token',
+    'Done!'
   ];
 
   const handleSave = async () => {
@@ -199,23 +199,23 @@ const NotificationDialog = ({ open, onClose }) => {
         {activeStep === 0 && (
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h6" gutterBottom sx={{ color: '#00ffff' }}>
-              1. Bot erstellen
+              1. Create Bot
             </Typography>
             <Typography paragraph sx={{ color: '#fff' }}>
-              • Öffne <Link href="https://t.me/BotFather" target="_blank" sx={{ color: '#00ffff' }}>@BotFather</Link> in Telegram
+              • Open <Link href="https://t.me/BotFather" target="_blank" sx={{ color: '#00ffff' }}>@BotFather</Link> in Telegram
             </Typography>
             <Typography paragraph sx={{ color: '#fff' }}>
-              • Sende <code style={{ color: '#00ffff' }}>/newbot</code> und folge den Anweisungen
+              • Send <code style={{ color: '#00ffff' }}>/newbot</code> and follow the instructions
             </Typography>
             <Typography paragraph sx={{ color: '#fff' }}>
-              • Kopiere den Bot-Token
+              • Copy the Bot Token
             </Typography>
             <NeonButton 
               variant="outlined"
               onClick={() => setActiveStep(1)}
               sx={{ mt: 2 }}
             >
-              Weiter
+              Next
             </NeonButton>
           </Box>
         )}
@@ -223,7 +223,7 @@ const NotificationDialog = ({ open, onClose }) => {
         {activeStep === 1 && (
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h6" gutterBottom sx={{ color: '#00ffff' }}>
-              2. Token eingeben
+              2. Enter Token
             </Typography>
             <NeonTextField
               fullWidth
@@ -239,14 +239,14 @@ const NotificationDialog = ({ open, onClose }) => {
                 variant="outlined"
                 onClick={() => setActiveStep(0)}
               >
-                Zurück
+                Back
               </NeonButton>
               <NeonButton 
                 variant="outlined"
                 onClick={handleSave}
                 disabled={!token}
               >
-                {isLoading ? <CircularProgress size={24} sx={{ color: '#00ffff' }} /> : 'Speichern'}
+                {isLoading ? <CircularProgress size={24} sx={{ color: '#00ffff' }} /> : 'Save'}
               </NeonButton>
             </Box>
           </Box>
@@ -263,7 +263,7 @@ const NotificationDialog = ({ open, onClose }) => {
                 marginBottom: 2
               }}
             >
-              Fast geschafft! Klicken Sie auf den Button unten um den Bot zu starten:
+              Almost done! Click the button below to start the bot:
             </Alert>
 
             <NeonButton
@@ -273,11 +273,11 @@ const NotificationDialog = ({ open, onClose }) => {
               rel="noopener noreferrer"
               sx={{ marginBottom: 2 }}
             >
-              BOT STARTEN
+              START BOT
             </NeonButton>
 
             <Typography variant="body2" sx={{ color: '#888' }}>
-              Nach dem Start des Bots können Sie diesen Dialog schließen.
+              After starting the bot, you can close this dialog.
             </Typography>
           </Box>
         )}

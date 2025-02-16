@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Fab, Tooltip } from '@mui/material';
+import { Fab, Tooltip, IconButton, Badge, Snackbar } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import NotificationDialog from './NotificationDialog';
@@ -11,6 +11,7 @@ const NotificationButton = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pressTimer, setPressTimer] = useState(null);
   const [tooltipText, setTooltipText] = useState('');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   const checkStatus = async () => {
     try {
@@ -50,11 +51,12 @@ const NotificationButton = () => {
         if (data.success) {
           logger.notification('Notification configuration reset');
           setNotificationsEnabled(false);
+          setSnackbarOpen(true);
         }
       } catch (error) {
         logger.error('Error resetting notification config:', error);
       }
-    }, 1000); // 1 second long press
+    }, 1000);
     setPressTimer(timer);
   }, []);
 
@@ -152,6 +154,21 @@ const NotificationButton = () => {
       <NotificationDialog 
         open={dialogOpen}
         onClose={handleDialogClose}
+      />
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message="Notification settings have been reset"
+        sx={{
+          '& .MuiSnackbarContent-root': {
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            color: '#00ffff',
+            border: '1px solid #00ffff',
+            boxShadow: '0 0 10px #00ffff'
+          }
+        }}
       />
     </>
   );

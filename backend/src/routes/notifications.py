@@ -108,17 +108,18 @@ def setup_telegram():
             'telegram': {
                 'enabled': True,
                 'token': token,
-                'chat_ids': existing_chat_ids,  # Behalte existierende chat_ids
+                'chat_ids': existing_chat_ids,
                 'bot_username': bot_username
             }
         }
         
-        logger.info(f"Saving settings to: {NOTIFICATIONS_FILE}")
         save_notification_settings(settings)
+        
+        # Wichtig: Bot mit neuem Token initialisieren
+        telegram_service.initialize_bot(token)
         
         return jsonify({
             'success': True,
-            'message': 'Telegram bot configured successfully',
             'botUsername': bot_username
         })
         
