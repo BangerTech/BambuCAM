@@ -54,9 +54,6 @@ os.makedirs(STREAMS_DIR, exist_ok=True)
 # Blueprints nur einmal registrieren
 register_blueprints(app)
 
-# Register blueprints
-app.register_blueprint(cloud_bp, url_prefix='/api')
-
 @app.before_request
 def log_request_info():
     if request.path.startswith('/api/'):  # Nur API-Anfragen loggen
