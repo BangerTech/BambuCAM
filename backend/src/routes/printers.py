@@ -7,8 +7,7 @@ from src.services import (
     getPrinterById,
     removePrinter,
     scanNetwork,
-    printer_service,
-    get_creality_status
+    printer_service
 )
 import logging
 import json

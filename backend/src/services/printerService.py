@@ -14,6 +14,8 @@ import ssl
 from src.printer_types import PRINTER_CONFIGS
 import threading
 import struct
+import queue
+from .networkScanner import scanNetwork
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -67,7 +69,8 @@ class PrinterService:
     def __init__(self):
         self.mqtt_clients = {}
         self.printer_data = {}
-        self.file_locks = {}  # Locks für jede Drucker-Datei
+        self.polling_threads = {}  # Neu hinzugefügt
+        self.file_locks = {}
 
     def get_file_lock(self, printer_id):
         """Holt oder erstellt einen Lock für einen Drucker"""
@@ -113,17 +116,26 @@ class PrinterService:
             def on_message(client, userdata, msg):
                 try:
                     data = json.loads(msg.payload)
-                    self.printer_data[printer_id] = data
+                    printer_id = msg.topic.split('/')[1]  # Extract printer ID from topic
+                    
                     # Update printer status
-                    self.update_printer_status(printer_id, {
+                    status_data = {
                         'status': data.get('print', {}).get('gcode_state', 'unknown'),
                         'temperatures': {
-                            'nozzle': data.get('print', {}).get('nozzle_temper', 0),
-                            'bed': data.get('print', {}).get('bed_temper', 0)
+                            'hotend': float(data.get('print', {}).get('nozzle_temper', 0)),
+                            'bed': float(data.get('print', {}).get('bed_temper', 0)),
+                            'chamber': float(data.get('print', {}).get('chamber_temper', 0))
                         },
-                        'progress': data.get('print', {}).get('mc_percent', 0),
+                        'progress': float(data.get('print', {}).get('mc_percent', 0)),
                         'state': data.get('print', {}).get('gcode_state', 'unknown')
-                    })
+                    }
+                    
+                    # Cache die Daten
+                    self.printer_data[printer_id] = status_data
+                    
+                    # Update Drucker Status
+                    self.update_printer_status(printer_id, status_data)
+                    
                 except Exception as e:
                     logger.error(f"Error processing MQTT message: {e}")
 
@@ -142,68 +154,28 @@ class PrinterService:
     def get_printer_status(self, printer_id: str) -> dict:
         """Holt den Status eines Druckers"""
         try:
-            # Lade Drucker-Daten
-            printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
-            if not os.path.exists(printer_file):
-                logger.error(f"Printer file not found: {printer_file}")
-                return {'error': 'Printer not found'}
-
-            try:
-                with open(printer_file, 'r') as f:
-                    printer = json.load(f)
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON in printer file: {printer_file}")
-                return {'error': 'Invalid printer data'}
-
-            # Prüfe ob alle notwendigen Felder vorhanden sind
-            required_fields = ['type', 'ip']
-            for field in required_fields:
-                if field not in printer:
-                    logger.error(f"Missing required field '{field}' in printer data")
-                    return {'error': f'Missing {field}'}
-
-            # Hole Status basierend auf Druckertyp
-            if printer['type'] == 'CREALITY':
-                try:
-                    url = f"http://{printer['ip']}/printer/info"
-                    response = requests.get(url, timeout=2)
-                    
-                    if response.ok:
-                        data = response.json()
-                        return {
-                            'status': 'online',
-                            'temperatures': {
-                                'nozzle': data.get('nozzle_temp', 0),
-                                'bed': data.get('bed_temp', 0)
-                            },
-                            'targets': {
-                                'nozzle': data.get('nozzle_target', 0),
-                                'bed': data.get('bed_target', 0)
-                            },
-                            'progress': data.get('progress', 0),
-                            'state': data.get('status', 'unknown')
-                        }
-                except Exception as e:
-                    logger.error(f"Error getting Creality status: {e}")
-                    return {
-                        'status': 'error',
-                        'temperatures': {'nozzle': 0, 'bed': 0},
-                        'targets': {'nozzle': 0, 'bed': 0},
-                        'progress': 0,
-                        'state': 'error'
-                    }
-
+            # Hole gecachten Status
+            if printer_id in self.printer_data:
+                return self.printer_data[printer_id]
+                
+            # Kein Status im Cache
             return {
                 'status': 'offline',
-                'temperatures': {'nozzle': 0, 'bed': 0},
-                'targets': {'nozzle': 0, 'bed': 0},
+                'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+                'targets': {'hotend': 0, 'bed': 0},
                 'progress': 0,
                 'state': 'offline'
             }
-
+            
         except Exception as e:
-            logger.error(f"Error getting printer status: {e}", exc_info=True)
-            return {'error': str(e)}
+            logger.error(f"Error getting printer status: {e}")
+            return {
+                'status': 'error',
+                'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+                'targets': {'hotend': 0, 'bed': 0},
+                'progress': 0,
+                'state': 'error'
+            }
 
     def cleanup(self, printer_id=None):
         """Beendet MQTT Verbindungen"""
@@ -239,12 +211,7 @@ class PrinterService:
                 self.connect_mqtt(printer_id, ip)
             elif printer_type.upper() == 'CREALITY':
                 logger.info(f"Setting up Creality polling for printer {printer_id}")
-                polling_thread = setup_creality_polling(printer_id, ip)
-                if polling_thread:
-                    self.mqtt_clients[printer_id] = polling_thread
-                    logger.info(f"Successfully started polling for Creality printer {printer_id}")
-                else:
-                    logger.error(f"Failed to start polling for Creality printer {printer_id}")
+                self.setup_creality_polling(printer_id, ip)
                     
         except Exception as e:
             logger.error(f"Error connecting printer {printer_id}: {e}", exc_info=True)
@@ -292,6 +259,85 @@ class PrinterService:
                 
         except Exception as e:
             logger.error(f"Error updating printer status: {e}", exc_info=True)
+
+    def setup_creality_polling(self, printer_id: str, printer_ip: str):
+        """Richtet Polling für einen Creality K1 Drucker ein"""
+        try:
+            # Prüfe ob bereits ein Polling-Thread läuft
+            if printer_id in self.polling_threads:
+                logger.info(f"Polling already active for printer {printer_id}")
+                return
+            
+            def poll_status():
+                logger.info(f"Starting polling thread for printer {printer_id}")
+                while printer_id in self.polling_threads:  # Neue Bedingung
+                    try:
+                        url = f"http://{printer_ip}:7125/printer/objects/query"
+                        params = {
+                            "objects": {
+                                "extruder": None,
+                                "heater_bed": None,
+                                "temperature_sensor chamber": None,
+                                "print_stats": None,
+                                "virtual_sdcard": None
+                            }
+                        }
+                        
+                        response = requests.post(url, json=params, timeout=2)
+                        
+                        if response.ok:
+                            data = response.json()
+                            status = data.get('result', {}).get('status', {})
+                            
+                            status_data = {
+                                'status': 'online',
+                                'temperatures': {
+                                    'hotend': status.get('extruder', {}).get('temperature', 0),
+                                    'bed': status.get('heater_bed', {}).get('temperature', 0),
+                                    'chamber': status.get('temperature_sensor chamber', {}).get('temperature', 0)
+                                },
+                                'targets': {
+                                    'hotend': status.get('extruder', {}).get('target', 0),
+                                    'bed': status.get('heater_bed', {}).get('target', 0)
+                                },
+                                'progress': status.get('virtual_sdcard', {}).get('progress', 0) * 100,
+                                'state': status.get('print_stats', {}).get('state', 'standby')
+                            }
+                            
+                            # Cache die Daten
+                            self.printer_data[printer_id] = status_data
+                            
+                            # Update Drucker Status
+                            self.update_printer_status(printer_id, status_data)
+                        else:
+                            logger.warning(f"Error polling printer {printer_id}: {response.status_code}")
+                            
+                    except requests.exceptions.RequestException as e:
+                        logger.error(f"Connection error polling printer {printer_id}: {e}")
+                        status_data = {
+                            'status': 'error',
+                            'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+                            'targets': {'hotend': 0, 'bed': 0},
+                            'progress': 0,
+                            'state': 'error'
+                        }
+                        self.printer_data[printer_id] = status_data
+                        self.update_printer_status(printer_id, status_data)
+                    except Exception as e:
+                        logger.error(f"Error in polling thread for {printer_id}: {e}")
+                    
+                    time.sleep(2)
+                logger.info(f"Polling thread stopped for printer {printer_id}")
+
+            # Starte den Thread
+            thread = threading.Thread(target=poll_status, daemon=True)
+            self.polling_threads[printer_id] = thread
+            thread.start()
+            logger.info(f"Successfully started polling for Creality printer {printer_id}")
+
+        except Exception as e:
+            logger.error(f"Error setting up Creality polling: {e}")
+            raise
 
 # Globale Instanz des PrinterService
 printer_service = PrinterService()
@@ -341,27 +387,40 @@ def addPrinter(data):
             'type': data.get('type', 'BAMBULAB'),
             'status': 'offline',
             'temperatures': {
-                'nozzle': 0,
-                'bed': 0
+                'hotend': 0,
+                'bed': 0,
+                'chamber': 0
             },
             'progress': 0,
-            'port': getNextPort(),
-            'accessCode': data.get('accessCode', ''),
-            'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
+            'port': getNextPort()
         }
+
+        # Spezifische Konfiguration je nach Druckertyp
+        if printer['type'] == 'BAMBULAB':
+            printer.update({
+                'accessCode': data.get('accessCode', ''),
+                'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
+            })
+            
+            # MQTT nur für Bambulab Drucker
+            printer_service.connect_mqtt(
+                printer_id=printer['id'],
+                ip=printer['ip']
+            )
+        elif printer['type'] == 'CREALITY':
+            printer.update({
+                'accessCode': '',  # Creality braucht keinen Access Code
+                'streamUrl': f"http://{data['ip']}:8080/?action=stream"  # Standard MJPEG Stream URL
+            })
+            
+            # Starte Polling für Creality direkt über die PrinterService-Instanz
+            printer_service.connect_printer(printer['id'], 'CREALITY', printer['ip'])
         
         printer_file = os.path.join(PRINTERS_DIR, f"{printer['id']}.json")
         logger.info(f"Saving printer to file: {printer_file}")
         
         with open(printer_file, 'w') as f:
             json.dump(printer, f, indent=2)
-            
-        # MQTT-Verbindung einrichten
-        printer_service.connect_printer(
-            printer_id=printer['id'],
-            printer_type=printer['type'],
-            ip=printer['ip']
-        )
             
         return printer
         
@@ -432,90 +491,6 @@ def removePrinter(printer_id):
         logger.error(f"Error removing printer {printer_id}: {e}")
         return False
 
-def scanNetwork():
-    """Scannt nach neuen Druckern im Netzwerk via SSDP"""
-    try:
-        logger.info("Starting network scan for printers...")
-        
-        # SSDP M-SEARCH Message für Bambu Lab Drucker
-        ssdp_request = (
-            'M-SEARCH * HTTP/1.1\r\n'
-            'HOST: 239.255.255.250:1990\r\n'
-            'MAN: "ssdp:discover"\r\n'
-            'MX: 3\r\n'
-            'ST: urn:bambulab-com:device:3dprinter:1\r\n'
-            '\r\n'
-        ).encode()
-
-        # Erstelle UDP Socket mit Broadcast
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(5)  # 5 Sekunden Timeout
-
-        # Bind to all interfaces
-        sock.bind(('', 0))
-
-        # Sende an beide Discovery Ports
-        discovery_ports = [1990, 2021]
-        for port in discovery_ports:
-            try:
-                logger.info(f"Sending SSDP discovery to port {port}")
-                # Sende beide Nachrichten mehrmals für bessere Zuverlässigkeit
-                for _ in range(2):
-                    sock.sendto(ssdp_request, ('239.255.255.250', port))  # Multicast
-                    sock.sendto(ssdp_request, ('255.255.255.255', port))  # Broadcast
-                    time.sleep(0.1)  # Kleine Pause zwischen den Versuchen
-            except Exception as e:
-                logger.error(f"Error sending to port {port}: {e}")
-
-        # Sammle Antworten
-        printers = []
-        start_time = time.time()
-        
-        while time.time() - start_time < 5:  # 5 Sekunden warten
-            try:
-                data, addr = sock.recvfrom(4096)
-                response = data.decode()
-                
-                # Parse SSDP Response
-                if 'bambulab' in response.lower():
-                    printer_info = {
-                        'id': str(uuid.uuid4()),
-                        'ip': addr[0],
-                        'type': 'BAMBULAB',
-                        'status': 'online'
-                    }
-                    
-                    # Extrahiere Details aus Response
-                    for line in response.split('\r\n'):
-                        if 'DevName.bambu.com:' in line:
-                            printer_info['name'] = line.split(':', 1)[1].strip()
-                        elif 'DevModel.bambu.com:' in line:
-                            printer_info['model'] = line.split(':', 1)[1].strip()
-                    
-                    # Prüfe ob der Drucker bereits gefunden wurde
-                    if not any(p['ip'] == addr[0] for p in printers):
-                        printers.append(printer_info)
-                        logger.info(f"Found printer: {printer_info}")
-                        
-            except socket.timeout:
-                continue
-            except Exception as e:
-                logger.error(f"Error receiving response: {e}")
-
-        logger.info(f"Scan complete. Found {len(printers)} printers")
-        return {'printers': printers}
-
-    except Exception as e:
-        logger.error(f"Error during network scan: {str(e)}")
-        return {'printers': []}
-    finally:
-        try:
-            sock.close()
-        except:
-            pass
-
 def startPrint(printer_id, file_path):
     """Startet einen Druck"""
     try:
@@ -566,17 +541,26 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     try:
         data = json.loads(msg.payload)
-        self.printer_data[printer_id] = data
+        printer_id = msg.topic.split('/')[1]  # Extract printer ID from topic
+        
         # Update printer status
-        self.update_printer_status(printer_id, {
+        status_data = {
             'status': data.get('print', {}).get('gcode_state', 'unknown'),
             'temperatures': {
-                'nozzle': data.get('print', {}).get('nozzle_temper', 0),
-                'bed': data.get('print', {}).get('bed_temper', 0)
+                'hotend': float(data.get('print', {}).get('nozzle_temper', 0)),
+                'bed': float(data.get('print', {}).get('bed_temper', 0)),
+                'chamber': float(data.get('print', {}).get('chamber_temper', 0))
             },
-            'progress': data.get('print', {}).get('mc_percent', 0),
+            'progress': float(data.get('print', {}).get('mc_percent', 0)),
             'state': data.get('print', {}).get('gcode_state', 'unknown')
-        })
+        }
+        
+        # Cache die Daten
+        self.printer_data[printer_id] = status_data
+        
+        # Update Drucker Status
+        self.update_printer_status(printer_id, status_data)
+        
     except Exception as e:
         logger.error(f"Error processing MQTT message: {e}")
 
@@ -590,9 +574,6 @@ def getPrinterStatus(printer_id):
         if not printer:
             raise Exception("Printer not found")
             
-        # Stelle sicher dass eine MQTT Verbindung besteht
-        printer_service.connect_mqtt(printer_id, printer['ip'])
-        
         # Hole Status aus dem Cache
         data = printer_service.get_printer_status(printer_id)
         
@@ -602,7 +583,7 @@ def getPrinterStatus(printer_id):
             return {
                 "temperatures": {
                     "bed": float(print_data.get('bed_temper', 0)),
-                    "nozzle": float(print_data.get('nozzle_temper', 0)),
+                    "hotend": float(print_data.get('nozzle_temper', 0)),
                     "chamber": float(print_data.get('chamber_temper', 0))
                 },
                 "status": print_data.get('gcode_state', 'unknown'),
@@ -611,7 +592,7 @@ def getPrinterStatus(printer_id):
             }
         
         return {
-            "temperatures": {"bed": 0, "nozzle": 0, "chamber": 0},
+            "temperatures": {"bed": 0, "hotend": 0, "chamber": 0},
             "status": "offline",
             "progress": 0,
             "remaining_time": 0
@@ -620,7 +601,7 @@ def getPrinterStatus(printer_id):
     except Exception as e:
         logger.error(f"Error getting printer status: {str(e)}")
         return {
-            "temperatures": {"bed": 0, "nozzle": 0, "chamber": 0},
+            "temperatures": {"bed": 0, "hotend": 0, "chamber": 0},
             "status": "offline",
             "progress": 0,
             "remaining_time": 0
@@ -639,7 +620,7 @@ def handle_mqtt_message(printer_id, data):
                 'gcode_state': data.get('gcode_state'),
                 'temperature': {
                     'bed': data.get('bed_temp', 0),
-                    'nozzle': data.get('nozzle_temp', 0)
+                    'hotend': data.get('nozzle_temp', 0)
                 },
                 'progress': data.get('progress', 0),
                 'remaining_time': data.get('remaining_time', 0),
@@ -668,82 +649,6 @@ def handle_mqtt_message(printer_id, data):
             
     except Exception as e:
         logger.error(f"Error handling MQTT message: {e}")
-
-def setup_creality_polling(printer_id: str, printer_ip: str):
-    """Richtet Polling für einen Creality K1 Drucker ein"""
-    try:
-        def poll_status():
-            while True:
-                try:
-                    status = get_creality_status(printer_ip)
-                    printer_service.update_printer_status(printer_id, status)
-                    time.sleep(2)  # Poll alle 2 Sekunden
-                except Exception as e:
-                    logger.error(f"Error polling printer status: {e}")
-                    time.sleep(5)  # Längere Pause bei Fehler
-        
-        # Starte Polling in eigenem Thread
-        polling_thread = threading.Thread(target=poll_status, daemon=True)
-        polling_thread.start()
-        
-        return polling_thread
-        
-    except Exception as e:
-        logger.error(f"Error setting up status polling: {e}")
-        return None
-
-def get_creality_status(printer_ip: str) -> dict:
-    try:
-        url = f"http://{printer_ip}:7125/printer/objects/query"
-        params = {
-            "objects": {
-                "extruder": None,
-                "heater_bed": None,
-                "temperature_sensor chamber": None,
-                "print_stats": None,
-                "virtual_sdcard": None
-            }
-        }
-        
-        response = requests.post(url, json=params, timeout=2)
-        
-        if response.ok:
-            data = response.json()
-            status = data.get('result', {}).get('status', {})
-            
-            result = {
-                'status': 'online',
-                'temperatures': {
-                    'hotend': status.get('extruder', {}).get('temperature', 0),
-                    'bed': status.get('heater_bed', {}).get('temperature', 0),
-                    'chamber': status.get('temperature_sensor chamber', {}).get('temperature', 0)
-                },
-                'targets': {
-                    'hotend': status.get('extruder', {}).get('target', 0),
-                    'bed': status.get('heater_bed', {}).get('target', 0)
-                },
-                'progress': status.get('virtual_sdcard', {}).get('progress', 0) * 100,
-                'state': status.get('print_stats', {}).get('state', 'offline')
-            }
-            
-            return result
-            
-        return {
-            'status': 'offline',
-            'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
-            'targets': {'hotend': 0, 'bed': 0},
-            'progress': 0,
-            'state': 'offline'
-        }
-    except Exception as e:
-        logger.error(f"Error getting Creality status: {e}")
-        return {
-            'status': 'error',
-            'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
-            'targets': {'hotend': 0, 'bed': 0},
-            'progress': 0,
-            'state': 'error'
-        }
 
 def parse_ssdp_response(response, ip):
     """Extrahiert Drucker-Informationen aus der SSDP-Antwort"""
