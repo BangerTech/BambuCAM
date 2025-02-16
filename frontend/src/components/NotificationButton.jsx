@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Fab, Tooltip } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
@@ -9,6 +9,8 @@ import logger from '../utils/logger';
 const NotificationButton = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [pressTimer, setPressTimer] = useState(null);
+  const [tooltipText, setTooltipText] = useState('');
 
   const checkStatus = async () => {
     try {
@@ -30,6 +32,39 @@ const NotificationButton = () => {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (notificationsEnabled) {
+      setTooltipText('Click to disable notifications\nLong press to reset configuration');
+    } else {
+      setTooltipText('Click to enable notifications\nLong press to reset configuration');
+    }
+  }, [notificationsEnabled]);
+
+  const handlePressStart = useCallback(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_URL}/notifications/telegram/reset`, {
+          method: 'POST'
+        });
+        const data = await response.json();
+        if (data.success) {
+          logger.notification('Notification configuration reset');
+          setNotificationsEnabled(false);
+        }
+      } catch (error) {
+        logger.error('Error resetting notification config:', error);
+      }
+    }, 1000); // 1 second long press
+    setPressTimer(timer);
+  }, []);
+
+  const handlePressEnd = useCallback(() => {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      setPressTimer(null);
+    }
+  }, [pressTimer]);
+
   const handleToggle = async () => {
     if (notificationsEnabled) {
       try {
@@ -45,7 +80,29 @@ const NotificationButton = () => {
         logger.error('Error disabling notifications:', error);
       }
     } else {
-      setDialogOpen(true);
+      try {
+        // Prüfe erst, ob der Bot bereits konfiguriert ist
+        const response = await fetch(`${API_URL}/notifications/telegram/status`);
+        const data = await response.json();
+        
+        if (data.configured) {
+          // Bot ist bereits konfiguriert, also nur aktivieren
+          const enableResponse = await fetch(`${API_URL}/notifications/telegram/enable`, {
+            method: 'POST'
+          });
+          const enableData = await enableResponse.json();
+          if (enableData.success) {
+            setNotificationsEnabled(true);
+            logger.notification('Notifications enabled');
+          }
+        } else {
+          // Bot muss erst eingerichtet werden
+          setDialogOpen(true);
+        }
+      } catch (error) {
+        logger.error('Error checking telegram status:', error);
+        setDialogOpen(true);
+      }
     }
   };
 
@@ -58,10 +115,18 @@ const NotificationButton = () => {
 
   return (
     <>
-      <Tooltip title={`${notificationsEnabled ? 'Disable' : 'Enable'} Telegram Notifications`}>
+      <Tooltip 
+        title={tooltipText}
+        placement="left"
+      >
         <Fab
           size="small"
           onClick={handleToggle}
+          onMouseDown={handlePressStart}
+          onMouseUp={handlePressEnd}
+          onMouseLeave={handlePressEnd}
+          onTouchStart={handlePressStart}
+          onTouchEnd={handlePressEnd}
           sx={{ 
             position: 'fixed',
             bottom: 15,

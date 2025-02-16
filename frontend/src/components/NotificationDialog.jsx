@@ -13,11 +13,14 @@ import {
   CircularProgress,
   Stepper,
   Step,
-  StepLabel
+  StepLabel,
+  IconButton,
+  Collapse
 } from '@mui/material';
 import { API_URL } from '../config';
 import { styled } from '@mui/material/styles';
 import logger from '../utils/logger';
+import InfoIcon from '@mui/icons-material/Info';
 
 // Styled Components
 const NeonDialog = styled(Dialog)(({ theme }) => ({
@@ -88,6 +91,7 @@ const NotificationDialog = ({ open, onClose }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [botUsername, setBotUsername] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
   const steps = [
     'Bot erstellen',
@@ -144,12 +148,46 @@ const NotificationDialog = ({ open, onClose }) => {
         textAlign: 'center',
         fontSize: '1.5rem',
         fontWeight: 'bold',
-        textShadow: '0 0 10px #00ffff'
+        textShadow: '0 0 10px #00ffff',
+        borderBottom: '1px solid rgba(0,0,0,0.1)',
+        pb: 2,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
       }}>
-        Telegram Benachrichtigungen einrichten
+        <span>Telegram Notifications</span>
+        <IconButton
+          onClick={() => setShowGuide(!showGuide)}
+          title="Setup Guide"
+          sx={{ color: '#00ffff' }}
+        >
+          <InfoIcon />
+        </IconButton>
       </DialogTitle>
 
       <DialogContent>
+        <Collapse in={showGuide}>
+          <Box sx={{ mb: 3, mt: 2 }}>
+            <Typography variant="h6" sx={{ mb: 2, color: '#00ffff' }}>
+              Setup Guide:
+            </Typography>
+            <ol style={{ paddingLeft: '20px', color: '#00ffff' }}>
+              <li>Create a new Telegram bot:
+                <ul>
+                  <li>Open Telegram and search for @BotFather</li>
+                  <li>Send /newbot command</li>
+                  <li>Choose a name for your bot</li>
+                  <li>Choose a username ending in &quot;bot&quot;</li>
+                  <li>Copy the API token you receive</li>
+                </ul>
+              </li>
+              <li>Enter the token below and click Save</li>
+              <li>Open the link to your bot and click Start</li>
+              <li>You will now receive notifications about your prints</li>
+            </ol>
+          </Box>
+        </Collapse>
+
         <NeonStepper activeStep={activeStep} sx={{ mb: 4 }}>
           {steps.map((label) => (
             <Step key={label}>

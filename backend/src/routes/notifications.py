@@ -5,6 +5,7 @@ import os
 import json
 from src.config import Config
 import requests
+from src.services.telegramService import telegram_service
 
 logger = logging.getLogger(__name__)
 notifications_bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
@@ -95,12 +96,19 @@ def setup_telegram():
         bot_username = bot_data['result']['username']
         logger.info(f"Bot username: {bot_username}")
             
+        # Hole die vorhandene chat_id aus der alten Konfiguration wenn vorhanden
+        existing_chat_ids = []
+        if os.path.exists(NOTIFICATIONS_FILE):
+            with open(NOTIFICATIONS_FILE, 'r') as f:
+                old_settings = json.load(f)
+                existing_chat_ids = old_settings.get('telegram', {}).get('chat_ids', [])
+        
         # Speichere die Einstellungen
         settings = {
             'telegram': {
                 'enabled': True,
                 'token': token,
-                'chat_ids': [],
+                'chat_ids': existing_chat_ids,  # Behalte existierende chat_ids
                 'bot_username': bot_username
             }
         }
@@ -144,6 +152,9 @@ def enable_telegram():
             settings['telegram']['enabled'] = True
             save_notification_settings(settings)
             
+            # Sende Benachrichtigung
+            telegram_service.send_status_notification(True)
+            
             return jsonify({
                 'success': True,
                 'message': 'Telegram notifications enabled'
@@ -163,6 +174,9 @@ def disable_telegram():
             settings['telegram']['enabled'] = False
             save_notification_settings(settings)
             
+            # Sende Benachrichtigung
+            telegram_service.send_status_notification(False)
+            
             return jsonify({
                 'success': True,
                 'message': 'Telegram notifications disabled'
@@ -170,6 +184,25 @@ def disable_telegram():
         return jsonify({'error': 'Telegram not configured'}), 400
     except Exception as e:
         logger.error(f"Error disabling Telegram: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@notifications_bp.route('/telegram/reset', methods=['POST'])
+def reset_telegram():
+    """Löscht die Telegram-Konfiguration"""
+    try:
+        if os.path.exists(NOTIFICATIONS_FILE):
+            os.remove(NOTIFICATIONS_FILE)
+            logger.info("Telegram configuration reset")
+            return jsonify({
+                'success': True,
+                'message': 'Telegram configuration reset successfully'
+            })
+        return jsonify({
+            'success': True,
+            'message': 'No configuration to reset'
+        })
+    except Exception as e:
+        logger.error(f"Error resetting Telegram configuration: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 # @notifications_bp.route('/notifications/whatsapp/login', methods=['POST'])

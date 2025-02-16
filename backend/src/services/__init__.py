@@ -10,7 +10,10 @@ from .printerService import (
     scanNetwork,
     setup_creality_polling,
     get_creality_status,
-    update_printer_status
+    handle_mqtt_message,
+    stored_printers,
+    getNextPort,
+    test_stream_url
 )
 
 from .streamService import (
@@ -20,6 +23,8 @@ from .streamService import (
     stopStream
 )
 
+from .telegramService import telegram_service
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -28,9 +33,14 @@ __all__ = [
     'removePrinter',
     'getPrinterById',
     'scanNetwork',
-    'update_printer_status',
     'printer_service',
     'stream_service',
     'startStream',
-    'stopStream'
+    'stopStream',
+    'getNextPort',
+    'test_stream_url',
+    'get_creality_status',
+    'setup_creality_polling',
+    'handle_mqtt_message',
+    'stored_printers'
 ] 

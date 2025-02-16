@@ -6,7 +6,7 @@ import logging
 load_dotenv()
 
 # Basis-Verzeichnisse
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(os.path.dirname(os.path.dirname(__file__)))
 DATA_DIR = BASE_DIR / 'data'
 LOGS_DIR = BASE_DIR / 'logs'
 
@@ -24,19 +24,21 @@ logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 class Config:
-    # Verzeichnis-Konfiguration
+    BASE_DIR = BASE_DIR
     DATA_DIR = DATA_DIR
-    PRINTERS_DATA_DIR = DATA_DIR / 'printers'
-    STREAMS_DATA_DIR = DATA_DIR / 'streams'
-    NOTIFICATIONS_DATA_DIR = DATA_DIR / 'notifications'
+    PRINTERS_DIR = DATA_DIR / 'printers'
+    NOTIFICATIONS_DIR = DATA_DIR / 'notifications'
+    BAMBU_CLOUD_DIR = DATA_DIR / 'bambu-cloud'
     LOGS_DIR = LOGS_DIR
 
-    # Stelle sicher, dass die Verzeichnisse existieren
-    DATA_DIR.mkdir(exist_ok=True)
-    PRINTERS_DATA_DIR.mkdir(exist_ok=True)
-    STREAMS_DATA_DIR.mkdir(exist_ok=True)
-    NOTIFICATIONS_DATA_DIR.mkdir(exist_ok=True)
-    LOGS_DIR.mkdir(exist_ok=True)
+    # Stelle sicher, dass alle Verzeichnisse existieren
+    os.makedirs(PRINTERS_DIR, exist_ok=True)
+    os.makedirs(NOTIFICATIONS_DIR, exist_ok=True)
+    os.makedirs(BAMBU_CLOUD_DIR, exist_ok=True)
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
+    # Dateipfade
+    BAMBU_CLOUD_FILE = BAMBU_CLOUD_DIR / 'bambu_cloud.json'
 
     # Flask Konfiguration
     DEBUG = os.getenv('FLASK_DEBUG', 'False') == 'True'

@@ -4,6 +4,8 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 import json
+import os
+from src.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +221,26 @@ class BambuCloudService:
         except Exception as e:
             logger.error(f"Error getting cloud printers: {e}")
             return []
+
+def save_cloud_credentials(credentials):
+    """Speichert die Cloud-Anmeldedaten"""
+    try:
+        with open(Config.BAMBU_CLOUD_FILE, 'w') as f:
+            json.dump(credentials, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving cloud credentials: {e}")
+
+
+def load_cloud_credentials():
+    """Lädt die gespeicherten Cloud-Anmeldedaten"""
+    try:
+        if os.path.exists(Config.BAMBU_CLOUD_FILE):
+            with open(Config.BAMBU_CLOUD_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading cloud credentials: {e}")
+    return None
+
 
 # Globale Instanz
 bambu_cloud_service = BambuCloudService() 

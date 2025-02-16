@@ -12,6 +12,7 @@ import paho.mqtt.client as mqtt
 import bambulabs_api as bl
 import ssl
 from src.printer_types import PRINTER_CONFIGS
+import threading
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -62,6 +63,13 @@ class PrinterService:
     def __init__(self):
         self.mqtt_clients = {}
         self.printer_data = {}
+        self.file_locks = {}  # Locks für jede Drucker-Datei
+
+    def get_file_lock(self, printer_id):
+        """Holt oder erstellt einen Lock für einen Drucker"""
+        if printer_id not in self.file_locks:
+            self.file_locks[printer_id] = threading.Lock()
+        return self.file_locks[printer_id]
 
     def connect_mqtt(self, printer_id, ip):
         """Erstellt eine persistente MQTT Verbindung"""
@@ -117,9 +125,71 @@ class PrinterService:
             logger.error(f"Error connecting to MQTT: {e}")
             raise
 
-    def get_printer_status(self, printer_id):
-        """Holt den Status aus dem Cache"""
-        return self.printer_data.get(printer_id, {})
+    def get_printer_status(self, printer_id: str) -> dict:
+        """Holt den Status eines Druckers"""
+        try:
+            # Lade Drucker-Daten
+            printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
+            if not os.path.exists(printer_file):
+                logger.error(f"Printer file not found: {printer_file}")
+                return {'error': 'Printer not found'}
+
+            try:
+                with open(printer_file, 'r') as f:
+                    printer = json.load(f)
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON in printer file: {printer_file}")
+                return {'error': 'Invalid printer data'}
+
+            # Prüfe ob alle notwendigen Felder vorhanden sind
+            required_fields = ['type', 'ip']
+            for field in required_fields:
+                if field not in printer:
+                    logger.error(f"Missing required field '{field}' in printer data")
+                    return {'error': f'Missing {field}'}
+
+            # Hole Status basierend auf Druckertyp
+            if printer['type'] == 'CREALITY':
+                try:
+                    url = f"http://{printer['ip']}/printer/info"
+                    response = requests.get(url, timeout=2)
+                    
+                    if response.ok:
+                        data = response.json()
+                        return {
+                            'status': 'online',
+                            'temperatures': {
+                                'nozzle': data.get('nozzle_temp', 0),
+                                'bed': data.get('bed_temp', 0)
+                            },
+                            'targets': {
+                                'nozzle': data.get('nozzle_target', 0),
+                                'bed': data.get('bed_target', 0)
+                            },
+                            'progress': data.get('progress', 0),
+                            'state': data.get('status', 'unknown')
+                        }
+                except Exception as e:
+                    logger.error(f"Error getting Creality status: {e}")
+                    return {
+                        'status': 'error',
+                        'temperatures': {'nozzle': 0, 'bed': 0},
+                        'targets': {'nozzle': 0, 'bed': 0},
+                        'progress': 0,
+                        'state': 'error'
+                    }
+
+            return {
+                'status': 'offline',
+                'temperatures': {'nozzle': 0, 'bed': 0},
+                'targets': {'nozzle': 0, 'bed': 0},
+                'progress': 0,
+                'state': 'offline'
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting printer status: {e}", exc_info=True)
+            return {'error': str(e)}
 
     def cleanup(self, printer_id=None):
         """Beendet MQTT Verbindungen"""
@@ -165,6 +235,50 @@ class PrinterService:
                     
         except Exception as e:
             logger.error(f"Error connecting printer {printer_id}: {e}", exc_info=True)
+
+    def update_printer_status(self, printer_id: str, status_data: dict) -> None:
+        """Aktualisiert den Status eines Druckers."""
+        try:
+            printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
+            
+            # Hole Lock für diesen Drucker
+            lock = self.get_file_lock(printer_id)
+            
+            with lock:  # Thread-sicheres Lesen/Schreiben
+                if not os.path.exists(printer_file) or os.path.getsize(printer_file) == 0:
+                    logger.debug(f"Skipping status update for removed printer: {printer_id}")
+                    return
+                    
+                try:
+                    with open(printer_file, 'r') as f:
+                        printer_data = json.load(f)
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON in printer file: {printer_file}")
+                    return
+                    
+                # Update alle Status-Felder
+                printer_data.update({
+                    'status': status_data.get('status', printer_data.get('status')),
+                    'temperatures': status_data.get('temperatures', printer_data.get('temperatures', {})),
+                    'targets': status_data.get('targets', printer_data.get('targets', {})),
+                    'power': status_data.get('power', printer_data.get('power', {})),
+                    'progress': status_data.get('progress', printer_data.get('progress', 0)),
+                    'is_active': status_data.get('is_active', printer_data.get('is_active', False)),
+                    'layer': status_data.get('layer', printer_data.get('layer', {'current': 0, 'total': 0})),
+                    'filename': status_data.get('filename', printer_data.get('filename', '')),
+                    'state': status_data.get('state', printer_data.get('state', 'offline')),
+                    'print_duration': status_data.get('print_duration', printer_data.get('print_duration', 0)),
+                    'message': status_data.get('message', printer_data.get('message', ''))
+                })
+                
+                # Direkte Speicherung mit Lock
+                with open(printer_file, 'w') as f:
+                    json.dump(printer_data, f, indent=2)
+                    
+                logger.debug('Updated status for printer %s', printer_id)
+                
+        except Exception as e:
+            logger.error(f"Error updating printer status: {e}", exc_info=True)
 
 # Globale Instanz des PrinterService
 printer_service = PrinterService()
@@ -534,60 +648,6 @@ def handle_mqtt_message(printer_id, data):
     except Exception as e:
         logger.error(f"Error handling MQTT message: {e}")
 
-def update_printer_status(printer_id: str, status_data: dict) -> None:
-    """Aktualisiert den Status eines Druckers."""
-    try:
-        printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
-        
-        # Prüfe ob die Datei existiert und nicht leer ist
-        if not os.path.exists(printer_file) or os.path.getsize(printer_file) == 0:
-            logger.error(f"Printer file not found or empty: {printer_file}")
-            return
-            
-        try:
-            with open(printer_file, 'r') as f:
-                printer_data = json.load(f)
-        except json.JSONDecodeError:
-            logger.error(f"Invalid JSON in printer file: {printer_file}")
-            printer_data = {
-                'id': printer_id,
-                'status': 'offline',
-                'temperatures': {},
-                'targets': {},
-                'power': {},
-                'progress': 0,
-                'is_active': False,
-                'layer': {'current': 0, 'total': 0},
-                'filename': '',
-                'state': 'offline',
-                'print_duration': 0,
-                'message': ''
-            }
-            
-        # Update alle Status-Felder
-        printer_data.update({
-            'status': status_data.get('status', printer_data.get('status')),
-            'temperatures': status_data.get('temperatures', printer_data.get('temperatures', {})),
-            'targets': status_data.get('targets', printer_data.get('targets', {})),
-            'power': status_data.get('power', printer_data.get('power', {})),
-            'progress': status_data.get('progress', printer_data.get('progress', 0)),
-            'is_active': status_data.get('is_active', printer_data.get('is_active', False)),
-            'layer': status_data.get('layer', printer_data.get('layer', {'current': 0, 'total': 0})),
-            'filename': status_data.get('filename', printer_data.get('filename', '')),
-            'state': status_data.get('state', printer_data.get('state', 'offline')),
-            'print_duration': status_data.get('print_duration', printer_data.get('print_duration', 0)),
-            'message': status_data.get('message', printer_data.get('message', ''))
-        })
-        
-        # Direkte Speicherung statt temporärer Datei
-        with open(printer_file, 'w') as f:
-            json.dump(printer_data, f, indent=2)
-            
-        logger.debug('Updated status for printer %s', printer_id)
-        
-    except Exception as e:
-        logger.error(f"Error updating printer status: {e}", exc_info=True)
-
 def setup_creality_polling(printer_id: str, printer_ip: str):
     """Richtet Polling für einen Creality K1 Drucker ein"""
     try:
@@ -595,14 +655,13 @@ def setup_creality_polling(printer_id: str, printer_ip: str):
             while True:
                 try:
                     status = get_creality_status(printer_ip)
-                    update_printer_status(printer_id, status)
+                    printer_service.update_printer_status(printer_id, status)
                     time.sleep(2)  # Poll alle 2 Sekunden
                 except Exception as e:
                     logger.error(f"Error polling printer status: {e}")
                     time.sleep(5)  # Längere Pause bei Fehler
         
         # Starte Polling in eigenem Thread
-        import threading
         polling_thread = threading.Thread(target=poll_status, daemon=True)
         polling_thread.start()
         

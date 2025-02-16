@@ -4,9 +4,9 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RTSPStream from './RTSPStream';
-import BambuLabInfo from './BambuLabInfo';
-import CrealityInfo from './CrealityInfo';
-import GenericInfo from './GenericInfo';
+import BambuLabInfo from './printer-info/BambuLabInfo';
+import CrealityInfo from './printer-info/CrealityInfo';
+import GenericInfo from './printer-info/GenericInfo';
 import logger from '../utils/logger';
 
 const PrinterCard = ({ printer, onDelete }) => {

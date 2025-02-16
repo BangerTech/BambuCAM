@@ -20,7 +20,7 @@ from src.config import Config  # Importiere Config
 logger = logging.getLogger(__name__)
 printers_bp = Blueprint('printers', __name__, url_prefix='/api')
 
-PRINTERS_DIR = Config.PRINTERS_DATA_DIR  # Nutze den Pfad aus der Config
+PRINTERS_DIR = Config.PRINTERS_DIR  # Nutze den Pfad aus der Config
 
 def getNextPort() -> int:
     """

@@ -3,6 +3,8 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, S
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
 import logger from '../utils/logger';
+import SearchIcon from '@mui/icons-material/Search';
+import { Alert } from '@mui/material';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -192,31 +194,9 @@ const AddPrinterDialog = ({
           </Box>
         </Collapse>
 
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-          {/* Drucker-Typ Auswahl */}
-          <FormControl fullWidth>
-            <InputLabel sx={{ color: '#00ffff' }}>Printer Type</InputLabel>
-            <Select
-              value={printerType}
-              onChange={handleTypeChange}
-              sx={{
-                color: '#00ffff',
-                '& .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'rgba(0, 255, 255, 0.3)'
-                },
-                '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'rgba(0, 255, 255, 0.5)'
-                }
-              }}
-            >
-              {Object.entries(PRINTER_TYPES).map(([key, value]) => (
-                <MenuItem key={key} value={key}>{value.name}</MenuItem>
-              ))}
-            </Select>
-</FormControl>
-
-          {/* SCAN NETWORK Button */}
-          <Button
+        {/* Scan Button zuerst */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+          <NeonButton
             variant="contained"
             onClick={onScan}
             disabled={isScanning}
@@ -232,67 +212,84 @@ const AddPrinterDialog = ({
             }}
           >
             {isScanning ? `Scanning... (${scanTimer}s)` : 'SCAN NETWORK'}
-          </Button>
-
-          {/* Gefundene Drucker */}
-          {scannedPrinters.length > 0 && (
-            <List>
-              {scannedPrinters.map((printer) => (
-                <ListItem 
-                  key={printer.ip}
-                  button
-                  onClick={() => setNewPrinter({
-                    ...newPrinter,
-                    name: printer.name,
-                    ip: printer.ip
-                  })}
-                  sx={{
-                    border: '1px solid rgba(0, 255, 255, 0.3)',
-                    borderRadius: '4px',
-                    mb: 1,
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 255, 255, 0.1)'
-                    }
-                  }}
-                >
-                  <ListItemText 
-                    primary={printer.name}
-                    secondary={printer.ip}
-                    sx={{
-                      '& .MuiListItemText-primary': { color: '#00ffff' },
-                      '& .MuiListItemText-secondary': { color: 'rgba(0, 255, 255, 0.7)' }
-                    }}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          )}
-
-          {/* Manuelle Eingabe */}
-          <NeonTextField
-            label="Printer Name"
-            value={newPrinter.name}
-            onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
-            fullWidth
-          />
-          
-          <NeonTextField
-            label="IP Address"
-            value={newPrinter.ip}
-            onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
-      fullWidth
-          />
-
-          {/* Access Code nur für Bambu Lab */}
-          {printerType === 'BAMBULAB' && (
-            <NeonTextField
-              label="Access Code"
-              value={newPrinter.accessCode}
-              onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
-      fullWidth
-            />
-          )}
+          </NeonButton>
         </Box>
+
+        {/* Dropdown Menü an zweiter Stelle */}
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel sx={{ color: '#00ffff' }}>Printer Type</InputLabel>
+          <Select
+            value={printerType}
+            onChange={handleTypeChange}
+            sx={{
+              color: '#00ffff',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(0, 255, 255, 0.3)'
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(0, 255, 255, 0.5)'
+              }
+            }}
+          >
+            {Object.entries(PRINTER_TYPES).map(([key, value]) => (
+              <MenuItem key={key} value={key}>{value.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Eingabefelder an dritter Stelle */}
+        <TextField
+          autoFocus
+          margin="dense"
+          label="Printer Name"
+          fullWidth
+          value={newPrinter.name}
+          onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
+        />
+        <TextField
+          margin="dense"
+          label="IP Address"
+          fullWidth
+          value={newPrinter.ip}
+          onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
+        />
+        {printerType === 'BAMBULAB' && (
+          <TextField
+            margin="dense"
+            label="Access Code"
+            fullWidth
+            value={newPrinter.accessCode}
+            onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
+          />
+        )}
+
+        {/* Rest bleibt gleich */}
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {scannedPrinters.length > 0 && (
+          <List>
+            {scannedPrinters.map((printer, index) => (
+              <ListItem
+                key={index}
+                button
+                onClick={() => setNewPrinter({
+                  ...newPrinter,
+                  name: printer.name,
+                  ip: printer.ip
+                })}
+              >
+                <ListItemText
+                  primary={`${printer.name} (${printer.ip})`}
+                  secondary={`Type: ${printer.type}`}
+                />
+              </ListItem>
+            ))}
+          </List>
+        )}
       </DialogContent>
       <DialogActions>
         <NeonButton onClick={onClose}>CANCEL</NeonButton>
@@ -305,11 +302,6 @@ const AddPrinterDialog = ({
           {submitting ? 'ADDING...' : 'ADD'}
         </NeonButton>
       </DialogActions>
-      {error && (
-        <Box sx={{ p: 2, color: 'error.main' }}>
-          {error}
-        </Box>
-      )}
     </GlassDialog>
   );
 };
