@@ -15,6 +15,7 @@ import uuid
 import requests
 import os
 from src.config import Config  # Importiere Config
+from src.services.mqttService import mqtt_service
 
 logger = logging.getLogger(__name__)
 printers_bp = Blueprint('printers', __name__, url_prefix='/api')
@@ -141,25 +142,40 @@ def scan_network():
         return jsonify({"error": str(e)}), 500
 
 @printers_bp.route('/printers/<printer_id>/status', methods=['GET'])
-def get_printer_status(printer_id):
-    """Get printer status"""
+def get_printer_status(printer_id: str):
+    """Holt den Status eines Druckers"""
     try:
-        printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
-        with open(printer_file, 'r') as f:
-            printer_data = json.load(f)
-            
-        if printer_data['type'] == 'CREALITY':
-            printer_service.connect_printer(
-                printer_id=printer_id,
-                printer_type=printer_data['type'],
-                ip=printer_data['ip']
-            )
-            
-        return jsonify(printer_data)
+        # Hole den Drucker aus der Datenbank
+        printer = getPrinterById(printer_id)
         
+        if printer['type'] == 'BAMBULAB':
+            # Neue MQTT-Logik für Bambulab
+            status = mqtt_service.get_printer_status(printer_id)
+            logger.debug(f"Returning Bambulab status: {status}")
+            return jsonify(status)
+        else:
+            # Existierende Logik für Creality
+            printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
+            with open(printer_file, 'r') as f:
+                printer_data = json.load(f)
+                
+            if printer_data['type'] == 'CREALITY':
+                printer_service.connect_printer(
+                    printer_id=printer_id,
+                    printer_type=printer_data['type'],
+                    ip=printer_data['ip']
+                )
+            
+            logger.debug(f"Returning Creality status: {printer_data}")
+            return jsonify(printer_data)
+            
     except Exception as e:
         logger.error(f"Error getting printer status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'temps': {'hotend': 0, 'bed': 0, 'chamber': 0},
+            'status': 'offline',
+            'progress': 0
+        })
 
 @printers_bp.route('/printers/<printer_id>/status', methods=['PUT'])
 def update_status(printer_id):

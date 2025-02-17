@@ -1,10 +1,8 @@
 import React from 'react';
 import { Box, Typography, LinearProgress } from '@mui/material';
+import PrinterIcon from '@mui/icons-material/Print';
 
-const BambuLabInfo = ({ printer }) => {
-  const temps = printer.temperatures || {};
-  const targets = printer.targets || {};
-
+const BambuLabInfo = ({ printer, status }) => {
   return (
     <Box sx={{
       position: 'absolute',
@@ -18,27 +16,26 @@ const BambuLabInfo = ({ printer }) => {
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
         <Typography variant="body2">
-          Status: {printer.status || 'offline'}
+          Status: {status?.status || 'offline'}
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Typography variant="body2">
-            Nozzle: {temps.nozzle?.toFixed(1) || '-.--'}°C
-            {targets.nozzle > 0 && ` / ${targets.nozzle}°C`}
+            Nozzle: {status?.temps?.hotend?.toFixed(1) || '-.--'}°C
           </Typography>
           <Typography variant="body2">
-            Bed: {temps.bed?.toFixed(1) || '-.--'}°C
-            {targets.bed > 0 && ` / ${targets.bed}°C`}
+            Bed: {status?.temps?.bed?.toFixed(1) || '-.--'}°C
           </Typography>
           <Typography variant="body2">
-            Chamber: {temps.chamber?.toFixed(1) || '-.--'}°C
+            Chamber: {status?.temps?.chamber?.toFixed(1) || '-.--'}°C
           </Typography>
         </Box>
       </Box>
-      {printer.progress > 0 && (
+      
+      {status?.progress > 0 && (
         <>
           <LinearProgress 
             variant="determinate" 
-            value={printer.progress}
+            value={status.progress}
             sx={{
               height: 4,
               borderRadius: 2,
@@ -49,8 +46,7 @@ const BambuLabInfo = ({ printer }) => {
             }}
           />
           <Typography variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
-            Progress: {printer.progress.toFixed(1)}%
-            {printer.remaining_time && ` | Remaining: ${printer.remaining_time}min`}
+            Progress: {status.progress.toFixed(1)}%
           </Typography>
         </>
       )}
