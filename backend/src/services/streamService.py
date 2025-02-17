@@ -44,8 +44,9 @@ class StreamService:
                 '-c:v', 'copy',  # Direkte Kopie des H.264-Streams
                 '-movflags', 'frag_keyframe+empty_moov+default_base_moof+faststart',
                 '-f', 'mp4',
-                '-frag_duration', '500000',  # 500ms pro Fragment
-                '-max_delay', '500000',
+                '-frag_duration', '250000',  # 250ms pro Fragment für flüssigeres Streaming
+                '-max_delay', '250000',
+                '-max_interleave_delta', '250000',
                 'pipe:1'
             ]
 

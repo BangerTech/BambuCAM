@@ -293,6 +293,8 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
             sourceBufferRef.current = ms.addSourceBuffer(mimeType);
             sourceBufferRef.current.mode = 'segments';
+            // Setze eine maximale Puffergröße von 30 Sekunden
+            ms.duration = 30;
             console.log('SourceBuffer erfolgreich erstellt');
 
             // Stream starten
@@ -306,32 +308,61 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
                 wsRef.current = ws;
 
                 let isFirstChunk = true;
+                let pendingBuffers = [];
 
                 ws.onopen = () => {
                     console.log('WebSocket connection established');
                     setLoading(false);
                 };
 
+                const appendNextBuffer = () => {
+                    if (pendingBuffers.length > 0 && !sourceBufferRef.current.updating) {
+                        try {
+                            sourceBufferRef.current.appendBuffer(pendingBuffers.shift());
+                        } catch (e) {
+                            console.error('Error appending buffer:', e);
+                        }
+                    }
+                };
+
+                sourceBufferRef.current.addEventListener('updateend', () => {
+                    // Prüfe und entferne alte Daten
+                    const buffered = sourceBufferRef.current.buffered;
+                    if (buffered.length > 0) {
+                        const currentTime = videoRef.current.currentTime;
+                        const bufferEnd = buffered.end(0);
+                        
+                        // Wenn mehr als 10 Sekunden gepuffert sind
+                        if (bufferEnd - currentTime > 10) {
+                            try {
+                                // Entferne alles außer den letzten 5 Sekunden
+                                sourceBufferRef.current.remove(0, currentTime - 5);
+                            } catch (e) {
+                                console.warn('Buffer removal failed:', e);
+                            }
+                        }
+                    }
+                    appendNextBuffer();
+                });
+
                 ws.onmessage = async (event) => {
                     try {
                         const data = await event.data.arrayBuffer();
                         console.log('Received data chunk:', data.byteLength, 'bytes');
                         
-                        if (sourceBufferRef.current && !sourceBufferRef.current.updating) {
+                        if (isFirstChunk) {
+                            console.log('Appending first chunk');
+                            isFirstChunk = false;
+                            pendingBuffers = [];
                             try {
-                                if (isFirstChunk) {
-                                    console.log('Appending first chunk');
-                                    isFirstChunk = false;
-                                }
                                 sourceBufferRef.current.appendBuffer(data);
                             } catch (e) {
-                                console.error('Error appending buffer:', e);
-                                if (e.name === 'QuotaExceededError') {
-                                    const buffered = sourceBufferRef.current.buffered;
-                                    if (buffered.length > 0) {
-                                        sourceBufferRef.current.remove(0, buffered.end(0) - 1);
-                                    }
-                                }
+                                console.error('Error appending first chunk:', e);
+                            }
+                        } else {
+                            pendingBuffers.push(data);
+                            if (!sourceBufferRef.current.updating) {
+                                appendNextBuffer();
                             }
                         }
                     } catch (error) {
