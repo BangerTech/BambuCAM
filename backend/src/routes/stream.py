@@ -79,35 +79,19 @@ def proxy_mjpeg_stream(printer_id):
         logger.error(f"Error setting up MJPEG proxy: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500 
 
-@stream_bp.route('/<printer_id>', methods=['GET'])
-def get_stream(printer_id):
-    """Startet einen neuen Stream"""
-    try:
-        url = request.args.get('url')
-        if not url:
-            return jsonify({'error': 'No stream URL provided'}), 400
-            
-        printer = getPrinterById(printer_id)
-        if not printer:
-            return jsonify({'error': 'Printer not found'}), 404
+@stream_bp.route('/stream/<printer_id>')
+def start_stream(printer_id):
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'success': False, 'error': 'No URL provided'}), 400
 
-        # Starte den Stream
-        result = stream_service.start_stream(printer_id, url)
-        
-        if result.get('success'):
-            return jsonify({
-                'success': True,
-                'port': result['port']
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Unknown error')
-            }), 400
-            
-    except Exception as e:
-        logger.error(f"Error starting stream: {e}")
-        return jsonify({'error': str(e)}), 500
+    logger.info(f"Starting stream for printer {printer_id} with URL: {url}")
+    result = stream_service.start_stream(printer_id, url)
+    
+    if result.get('success'):
+        return jsonify(result)
+    else:
+        return jsonify(result), 500
 
 @stream_bp.route('/<printer_id>/stop', methods=['POST'])
 def stop_stream(printer_id):

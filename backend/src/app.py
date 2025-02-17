@@ -5,6 +5,7 @@ from src.services import (
     startStream,
     addPrinter,
     getPrinters,
+    getPrinterById,
     removePrinter,
     stream_service
 )
@@ -44,7 +45,8 @@ CORS(app, resources={
         "origins": "*",
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
-    }
+    },
+    r"/stream/*": {"origins": "*"}
 })
 
 # Stelle sicher, dass die Verzeichnisse existieren
@@ -93,6 +95,26 @@ def test_route():
         'status': 'ok',
         'message': 'Backend is running'
     })
+
+@app.route('/api/stream/<printer_id>', methods=['GET'])
+def start_stream(printer_id):
+    """Startet einen neuen Stream"""
+    try:
+        url = request.args.get('url')
+        if not url:
+            return jsonify({'error': 'No stream URL provided'}), 400
+            
+        # Starte den Stream
+        result = stream_service.start_stream(printer_id, url)
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify({'error': result.get('error', 'Unknown error')}), 500
+            
+    except Exception as e:
+        logger.error(f"Error starting stream: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 

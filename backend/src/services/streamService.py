@@ -18,10 +18,10 @@ class StreamService:
         self.ws_servers = {}
         self.BASE_PORT = 9000
 
-    def start_stream(self, printer_id: str, stream_url: str) -> dict:
+    def start_stream(self, printer_id: str, url: str) -> dict:
         """Startet einen neuen Stream"""
         try:
-            logger.info(f"Starting stream for {printer_id} with URL {stream_url}")
+            logger.info(f"Starting stream for {printer_id} with URL {url}")
             
             # Stoppe existierenden Stream falls vorhanden
             self.stop_stream(printer_id)
@@ -34,18 +34,18 @@ class StreamService:
             # Hole nächsten freien Port
             port = self.get_next_port()
             
+            # FFmpeg Befehl für fragmentiertes MP4 mit direkter H.264-Kopie
             command = [
                 'ffmpeg',
                 '-fflags', 'nobuffer',
                 '-flags', 'low_delay',
                 '-rtsp_transport', 'tcp',
-                '-i', stream_url,
-                '-vsync', '0',
-                '-c:v', 'copy',
-                '-max_delay', '0',
-                '-an',
-                '-f', 'mpegts',
-                '-flush_packets', '1',
+                '-i', url,
+                '-c:v', 'copy',  # Direkte Kopie des H.264-Streams
+                '-movflags', 'frag_keyframe+empty_moov+default_base_moof+faststart',
+                '-f', 'mp4',
+                '-frag_duration', '500000',  # 500ms pro Fragment
+                '-max_delay', '500000',
                 'pipe:1'
             ]
 
@@ -67,7 +67,7 @@ class StreamService:
                     'error': 'Failed to start FFmpeg'
                 }
             
-            # Lese erste Fehlerausgabe auch wenn Prozess läuft
+            # Lese erste Fehlerausgabe
             error = process.stderr.read1(4096).decode()
             if error:
                 logger.info(f"FFmpeg output: {error}")
@@ -77,7 +77,7 @@ class StreamService:
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
-                'url': stream_url
+                'url': url
             }
 
             # Starte WebSocket Server
@@ -96,9 +96,19 @@ class StreamService:
                 'error': str(e)
             }
 
-    def start_websocket_server(self, port):
-        """Startet einen WebSocket Server"""
+    def start_websocket_server(self, port: int = 9000):
+        """Startet den WebSocket-Server"""
         try:
+            logger.info(f"Starting WebSocket server on port {port}")
+            
+            # Prüfe ob der Port bereits verwendet wird
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            result = sock.connect_ex(('127.0.0.1', port))
+            if result == 0:
+                logger.warning(f"Port {port} is already in use!")
+            sock.close()
+            
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
@@ -106,13 +116,17 @@ class StreamService:
                 self.handle_stream,
                 "0.0.0.0",
                 port,
-                ping_interval=None
+                ping_interval=30,
+                ping_timeout=10
             )
             
             loop.run_until_complete(start_server)
             
             def run_loop():
-                loop.run_forever()
+                try:
+                    loop.run_forever()
+                except Exception as e:
+                    logger.error(f"Error in WebSocket server loop: {e}", exc_info=True)
             
             server_thread = Thread(target=run_loop, daemon=True)
             server_thread.start()
@@ -122,43 +136,53 @@ class StreamService:
                 'thread': server_thread
             }
             
-            logger.info(f"Started WebSocket server on port {port}")
+            logger.info(f"WebSocket server successfully started on port {port}")
             
         except Exception as e:
-            logger.error(f"Error starting WebSocket server: {e}")
-            raise e
+            logger.error(f"Error starting WebSocket server: {e}", exc_info=True)
 
     async def handle_stream(self, websocket, path):
         """Behandelt einen einzelnen WebSocket Stream"""
-        printer_id = path.split('/')[-1]
-        logger.info(f"Stream handler called for printer {printer_id}")
-        
-        if printer_id not in self.active_streams:
-            return
-            
-        stream_data = self.active_streams[printer_id]
-        process = stream_data['process']
-        
         try:
+            printer_id = path.split('/')[-1]
+            logger.info(f"WebSocket connection attempt for printer {printer_id}")
+            logger.info(f"Active streams: {list(self.active_streams.keys())}")
+            
+            if printer_id not in self.active_streams:
+                logger.error(f"No active stream for printer {printer_id}")
+                await websocket.close(1008, f"No active stream for printer {printer_id}")
+                return
+            
+            stream_data = self.active_streams[printer_id]
+            process = stream_data['process']
+            
+            logger.info(f"Starting stream data transfer for printer {printer_id}")
+            
             while True:
                 if process.poll() is not None:
+                    error = process.stderr.read().decode()
+                    logger.error(f"FFmpeg process ended for printer {printer_id}. Error: {error}")
                     break
                     
                 data = process.stdout.read1(32768)
                 if not data:
+                    logger.debug("No data received from FFmpeg, continuing...")
                     continue
                     
                 try:
+                    logger.debug(f"Sending {len(data)} bytes of data")
                     await websocket.send(data)
                 except websockets.exceptions.ConnectionClosed:
+                    logger.info(f"WebSocket connection closed for printer {printer_id}")
                     break
                 except Exception as e:
-                    logger.error(f"Error sending data: {e}")
+                    logger.error(f"Error sending data: {e}", exc_info=True)
                     break
-                    
+                
         except Exception as e:
-            logger.error(f"Error in stream handler: {e}")
+            logger.error(f"Error in stream handler: {e}", exc_info=True)
         finally:
+            logger.info(f"Stream handler finished for printer {printer_id}")
             try:
                 await websocket.close()
             except:

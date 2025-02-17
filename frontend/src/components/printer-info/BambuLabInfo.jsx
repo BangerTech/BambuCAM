@@ -3,15 +3,18 @@ import { Box, Typography, LinearProgress } from '@mui/material';
 import logger from '../../utils/logger';
 
 const BambuLabInfo = ({ printer, status }) => {
-  // Debug logging
-  console.log('BambuLabInfo render:', {
-    printer,
-    status,
-    temps: status?.temps,
-    nozzle_temp: status?.temps?.nozzle,
-    bed_temp: status?.temps?.bed,
-    chamber_temp: status?.temps?.chamber
+  // Debug-Logging
+  logger.debug('BambuLabInfo render:', {
+    printer_id: printer?.id,
+    status: status?.status,
+    temperatures: status?.temperatures,
+    targets: status?.targets,
+    progress: status?.progress
   });
+
+  const formatTemp = (temp) => {
+    return temp ? `${temp.toFixed(1)}°C` : '0°C';
+  };
 
   return (
     <Box sx={{
@@ -21,42 +24,45 @@ const BambuLabInfo = ({ printer, status }) => {
       right: 0,
       padding: '8px',
       background: 'rgba(0,0,0,0.7)',
-      color: '#00ffff',
+      color: '#fff',
       zIndex: 2
     }}>
+      {/* Status und Temperaturen */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
         <Typography variant="body2">
-          Status: {status?.status || 'offline'}
+          Status: {status?.status || 'Offline'}
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Typography variant="body2">
-            Nozzle: {status?.temps?.nozzle?.toFixed(1) || '-.--'}°C
+            Hotend: {formatTemp(status?.temperatures?.hotend)} / {formatTemp(status?.targets?.hotend)}
           </Typography>
           <Typography variant="body2">
-            Bed: {status?.temps?.bed?.toFixed(1) || '-.--'}°C
+            Bed: {formatTemp(status?.temperatures?.bed)} / {formatTemp(status?.targets?.bed)}
           </Typography>
           <Typography variant="body2">
-            Chamber: {status?.temps?.chamber?.toFixed(1) || '-.--'}°C
+            Chamber: {formatTemp(status?.temperatures?.chamber)}
           </Typography>
         </Box>
       </Box>
-      
-      {(status?.progress > 0 || status?.status === 'finish') && (
+
+      {/* Fortschritt */}
+      {status?.progress > 0 && (
         <>
           <LinearProgress 
             variant="determinate" 
-            value={status?.progress || 0}
+            value={status.progress} 
             sx={{
               height: 4,
               borderRadius: 2,
-              backgroundColor: 'rgba(0, 255, 255, 0.2)',
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
               '& .MuiLinearProgress-bar': {
-                backgroundColor: '#00ffff'
+                backgroundColor: '#fff'
               }
             }}
           />
           <Typography variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
-            Progress: {(status?.progress || 0).toFixed(1)}%
+            Progress: {status.progress.toFixed(1)}%
+            {status?.remaining_time > 0 && ` (${Math.floor(status.remaining_time / 60)}min remaining)`}
           </Typography>
         </>
       )}

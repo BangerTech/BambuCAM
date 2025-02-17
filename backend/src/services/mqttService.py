@@ -15,9 +15,6 @@ DISCOVERY_PORT = 1990
 SSDP_PORT = 2021
 RTSP_PORT = 322
 
-# Pfad zur JSON-Datei
-PRINTERS_FILE = Path(os.getenv('PRINTERS_FILE', 'printers.json'))
-
 class MQTTService:
     def __init__(self):
         self.clients = {}
@@ -69,57 +66,72 @@ class MQTTService:
 
             def on_message(client, userdata, msg):
                 try:
-                    logger.debug(f"Received MQTT message on topic {msg.topic}")
-                    # Extrahiere printer_id aus dem Topic (format: device/PRINTER_ID/report)
-                    topic_parts = msg.topic.split('/')
-                    if len(topic_parts) >= 3:
-                        message_printer_id = topic_parts[1]
-                        logger.debug(f"Message for printer: {message_printer_id}")
+                    data = json.loads(msg.payload)
+                    serial = msg.topic.split('/')[1]  # Format: device/SERIAL/report
+                    
+                    # Speichere die Seriennummer beim ersten Empfang
+                    if printer_id not in self.stored_printers:
+                        from src.services import getPrinters
+                        for printer in getPrinters():
+                            if printer['id'] == printer_id:
+                                printer['serial'] = serial
+                                # Speichere den aktualisierten Drucker
+                                printer_file = os.path.join('/app/data/printers', f"{printer_id}.json")
+                                with open(printer_file, 'w') as f:
+                                    json.dump(printer, f, indent=2)
+                                break
+                    
+                    if 'print' in data:
+                        print_data = data['print']
+                        status_data = {
+                            'status': print_data.get('gcode_state', 'unknown'),
+                            'temperatures': {
+                                'nozzle': float(print_data.get('nozzle_temper', 0)),
+                                'bed': float(print_data.get('bed_temper', 0)),
+                                'chamber': float(print_data.get('chamber_temper', 0))
+                            },
+                            'targets': {
+                                'nozzle': float(print_data.get('nozzle_target_temper', 0)),
+                                'bed': float(print_data.get('bed_target_temper', 0))
+                            },
+                            'progress': float(print_data.get('mc_percent', 0)),
+                            'remaining_time': int(print_data.get('mc_remaining_time', 0))
+                        }
                         
-                        data = json.loads(msg.payload)
-                        if 'print' in data:
-                            print_data = data['print']
-                            status_data = {
-                                "temperatures": {
-                                    "bed": float(print_data.get('bed_temper', 0)),
-                                    "nozzle": float(print_data.get('nozzle_temper', 0)),
-                                    "chamber": float(print_data.get('chamber_temper', 0))
-                                },
-                                "targets": {
-                                    "bed": float(print_data.get('bed_target_temper', 0)),
-                                    "nozzle": float(print_data.get('nozzle_target_temper', 0))
-                                },
-                                "status": print_data.get('gcode_state', 'unknown'),
-                                "progress": float(print_data.get('mc_percent', 0)),
-                                "remaining_time": int(print_data.get('mc_remaining_time', 0))
-                            }
+                        # Cache die Daten
+                        self.printer_data[printer_id] = status_data
+                        logger.debug(f"Updated printer data: {self.printer_data}")
+                        
+                        # Update stored_printers Status
+                        if printer_id in self.stored_printers:
+                            self.stored_printers[printer_id].update({
+                                'status': status_data['status'],
+                                'temperatures': status_data['temperatures'],
+                                'targets': status_data['targets'],
+                                'progress': status_data['progress'],
+                                'remaining_time': status_data['remaining_time'],
+                                'last_update': datetime.now().timestamp()
+                            })
                             
-                            logger.info(f"Processed status data: {status_data}")
-                            
-                            # Speichere die verarbeiteten Daten
-                            self.printer_data[printer_id] = status_data
-                            
-                            # Update stored_printers Status
-                            if printer_id in self.stored_printers:
-                                self.stored_printers[printer_id].update({
-                                    'status': status_data['status'],
-                                    'temperatures': status_data['temperatures'],
-                                    'targets': status_data['targets'],
-                                    'progress': status_data['progress'],
-                                    'remaining_time': status_data['remaining_time'],
-                                    'last_update': datetime.now().timestamp()
-                                })
-                                
-                                # Sende Benachrichtigung bei Statusänderungen
-                                self._check_status_change(printer_id, print_data)
+                            # Sende Benachrichtigung bei Statusänderungen
+                            self._check_status_change(printer_id, data)
                 
                 except Exception as e:
-                    logger.error(f"Error processing MQTT message: {e}")
+                    logger.error(f"Error processing MQTT message: {e}", exc_info=True)
+
+            # Zusätzliche Debug-Callbacks
+            def on_disconnect(client, userdata, rc):
+                logger.warning(f"MQTT disconnected with code {rc}")
+
+            def on_subscribe(client, userdata, mid, granted_qos):
+                logger.info(f"Successfully subscribed with QoS: {granted_qos}")
 
             client.on_connect = on_connect
             client.on_message = on_message
+            client.on_disconnect = on_disconnect
+            client.on_subscribe = on_subscribe
             
-            # Verbinde mit Bambulab MQTT Port
+            # Verbinde mit Bambulab MQTT Port und starte Loop
             client.connect(ip, MQTT_PORT, 60)
             client.loop_start()
             
@@ -132,34 +144,36 @@ class MQTTService:
 
     def get_printer_status(self, printer_id: str) -> dict:
         """Holt den aktuellen Status eines Druckers"""
-        status_data = self.printer_data.get(printer_id, {})
-        logger.debug(f"MQTT Service - Raw status_data: {status_data}")
-        
-        if status_data:
-            formatted_data = {
-                'printerId': printer_id,
-                'temps': {
-                    'nozzle': float(status_data['temperatures']['nozzle']),
-                    'bed': float(status_data['temperatures']['bed']),
-                    'chamber': float(status_data['temperatures']['chamber'])
-                },
-                'status': status_data['status'].lower(),
-                'progress': float(status_data['progress'])
+        try:
+            status_data = self.printer_data.get(printer_id, {})
+            logger.debug(f"Getting status for {printer_id}: {status_data}")
+            
+            if status_data:
+                return {
+                    'status': status_data['status'],
+                    'temperatures': status_data['temperatures'],
+                    'targets': status_data['targets'],
+                    'progress': status_data['progress'],
+                    'remaining_time': status_data['remaining_time']
+                }
+            
+            # Fallback wenn keine Daten vorhanden
+            return {
+                'status': 'offline',
+                'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+                'targets': {'hotend': 0, 'bed': 0},
+                'progress': 0,
+                'remaining_time': 0
             }
-            logger.debug(f"MQTT Service - Formatted data: {formatted_data}")
-            return formatted_data
-        
-        # Fallback wenn keine Daten vorhanden
-        return {
-            'printerId': printer_id,
-            'temps': {
-                'nozzle': 0,
-                'bed': 0,
-                'chamber': 0
-            },
-            'status': 'offline',
-            'progress': 0
-        }
+        except Exception as e:
+            logger.error(f"Error getting printer status: {e}", exc_info=True)
+            return {
+                'status': 'offline',
+                'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
+                'targets': {'hotend': 0, 'bed': 0},
+                'progress': 0,
+                'remaining_time': 0
+            }
 
     def disconnect_printer(self, printer_id: str):
         """Trennt die MQTT Verbindung eines Druckers"""
@@ -197,7 +211,7 @@ class MQTTService:
         try:
             temperatures = {
                 'bed': data['temperatures']['bed'],
-                'nozzle': data['temperatures']['nozzle'],
+                'hotend': data['temperatures']['hotend'],
                 'chamber': data['temperatures']['chamber']
             }
             return {

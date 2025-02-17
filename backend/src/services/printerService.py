@@ -155,30 +155,35 @@ class PrinterService:
     def get_printer_status(self, printer_id: str) -> dict:
         """Holt den Status eines Druckers"""
         try:
-            printer = self.get_printer_by_id(printer_id)
+            printer = getPrinterById(printer_id)
             if not printer:
                 raise Exception("Printer not found")
-
+            
             if printer['type'] == 'BAMBULAB':
                 # Hole Status vom MQTT Service
                 mqtt_status = mqtt_service.get_printer_status(printer_id)
+                logger.debug(f"MQTT status for {printer_id}: {mqtt_status}")
                 
                 # Konvertiere in das Format, das das Frontend erwartet
-                return {
+                status = {
                     'printerId': printer_id,
-                    'status': mqtt_status['status'],  # 'finish', 'printing', etc.
+                    'status': mqtt_status.get('status', 'offline').lower(),
                     'temps': {
-                        'bed': mqtt_status['temperatures']['bed'],
-                        'hotend': mqtt_status['temperatures']['hotend'],
-                        'chamber': mqtt_status['temperatures']['chamber']
+                        'bed': float(mqtt_status.get('temperatures', {}).get('bed', 0)),
+                        'hotend': float(mqtt_status.get('temperatures', {}).get('hotend', 0)),
+                        'chamber': float(mqtt_status.get('temperatures', {}).get('chamber', 0))
                     },
                     'targets': {
-                        'bed': mqtt_status['targets']['bed'],
-                        'hotend': mqtt_status['targets']['hotend']
+                        'bed': float(mqtt_status.get('targets', {}).get('bed', 0)),
+                        'hotend': float(mqtt_status.get('targets', {}).get('hotend', 0))
                     },
-                    'progress': mqtt_status['progress'],
-                    'remaining_time': mqtt_status['remaining_time']
+                    'progress': float(mqtt_status.get('progress', 0)),
+                    'remaining_time': int(mqtt_status.get('remaining_time', 0))
                 }
+                
+                logger.debug(f"Converted status for frontend: {status}")
+                return status
+            
             else:
                 # Existierende Logik für andere Drucker...
                 pass
@@ -187,9 +192,9 @@ class PrinterService:
             logger.error(f"Error getting printer status: {e}")
             return {
                 'printerId': printer_id,
+                'temps': {'hotend': 0, 'bed': 0, 'chamber': 0},
+                'targets': {'hotend': 0, 'bed': 0},
                 'status': 'offline',
-                'temps': {'bed': 0, 'hotend': 0, 'chamber': 0},
-                'targets': {'bed': 0, 'hotend': 0},
                 'progress': 0,
                 'remaining_time': 0
             }
@@ -354,6 +359,42 @@ class PrinterService:
 
         except Exception as e:
             logger.error(f"Error setting up Creality polling: {e}")
+            raise
+
+    def add_printer(self, data: dict) -> dict:
+        """Fügt einen neuen Drucker hinzu"""
+        try:
+            printer_id = str(uuid.uuid4())
+            printer = {
+                'id': printer_id,
+                'name': data['name'],
+                'ip': data['ip'],
+                'type': data['type'],
+                'status': 'offline',
+                'temperatures': {
+                    'hotend': 0,
+                    'bed': 0,
+                    'chamber': 0
+                },
+                'progress': 0,
+                'port': 8554,
+                'accessCode': data['accessCode'],
+                'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
+            }
+            
+            # Get MQTT info and store serial number
+            if data['type'] == 'BAMBULAB':
+                try:
+                    mqtt_info = self.mqtt_service.get_printer_mqtt_info(data['ip'])
+                    if mqtt_info and mqtt_info.get('sn'):
+                        printer['serial'] = mqtt_info['sn']
+                except Exception as e:
+                    logger.error(f"Error getting MQTT info: {e}")
+            
+            self.save_printer(printer)
+            return printer
+        except Exception as e:
+            logger.error(f"Error adding printer: {e}")
             raise
 
 # Globale Instanz des PrinterService

@@ -28,12 +28,14 @@ services:
       - bambucam_logs:/app/logs
     ports:
       - "4000:4000"
+      - "9000:9000"  # WebSocket Port für Streams
     environment:
       - FLASK_APP=src/app.py
       - FLASK_ENV=development
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=DEBUG
     command: flask run --host=0.0.0.0 --port=4000
+    network_mode: "host"
 
   nginx:
     image: nginx:alpine

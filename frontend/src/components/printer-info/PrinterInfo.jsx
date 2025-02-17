@@ -1,36 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import api from '../../services/api';
+import React from 'react';
 import BambuLabInfo from './BambuLabInfo';
 import CrealityInfo from './CrealityInfo';
+import logger from '../../utils/logger';
 
-const PrinterInfo = ({ printer }) => {
-  const [status, setStatus] = useState(null);
+const PrinterInfo = ({ printer, status }) => {
+  // Daten-Mapping für unterschiedliche Druckertypen
+  const mappedStatus = printer?.type === 'CREALITY' ? {
+    ...status,
+    temperatures: status?.temps,  // Für Creality: temps -> temperatures
+  } : status;
 
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const response = await api.getPrinterStatus(printer.id);
-        setStatus(response.data);
-      } catch (error) {
-        console.error('Error fetching printer status:', error);
-      }
-    };
+  // Erweitertes Debug-Logging
+  logger.debug('PrinterInfo render:', {
+    printer_type: printer?.type,
+    printer_id: printer?.id,
+    status: mappedStatus,
+    temperatures: mappedStatus?.temperatures,
+    targets: mappedStatus?.targets,
+    progress: mappedStatus?.progress
+  });
 
-    // Initial fetch
-    fetchStatus();
-
-    // Poll every 5 seconds
-    const interval = setInterval(fetchStatus, 5000);
-
-    return () => clearInterval(interval);
-  }, [printer.id]);
-
-  switch(printer.type) {
+  // Wähle die richtige Info-Komponente basierend auf dem Druckertyp
+  switch (printer?.type) {
     case 'BAMBULAB':
-      return <BambuLabInfo printer={printer} status={status} />;
+      return <BambuLabInfo printer={printer} status={mappedStatus} />;
     case 'CREALITY':
-      return <CrealityInfo printer={printer} />;
+      return <CrealityInfo printer={printer} status={mappedStatus} />;
     default:
+      logger.warn(`Unknown printer type: ${printer?.type}`);
       return null;
   }
 };
