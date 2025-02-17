@@ -133,22 +133,30 @@ class MQTTService:
     def get_printer_status(self, printer_id: str) -> dict:
         """Holt den aktuellen Status eines Druckers"""
         status_data = self.printer_data.get(printer_id, {})
+        logger.debug(f"MQTT Service - Raw status_data: {status_data}")
         
-        if status_data:  # Wenn wir Daten haben
-            # Konvertiere in das Format, das BambuLabInfo.jsx erwartet
-            return {
+        if status_data:
+            formatted_data = {
+                'printerId': printer_id,
                 'temps': {
-                    'hotend': status_data['temperatures']['nozzle'],
-                    'bed': status_data['temperatures']['bed'],
-                    'chamber': status_data['temperatures']['chamber']
+                    'nozzle': float(status_data['temperatures']['nozzle']),
+                    'bed': float(status_data['temperatures']['bed']),
+                    'chamber': float(status_data['temperatures']['chamber'])
                 },
-                'status': status_data['status'].lower(),  # Frontend erwartet Kleinbuchstaben
-                'progress': status_data['progress']
+                'status': status_data['status'].lower(),
+                'progress': float(status_data['progress'])
             }
+            logger.debug(f"MQTT Service - Formatted data: {formatted_data}")
+            return formatted_data
         
         # Fallback wenn keine Daten vorhanden
         return {
-            'temps': {'hotend': 0, 'bed': 0, 'chamber': 0},
+            'printerId': printer_id,
+            'temps': {
+                'nozzle': 0,
+                'bed': 0,
+                'chamber': 0
+            },
             'status': 'offline',
             'progress': 0
         }
@@ -184,6 +192,22 @@ class MQTTService:
             # Sende Benachrichtigung
             send_printer_notification(printer_name, gcode_state, message)
             logger.info(f"Sending notification for state {gcode_state}: {message}")
+
+    def process_status_data(self, data):
+        try:
+            temperatures = {
+                'bed': data['temperatures']['bed'],
+                'nozzle': data['temperatures']['nozzle'],
+                'chamber': data['temperatures']['chamber']
+            }
+            return {
+                'temps': temperatures,
+                'status': data.get('status', 'offline').lower(),
+                'progress': data.get('progress', 0)
+            }
+        except Exception as e:
+            logger.error(f"Error processing status data: {e}")
+            return None
 
 # Globale Instanz
 mqtt_service = MQTTService() 

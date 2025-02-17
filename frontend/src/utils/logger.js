@@ -1,9 +1,12 @@
+const LOG_LEVEL = process.env.REACT_APP_LOG_LEVEL || 'debug';
+
 const logger = {
   lastNotificationStatus: null,
   
   debug: (...args) => {
-    // Immer loggen im Development
-    console.debug('[Debug]', new Date().toISOString(), ...args);
+    if (LOG_LEVEL === 'debug') {
+      console.debug('[DEBUG]', new Date().toISOString(), ...args);
+    }
   },
   
   info: (...args) => {
@@ -11,15 +14,19 @@ const logger = {
   },
   
   error: (...args) => {
-    console.error('[Error]', new Date().toISOString(), ...args);
+    console.error('[ERROR]', new Date().toISOString(), ...args);
   },
   
   api: (...args) => {
-    console.info('[API]', new Date().toISOString(), ...args);
+    if (LOG_LEVEL === 'debug') {
+      console.info('[API]', new Date().toISOString(), ...args);
+    }
   },
   
   printer: (...args) => {
-    console.info('[Printer]', new Date().toISOString(), ...args);
+    if (LOG_LEVEL === 'debug') {
+      console.info('[Printer]', new Date().toISOString(), ...args);
+    }
   },
   
   notification: (message, data = null) => {
@@ -36,6 +43,21 @@ const logger = {
     
     // Alle anderen Notification-Logs normal ausgeben
     console.info('[Notification]', new Date().toISOString(), message, data);
+  },
+  
+  apiResponse: (endpoint, data) => {
+    if (LOG_LEVEL === 'debug') {
+      console.group(`[API Response] ${new Date().toISOString()} - ${endpoint}`);
+      console.log('Raw data:', data);
+      if (data?.temps) {
+        console.log('Temperature data:', data.temps);
+      } else {
+        console.warn('No temperature data found!');
+      }
+      console.log('Status:', data?.status);
+      console.log('Progress:', data?.progress);
+      console.groupEnd();
+    }
   }
 };
 

@@ -1,18 +1,23 @@
 import logger from '../utils/logger';
 import { API_URL } from '../config';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
+
 export const printerApi = {
   // Hole Status eines Druckers
   fetchStatus: async (printerId) => {
     try {
       const response = await fetch(`${API_URL}/printers/${printerId}/status`);
       const data = await response.json();
-      logger.api('Received printer status:', {
-        printerId,
-        status: data.status,
-        temps: data.temperatures,
-        state: data.state
-      });
+      
+      // Normalisiere die Temperaturdaten
+      if (data.temperatures && !data.temps) {
+        data.temps = data.temperatures;  // Kopiere temperatures nach temps
+      }
+      
+      // Debug-Log für die API-Response
+      logger.apiResponse(`/printers/${printerId}/status`, data);
+      
       return data;
     } catch (error) {
       logger.error('Error fetching printer status:', error);
