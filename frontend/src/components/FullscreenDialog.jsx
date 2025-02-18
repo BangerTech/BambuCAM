@@ -1,40 +1,81 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dialog, IconButton, Box, Typography, AppBar, Toolbar, LinearProgress, Paper } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
+import { Close as CloseIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import RTSPStream from './RTSPStream';
+import Logger from '../utils/logger';
+import BambuLabInfo from './printer-info/BambuLabInfo';
+import CrealityInfo from './printer-info/CrealityInfo';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
 
-const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatus }) => {
-  if (!printer) return null;  // Early return wenn kein Drucker
+const FullscreenDialog = ({ open, printer, onClose, onDelete }) => {
+  const [printerData, setPrinterData] = useState({
+    ...printer,
+    status: 'offline',
+    temperatures: { nozzle: 0, bed: 0, chamber: 0 },
+    targets: { nozzle: 0, bed: 0 },
+    progress: 0
+  });
 
-  // Starte den Stream wenn der Dialog geöffnet wird
-  React.useEffect(() => {
+  useEffect(() => {
     if (open && printer) {
-      const startStream = async () => {
+      const fetchStatus = async () => {
         try {
-          const wsUrl = `ws://${window.location.hostname}:9000/stream/${printer.id}`;
-          console.log('Starting fullscreen stream:', wsUrl);
-        } catch (e) {
-          console.warn('Error starting fullscreen stream:', e);
+          const response = await fetch(`/api/printers/${printer.id}/status`);
+          const data = await response.json();
+          
+          if (printer.type === 'BAMBULAB') {
+            // Anpassung an das Format wie in PrinterCard
+            setPrinterData(prev => ({
+              ...prev,
+              ...printer,
+              status: data.status || 'offline',
+              temps: data.temps || {}, // Original BambuLab temps
+              temperatures: {
+                hotend: data.temps?.nozzle || 0,
+                bed: data.temps?.bed || 0,
+                chamber: data.temps?.chamber || 0
+              },
+              targets: {
+                hotend: data.temps?.nozzle_target || 0,
+                bed: data.temps?.bed_target || 0
+              },
+              progress: data.progress || 0,
+              remaining_time: data.remaining_time || 0
+            }));
+          } else {
+            // Bestehende Verarbeitung für Creality bleibt unverändert
+            setPrinterData(prev => ({
+              ...prev,
+              ...printer,
+              status: data.status || 'offline',
+              temperatures: {
+                nozzle: data.temperatures?.hotend || data.temperatures?.nozzle || 0,
+                bed: data.temperatures?.bed || 0,
+                chamber: data.temperatures?.chamber || 0
+              },
+              targets: data.targets || { nozzle: 0, bed: 0 },
+              progress: data.progress || 0
+            }));
+          }
+        } catch (error) {
+          Logger.error('Error fetching printer status:', error);
         }
       };
-      startStream();
+
+      fetchStatus();
+      const interval = setInterval(fetchStatus, 2000);
+
+      return () => clearInterval(interval);
     }
-  }, [open, printer]);
+  }, [printer, open]);
 
   return (
     <Dialog
       fullScreen
       open={open}
-      onClose={() => {
-        // Cleanup beim Schließen
-        if (printer) {
-          console.log('Closing fullscreen stream');
-        }
-        onClose();
-      }}
+      onClose={onClose}
       PaperProps={{
         sx: {
           background: '#1a1a1a',
@@ -60,23 +101,39 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
         <AppBar 
           position="relative" 
           sx={{ 
-            background: 'rgba(0,0,0,0.7)',
+            background: 'rgba(0,0,0,0.9)',
             boxShadow: 'none'
           }}
         >
           <Toolbar>
-            <IconButton edge="start" color="inherit" onClick={onClose}>
+            <IconButton
+              edge="start"
+              color="inherit"
+              onClick={onClose}
+              aria-label="close"
+            >
               <CloseIcon />
             </IconButton>
-            <Typography variant="h6" sx={{ ml: 2, flex: 1 }}>
-              {printer?.name}
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              {printer?.name} ({printer?.ip})
             </Typography>
+            <IconButton
+              edge="end"
+              color="inherit"
+              onClick={() => {
+                onDelete(printer);
+                onClose();
+              }}
+              aria-label="delete"
+            >
+              <DeleteIcon />
+            </IconButton>
           </Toolbar>
         </AppBar>
 
         <Box sx={{ flex: 1, position: 'relative' }}>
           <RTSPStream 
-            printer={printer} 
+            printer={printerData} 
             fullscreen 
             style={{
               width: '100%',
@@ -101,20 +158,32 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
           }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography>
-                Hotend: {getTemperature(printer, 'nozzle')}°C
+                {printer.type === 'BAMBULAB' ? (
+                  `Hotend: ${printerData.temps?.nozzle || 0}°C`
+                ) : (
+                  `Hotend: ${printerData.temperatures?.nozzle || 0}°C`
+                )}
               </Typography>
               <Typography>
-                Bed: {getTemperature(printer, 'bed')}°C
+                {printer.type === 'BAMBULAB' ? (
+                  `Bed: ${printerData.temps?.bed || 0}°C`
+                ) : (
+                  `Bed: ${printerData.temperatures?.bed || 0}°C`
+                )}
               </Typography>
               <Typography>
-                Chamber: {getTemperature(printer, 'chamber')}°C
+                {printer.type === 'BAMBULAB' ? (
+                  `Chamber: ${printerData.temps?.chamber || 0}°C`
+                ) : (
+                  `Chamber: ${printerData.temperatures?.chamber || 0}°C`
+                )}
               </Typography>
             </Box>
             
             <Box sx={{ mt: 2 }}>
               <LinearProgress 
                 variant="determinate"
-                value={printerStatus[printer?.id]?.progress || 0}
+                value={printerData?.progress || 0}
                 sx={{
                   height: 8,
                   borderRadius: 4,
@@ -125,11 +194,17 @@ const FullscreenDialog = ({ printer, open, onClose, getTemperature, printerStatu
                 }}
               />
               <Typography sx={{ mt: 1, textAlign: 'center' }}>
-                {printerStatus[printer?.id]?.remaining_time || 0} min remaining
+                {printerData?.remaining_time || 0} min remaining
               </Typography>
             </Box>
           </Box>
         </Box>
+
+        {printer?.type === 'BAMBULAB' ? (
+          <BambuLabInfo printer={printerData} fullscreen={true} />
+        ) : (
+          <CrealityInfo printer={printerData} fullscreen={true} />
+        )}
       </Paper>
     </Dialog>
   );

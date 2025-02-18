@@ -89,12 +89,20 @@ class Logger {
     if (!lastStatus || 
         lastStatus.status !== status.status ||
         lastStatus.progress !== status.progress ||
-        Math.abs(lastStatus.temperatures.bed - status.temperatures.bed) > 1 ||
-        Math.abs(lastStatus.temperatures.nozzle - status.temperatures.nozzle) > 1) {
+        Math.abs(lastStatus.temperatures?.bed - status.temperatures?.bed) > 1 ||
+        Math.abs(lastStatus.temperatures?.nozzle - status.temperatures?.nozzle) > 1) {
       
       // Kompaktes Status-Logging
-      const temps = status.temperatures;
-      this.info(`Printer ${printerId}: ${status.status} | Progress: ${status.progress}% | Temps - Bed: ${temps.bed}°C, Nozzle: ${temps.nozzle}°C`);
+      const temps = status.temperatures || {};
+      const nozzleTemp = temps.hotend || temps.nozzle;
+      const printerName = status.name || printerId || 'unknown';
+      
+      this.info(
+        `Printer "${printerName}": ${status.status || 'unknown'} | ` +
+        `Progress: ${status.progress || 0}% | ` +
+        `Temps - Bed: ${temps.bed?.toFixed(1) || 0}°C, ` +
+        `Nozzle: ${nozzleTemp?.toFixed(1) || 0}°C`
+      );
       
       this.lastPrinterStatus[printerId] = status;
     }

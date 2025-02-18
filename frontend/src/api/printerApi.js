@@ -62,10 +62,9 @@ export const printerApi = {
 };
 
 const handlePrinterStatus = (response) => {
-  Logger.logPrinterStatus(response.printerId, {
-    status: response.status,
-    progress: response.progress,
-    temperatures: response.temperatures
+  Logger.logPrinterStatus(response.id, {
+    ...response,
+    name: response.name || response.id  // Stelle sicher, dass der Name verfügbar ist
   });
   
   // ... rest of handling ...
