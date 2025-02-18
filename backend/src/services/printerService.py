@@ -184,6 +184,24 @@ class PrinterService:
                 logger.debug(f"Converted status for frontend: {status}")
                 return status
             
+            elif printer['type'] == 'CREALITY':
+                # Moonraker API Abfrage
+                response = requests.get(f"http://{printer['ip']}/printer/objects/query?heater_bed&extruder&temperature_sensor chamber_temp", timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.debug(f"Moonraker response: {data}")
+                    temps = {
+                        'bed': data.get('status', {}).get('heater_bed', {}).get('temperature', 0),
+                        'hotend': data.get('status', {}).get('extruder', {}).get('temperature', 0),
+                        'chamber': data.get('status', {}).get('temperature_sensor chamber_temp', {}).get('temperature', 0)
+                    }
+                    
+                    return {
+                        'status': 'online', 
+                        'temperatures': temps,
+                        'progress': self.get_print_progress(printer_id)
+                    }
+            
             else:
                 # Existierende Logik für andere Drucker...
                 pass
@@ -649,8 +667,22 @@ def getPrinterStatus(printer_id):
             # Hole Status über MQTT Service
             return mqtt_service.get_printer_status(printer_id)
         elif printer['type'] == 'CREALITY':
-            # ... existierender Creality Code bleibt unverändert ...
-            return printer_service.get_printer_status(printer_id)
+            # Moonraker API Abfrage
+            response = requests.get(f"http://{printer['ip']}/printer/objects/query?heater_bed&extruder&temperature_sensor chamber_temp", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"Moonraker response: {data}")
+                temps = {
+                    'bed': data.get('status', {}).get('heater_bed', {}).get('temperature', 0),
+                    'hotend': data.get('status', {}).get('extruder', {}).get('temperature', 0),
+                    'chamber': data.get('status', {}).get('temperature_sensor chamber_temp', {}).get('temperature', 0)
+                }
+                
+                return {
+                    'status': 'online', 
+                    'temperatures': temps,
+                    'progress': self.get_print_progress(printer_id)
+                }
             
     except Exception as e:
         logger.error(f"Error getting printer status: {e}")

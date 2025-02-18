@@ -17,27 +17,282 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   const resetTimerRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 3;
+  const maxReconnectAttempts = 5;
+  const lastDataReceived = useRef(Date.now());
+  const pendingBuffersRef = useRef([]);
+  const reconnectTimerRef = useRef(null);
+  const isReconnecting = useRef(false);
+  const setupInProgress = useRef(false);
+  const errorCount = useRef(0);
+  const maxErrorCount = 5;
+  const bufferResetTimeout = useRef(null);
+  const videoErrorCount = useRef(0);
+  const bufferErrorCount = useRef(0);
+  const maxVideoErrors = 3;
+  const maxBufferErrors = 5;
+  const reconnectDelay = useRef(1000);
+  const maxReconnectDelay = 30000;
+  const handleErrorRef = useRef(null);
 
   // Bestimme die Stream-URL basierend auf dem Druckertyp
   const streamUrl = printer.type === 'CREALITY' 
     ? `http://${printer.ip}:8080/?action=stream`
     : null;
 
-  const processNextBuffer = useCallback(() => {
-    if (!sourceBufferRef.current || !bufferQueue.current.length) {
-      isProcessing.current = false;
+  // 1. Cleanup Funktion
+  const cleanup = useCallback(() => {
+    console.debug('Cleaning up stream resources');
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (bufferResetTimeout.current) {
+      clearTimeout(bufferResetTimeout.current);
+      bufferResetTimeout.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (sourceBufferRef.current && mediaSourceRef.current) {
+      try {
+        if (mediaSourceRef.current.readyState === 'open') {
+          sourceBufferRef.current.abort();
+          mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
+        }
+      } catch (e) {
+        console.debug('Cleanup error:', e);
+      }
+    }
+    if (videoRef.current) {
+      videoRef.current.src = '';
+      videoRef.current.load();
+    }
+    bufferQueue.current = [];
+    isProcessing.current = false;
+    sourceBufferRef.current = null;
+    mediaSourceRef.current = null;
+    errorCount.current = 0;
+    videoErrorCount.current = 0;
+    bufferErrorCount.current = 0;
+    reconnectDelay.current = 1000;
+  }, []);
+
+  // 2. Reconnect Funktion
+  const reconnect = useCallback(() => {
+    if (!mountedRef.current || isReconnecting.current) {
+      console.debug('Reconnect aborted: already reconnecting or unmounted');
+      return;
+    }
+    
+    if (reconnectAttempts.current >= maxReconnectAttempts) {
+      console.warn('Maximum reconnection attempts reached');
+      setError('Verbindung fehlgeschlagen - Bitte Seite neu laden');
+      cleanup();
       return;
     }
 
-    isProcessing.current = true;
+    isReconnecting.current = true;
+    cleanup();
+    
+    reconnectAttempts.current++;
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
+    
+    reconnectTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) {
+        isReconnecting.current = false;
+        initStream();
+      }
+    }, delay);
+  }, [cleanup]);
+
+  // 3. Error Handler Funktionen
+  const handleVideoError = useCallback((error) => {
+    console.debug('Video error:', error);
+    videoErrorCount.current++;
+    
+    if (videoErrorCount.current > maxVideoErrors) {
+      console.warn(`Too many video errors (${videoErrorCount.current}/${maxVideoErrors})`);
+      if (!isReconnecting.current && handleErrorRef.current) {
+        handleErrorRef.current();
+      }
+    }
+  }, []);
+
+  const handleBufferError = useCallback((error) => {
+    console.debug('Buffer error:', error);
+    bufferErrorCount.current++;
+    
+    if (bufferErrorCount.current > maxBufferErrors) {
+      console.warn(`Too many buffer errors (${bufferErrorCount.current}/${maxBufferErrors})`);
+      if (!isReconnecting.current && handleErrorRef.current) {
+        handleErrorRef.current();
+      }
+    }
+  }, []);
+
+  // 4. Setup Stream Funktion
+  const initStream = useCallback(async () => {
+    if (setupInProgress.current) {
+      console.debug('Setup already in progress, aborting');
+      return;
+    }
+
     try {
+      setupInProgress.current = true;
+      cleanup();
+      setLoading(true);
+      setError(null);
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      // Stream vom Backend anfordern
+      const response = await fetch(`/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to start stream');
+      }
+
+      // MediaSource Setup
+      const mediaSource = new MediaSource();
+      mediaSourceRef.current = mediaSource;
+
+      await new Promise((resolve, reject) => {
+        mediaSource.addEventListener('sourceopen', () => {
+          try {
+            const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
+            sourceBufferRef.current = sourceBuffer;
+
+            // Buffer Management
+            sourceBuffer.addEventListener('updateend', () => {
+              try {
+                if (sourceBuffer.buffered.length > 0) {
+                  const currentTime = video.currentTime;
+                  const bufferEnd = sourceBuffer.buffered.end(0);
+                  
+                  if (bufferEnd - currentTime > 5) {
+                    sourceBuffer.remove(0, currentTime - 1);
+                  }
+                }
+              } catch (e) {
+                console.debug('Buffer management error:', e);
+              }
+            });
+
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+
+      video.src = URL.createObjectURL(mediaSource);
+
+      // WebSocket Setup
+      const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.debug('WebSocket connected');
+        setLoading(false);
+        reconnectAttempts.current = 0;
+        lastDataReceived.current = Date.now();
+        errorCount.current = 0;
+      };
+
+      ws.onmessage = async (event) => {
+        lastDataReceived.current = Date.now();
+        try {
+          const data = await event.data.arrayBuffer();
+          
+          if (!sourceBufferRef.current || mediaSourceRef.current?.readyState !== 'open') {
+            console.debug('SourceBuffer or MediaSource not ready');
+            return;
+          }
+
+          if (!sourceBufferRef.current.updating) {
+            try {
+              sourceBufferRef.current.appendBuffer(data);
+            } catch (e) {
+              if (e.name === 'QuotaExceededError') {
+                const buffered = sourceBufferRef.current.buffered;
+                if (buffered.length > 0) {
+                  sourceBufferRef.current.remove(0, buffered.end(0) - 2);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.debug('Stream error:', error);
+          reconnect();
+        }
+      };
+
+      ws.onerror = () => {
+        console.debug('WebSocket error');
+        if (!isReconnecting.current) {
+          reconnect();
+        }
+      };
+
+      ws.onclose = () => {
+        console.debug('WebSocket closed');
+        if (!isReconnecting.current) {
+          reconnect();
+        }
+      };
+
+    } catch (error) {
+      console.error('Stream setup failed:', error);
+      setError('Stream-Initialisierung fehlgeschlagen');
+      setLoading(false);
+      if (!isReconnecting.current && handleErrorRef.current) {
+        handleErrorRef.current();
+      }
+    } finally {
+      setupInProgress.current = false;
+    }
+  }, [cleanup, handleVideoError, handleBufferError]);
+
+  // 5. Setze die handleErrorRef auf die reconnect Funktion
+  useEffect(() => {
+    handleErrorRef.current = reconnect;
+  }, [reconnect]);
+
+  // 6. Initialer Stream-Start und Cleanup
+  useEffect(() => {
+    initStream();
+    return () => {
+      console.debug('Component unmounting, cleaning up...');
+      mountedRef.current = false;
+      cleanup();
+    };
+  }, [initStream, cleanup]);
+
+  const processNextBuffer = useCallback(() => {
+    if (!sourceBufferRef.current || !bufferQueue.current.length || isProcessing.current) {
+      return;
+    }
+
+    try {
+      isProcessing.current = true;
       if (!sourceBufferRef.current.updating) {
         const nextBuffer = bufferQueue.current.shift();
         sourceBufferRef.current.appendBuffer(nextBuffer);
       }
     } catch (error) {
       console.error('Error processing buffer:', error);
+      if (error.name === 'QuotaExceededError') {
+        // Buffer voll - alte Daten entfernen
+        const buffered = sourceBufferRef.current.buffered;
+        if (buffered.length > 0) {
+          sourceBufferRef.current.remove(0, buffered.end(0) - 2);
+        }
+      }
+    } finally {
       isProcessing.current = false;
     }
   }, []);
@@ -267,129 +522,212 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     };
   }, [printer.id]);
 
-  const setupBambuStream = () => {
-    console.log('Setting up Bambu Lab RTSP stream');
-    const ms = new MediaSource();
-    mediaSourceRef.current = ms;
-    videoRef.current.src = URL.createObjectURL(ms);
-
-    // Video-Element Event-Handler
-    videoRef.current.onerror = (e) => {
-        console.error('Video error:', videoRef.current.error);
-        setError(`Video error: ${videoRef.current.error?.message}`);
-    };
-
-    ms.addEventListener('sourceopen', async () => {
-        console.log('MediaSource opened');
-        try {
-            // H.264 Baseline Level 3.0
-            const mimeType = 'video/mp4; codecs="avc1.42001f"';
-            
-            if (!MediaSource.isTypeSupported(mimeType)) {
-                console.error('Codec nicht unterstützt:', mimeType);
-                setError('Video codec not supported');
-                return;
-            }
-
-            sourceBufferRef.current = ms.addSourceBuffer(mimeType);
-            sourceBufferRef.current.mode = 'segments';
-            // Setze eine maximale Puffergröße von 30 Sekunden
-            ms.duration = 30;
-            console.log('SourceBuffer erfolgreich erstellt');
-
-            // Stream starten
-            const response = await fetch(`/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
-            const data = await response.json();
-            
-            if (data.success) {
-                const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
-                console.log('Connecting to WebSocket:', wsUrl);
-                const ws = new WebSocket(wsUrl);
-                wsRef.current = ws;
-
-                let isFirstChunk = true;
-                let pendingBuffers = [];
-
-                ws.onopen = () => {
-                    console.log('WebSocket connection established');
-                    setLoading(false);
-                };
-
-                const appendNextBuffer = () => {
-                    if (pendingBuffers.length > 0 && !sourceBufferRef.current.updating) {
-                        try {
-                            sourceBufferRef.current.appendBuffer(pendingBuffers.shift());
-                        } catch (e) {
-                            console.error('Error appending buffer:', e);
-                        }
-                    }
-                };
-
-                sourceBufferRef.current.addEventListener('updateend', () => {
-                    // Prüfe und entferne alte Daten
-                    const buffered = sourceBufferRef.current.buffered;
-                    if (buffered.length > 0) {
-                        const currentTime = videoRef.current.currentTime;
-                        const bufferEnd = buffered.end(0);
-                        
-                        // Wenn mehr als 10 Sekunden gepuffert sind
-                        if (bufferEnd - currentTime > 10) {
-                            try {
-                                // Entferne alles außer den letzten 5 Sekunden
-                                sourceBufferRef.current.remove(0, currentTime - 5);
-                            } catch (e) {
-                                console.warn('Buffer removal failed:', e);
-                            }
-                        }
-                    }
-                    appendNextBuffer();
-                });
-
-                ws.onmessage = async (event) => {
-                    try {
-                        const data = await event.data.arrayBuffer();
-                        console.log('Received data chunk:', data.byteLength, 'bytes');
-                        
-                        if (isFirstChunk) {
-                            console.log('Appending first chunk');
-                            isFirstChunk = false;
-                            pendingBuffers = [];
-                            try {
-                                sourceBufferRef.current.appendBuffer(data);
-                            } catch (e) {
-                                console.error('Error appending first chunk:', e);
-                            }
-                        } else {
-                            pendingBuffers.push(data);
-                            if (!sourceBufferRef.current.updating) {
-                                appendNextBuffer();
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error processing video data:', error);
-                    }
-                };
-
-                ws.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                    setError('Stream connection error');
-                    setLoading(false);
-                };
-
-                ws.onclose = () => {
-                    console.log('WebSocket connection closed');
-                    if (mountedRef.current) {
-                        setError('Stream connection lost');
-                        setLoading(false);
-                    }
-                };
-            }
-        } catch (error) {
-            console.error('Error setting up stream:', error);
-            setError('Failed to setup video stream');
-        }
-    });
+  // Prüfe ob Video-Element verfügbar ist
+  const isVideoReady = () => {
+    return videoRef.current && !videoRef.current.error;
   };
+
+  const appendNextBuffer = () => {
+    if (pendingBuffersRef.current.length > 0 && sourceBufferRef.current && !sourceBufferRef.current.updating) {
+      try {
+        sourceBufferRef.current.appendBuffer(pendingBuffersRef.current.shift());
+      } catch (e) {
+        console.error('Error appending buffer:', e);
+      }
+    }
+  };
+
+  // Buffer Management mit Sicherheitsprüfungen
+  const manageBuffer = () => {
+    if (!isVideoReady() || !sourceBufferRef.current) return;
+
+    const buffered = sourceBufferRef.current.buffered;
+    if (buffered.length > 0) {
+      try {
+        const currentTime = videoRef.current.currentTime;
+        const bufferEnd = buffered.end(0);
+        
+        if (bufferEnd - currentTime > 10) {
+          sourceBufferRef.current.remove(0, currentTime - 5);
+        }
+      } catch (e) {
+        console.warn('Buffer management failed:', e);
+      }
+    }
+    appendNextBuffer();
+  };
+
+  // Automatischer Neustart bei Stream-Ende
+  const handleStreamEnd = () => {
+    console.log('Stream ended, attempting restart...');
+    cleanup();
+    setTimeout(() => {
+      if (mountedRef.current) {
+        setupBambuStream();
+      }
+    }, 1000);
+  };
+
+  const setupBambuStream = useCallback(async () => {
+    try {
+      console.log('Setting up Bambu Lab RTSP stream');
+      cleanup();
+      setLoading(true);
+      setError(null);
+
+      // Stream vom Backend anfordern
+      const response = await fetch(`/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to start stream');
+      }
+
+      // MediaSource Setup
+      const video = videoRef.current;
+      if (!video) return;
+
+      // WebSocket Verbindung
+      const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      // Blob Setup für Video
+    const mediaSource = new MediaSource();
+      video.src = URL.createObjectURL(mediaSource);
+    
+    mediaSource.addEventListener('sourceopen', () => {
+        const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
+        let isFirstChunk = true;
+        let errorCount = 0;
+        const MAX_ERRORS = 5;
+        
+        ws.onmessage = async (event) => {
+          try {
+            lastDataReceived.current = Date.now();
+            const data = await event.data.arrayBuffer();
+            
+            if (sourceBuffer.updating) {
+              return;
+            }
+
+            // Prüfe ob Video-Element Fehler hat
+            if (videoRef.current.error) {
+              errorCount++;
+              console.debug(`Video error detected (${errorCount}/${MAX_ERRORS}):`, videoRef.current.error.message);
+              
+              if (errorCount >= MAX_ERRORS) {
+                console.warn('Too many video errors, reconnecting...');
+                reconnect();
+                return;
+              }
+
+              // Versuche Video-Element zurückzusetzen
+              try {
+                await sourceBuffer.abort();
+                sourceBuffer.timestampOffset = 0;
+                videoRef.current.currentTime = 0;
+              } catch (e) {
+                console.debug('Reset failed:', e);
+              }
+            }
+            
+            try {
+              sourceBuffer.appendBuffer(data);
+              if (isFirstChunk) {
+                isFirstChunk = false;
+                videoRef.current.play().catch(console.debug);
+              }
+              errorCount = 0; // Reset Error-Counter bei erfolgreicher Verarbeitung
+            } catch (e) {
+              if (e.name === 'QuotaExceededError') {
+                // Buffer voll - ältere Daten entfernen
+                const buffered = sourceBuffer.buffered;
+                if (buffered.length > 0) {
+                  const currentTime = videoRef.current.currentTime;
+                  sourceBuffer.remove(0, currentTime - 1); // Behalte 1 Sekunde Puffer
+                }
+              } else {
+                console.debug('Buffer warning:', e.message);
+                errorCount++;
+              }
+            }
+          } catch (error) {
+            console.error('Fatal stream error:', error);
+            reconnect();
+          }
+        };
+
+        // Buffer Management
+        sourceBuffer.addEventListener('updateend', () => {
+          try {
+            const buffered = sourceBuffer.buffered;
+            if (buffered.length > 0) {
+              const currentTime = videoRef.current.currentTime;
+              const bufferEnd = buffered.end(0);
+              
+              // Entferne alte Daten wenn Buffer zu groß wird
+              if (bufferEnd - currentTime > 10) {
+                sourceBuffer.remove(0, currentTime - 2);
+              }
+            }
+          } catch (e) {
+            console.debug('Buffer cleanup skipped:', e.message);
+          }
+        });
+
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+          setLoading(false);
+          reconnectAttempts.current = 0;
+        };
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          setError('Stream-Verbindung unterbrochen');
+          reconnect();
+        };
+
+        ws.onclose = () => {
+          console.log('WebSocket closed');
+          reconnect();
+        };
+      });
+
+      // Verbesserte Video Event Handler
+      video.addEventListener('loadstart', () => console.debug('Video: Initial laden'));
+      video.addEventListener('playing', () => {
+        console.debug('Video: Stream läuft');
+        setLoading(false);
+      });
+      video.addEventListener('waiting', () => {
+        console.debug('Video: Puffern...');
+        // Nur kurzes Puffern erlauben
+        setTimeout(() => {
+          if (videoRef.current && videoRef.current.readyState <= 2) {
+            console.debug('Puffer-Timeout - Neustart');
+            reconnect();
+          }
+        }, 5000);
+      });
+      video.addEventListener('error', (e) => {
+        const error = e.target.error;
+        console.debug('Video warning:', error.message);
+        // Nur bei schweren Fehlern reconnecten
+        if (error.code === MediaError.MEDIA_ERR_DECODE) {
+          reconnect();
+        }
+      });
+
+    } catch (error) {
+      console.error('Fehler beim Stream-Setup:', error);
+      setError('Stream-Initialisierung fehlgeschlagen');
+      setLoading(false);
+      reconnect();
+    }
+  }, [printer.id, printer.streamUrl, cleanup]);
 
   const setupCrealityStream = () => {
     if (videoRef.current) {
@@ -450,17 +788,17 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         .then(data => {
           if (data.success) {
             const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
-            console.log('Connecting to WebSocket:', wsUrl);
-            const ws = new WebSocket(wsUrl);
+        console.log('Connecting to WebSocket:', wsUrl);
+        const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
-
-            ws.onopen = () => {
+        
+        ws.onopen = () => {
               console.log('WebSocket connection established');
-              setLoading(false);
-            };
+            setLoading(false);
+        };
 
-            ws.onmessage = async (event) => {
-              try {
+        ws.onmessage = async (event) => {
+            try {
                 const data = await event.data.arrayBuffer();
                 const buffer = new Uint8Array(data);
                 
@@ -505,84 +843,19 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     }
   };
 
-  const cleanup = () => {
-    console.log('Cleaning up stream component');
-    if (videoRef.current) {
-      console.log('Cleaning up video/image element');
-      if (videoRef.current instanceof HTMLImageElement) {
-        videoRef.current.src = '';
-        videoRef.current.onerror = null;
-        videoRef.current.onload = null;
-      } else {
-        videoRef.current.onloadstart = null;
-        videoRef.current.onloadeddata = null;
-        videoRef.current.onerror = null;
-        videoRef.current.src = '';
-        videoRef.current.load();
-        
-        // Cleanup WebSocket nur für Bambu Lab
-        if (printer.type === 'BAMBULAB' && wsRef.current) {
-          try {
-            wsRef.current.onclose = null;
-            wsRef.current.onerror = null;
-            wsRef.current.onmessage = null;
-            wsRef.current.close();
-          } catch (err) {
-            console.warn('Error closing WebSocket:', err);
-          }
-          wsRef.current = null;
+  // Prüfe regelmäßig auf Datenverlust - nur für Bambu Lab
+  useEffect(() => {
+    if (printer.type !== 'CREALITY') {
+      const checkInterval = setInterval(() => {
+        if (Date.now() - lastDataReceived.current > 5000 && !isReconnecting.current) {
+          console.log('Keine Daten für 5 Sekunden - Neustart');
+          reconnect();
         }
+      }, 5000);
 
-        // Cleanup MediaSource nur für Bambu Lab
-        if (printer.type === 'BAMBULAB' && mediaSourceRef.current) {
-          try {
-            URL.revokeObjectURL(videoRef.current.src);
-          } catch (err) {
-            console.warn('Error revoking object URL:', err);
-          }
-          mediaSourceRef.current = null;
-        }
-      }
+      return () => clearInterval(checkInterval);
     }
-  };
-
-  const setupStream = async () => {
-    if (printer.type === 'BAMBULAB') {
-      console.log('Setting up Bambu Lab RTSP stream');
-      const response = await fetch(`${API_URL}/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setupWebSocket(data.port);
-      }
-    }
-  };
-
-  const setupMediaSource = () => {
-    try {
-        const ms = new MediaSource();
-        mediaSourceRef.current = ms;
-        videoRef.current.src = URL.createObjectURL(ms);
-
-        ms.addEventListener('sourceopen', () => {
-            try {
-                console.log('MediaSource opened, setting up SourceBuffer');
-                sourceBufferRef.current = ms.addSourceBuffer('video/mp2t');
-                sourceBufferRef.current.mode = 'segments';
-                sourceBufferRef.current.addEventListener('updateend', processNextBuffer);
-                
-                // Nach dem Setup den Stream starten
-                setupStream();
-            } catch (error) {
-                console.error('Error setting up SourceBuffer:', error);
-                setError('Failed to setup video decoder');
-            }
-        });
-    } catch (error) {
-        console.error('Error setting up MediaSource:', error);
-        setError('Failed to setup video player');
-    }
-  };
+  }, [reconnect, printer.type]);
 
   return (
     <Box sx={{
