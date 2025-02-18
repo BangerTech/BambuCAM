@@ -1,5 +1,6 @@
 import logger from '../utils/logger';
 import { API_URL } from '../config';
+import Logger from '../utils/logger';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
@@ -17,6 +18,8 @@ export const printerApi = {
       
       // Debug-Log für die API-Response
       logger.apiResponse(`/printers/${printerId}/status`, data);
+      
+      handlePrinterStatus(data);
       
       return data;
     } catch (error) {
@@ -56,4 +59,14 @@ export const printerApi = {
       throw error;
     }
   }
+};
+
+const handlePrinterStatus = (response) => {
+  Logger.logPrinterStatus(response.printerId, {
+    status: response.status,
+    progress: response.progress,
+    temperatures: response.temperatures
+  });
+  
+  // ... rest of handling ...
 }; 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import logger from '../utils/logger';
+import Logger from '../utils/logger';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;
@@ -41,7 +41,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   // 1. Cleanup Funktion
   const cleanup = useCallback(() => {
-    console.debug('Cleaning up stream resources');
+    Logger.logStream('Cleanup', 'Cleaning up stream resources');
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -81,12 +81,12 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   // 2. Reconnect Funktion
   const reconnect = useCallback(() => {
     if (!mountedRef.current || isReconnecting.current) {
-      console.debug('Reconnect aborted: already reconnecting or unmounted');
+      Logger.logStream('Reconnect', 'Aborted: already reconnecting or unmounted');
       return;
     }
     
     if (reconnectAttempts.current >= maxReconnectAttempts) {
-      console.warn('Maximum reconnection attempts reached');
+      Logger.warn('Maximum reconnection attempts reached');
       setError('Verbindung fehlgeschlagen - Bitte Seite neu laden');
       cleanup();
       return;
@@ -196,7 +196,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.debug('WebSocket connected');
+        Logger.logStream('WebSocket', 'Connected');
         setLoading(false);
         reconnectAttempts.current = 0;
         lastDataReceived.current = Date.now();
@@ -494,7 +494,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   // Behalte nur diesen einen useEffect für Stream-Setup
   useEffect(() => {
-    logger.info('Initializing stream for printer:', printer);
+    Logger.info('Initializing stream for printer:', printer);
     
     // Wenn es nur ein Fullscreen-Toggle ist, nicht neu initialisieren
     if (videoRef.current && document.fullscreenElement === videoRef.current) {
@@ -697,9 +697,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       });
 
       // Verbesserte Video Event Handler
-      video.addEventListener('loadstart', () => console.debug('Video: Initial laden'));
+      video.addEventListener('loadstart', () => Logger.logStream('Video', 'Initial laden'));
       video.addEventListener('playing', () => {
-        console.debug('Video: Stream läuft');
+        Logger.logStream('Video', 'Stream läuft');
         setLoading(false);
       });
       video.addEventListener('waiting', () => {
