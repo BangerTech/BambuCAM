@@ -2,27 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse } from '@mui/material';
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
-import logger from '../utils/logger';
-import SearchIcon from '@mui/icons-material/Search';
-import { Alert } from '@mui/material';
-
-// Dynamische API URL basierend auf dem aktuellen Host
-const API_URL = `http://${window.location.hostname}:4000`;
-
-const PRINTER_TYPES = {
-  BAMBULAB: {
-    name: 'Bambu Lab',
-    streamUrlTemplate: 'rtsps://bblp:{accessCode}@{ip}:322/streaming/live/1',
-  },
-  CREALITY: {
-    name: 'Creality',
-    streamUrlTemplate: 'http://{ip}:8080/?action=stream',
-  },
-  CUSTOM: {
-    name: 'Custom / Other',
-    streamUrlTemplate: '',
-  }
-};
+import { CircularProgress } from '@mui/material';
 
 const NeonButton = styled(Button)({
   background: 'rgba(0, 0, 0, 0.8)',
@@ -54,6 +34,21 @@ const GlassDialog = styled(Dialog)({
   }
 });
 
+const PRINTER_TYPES = {
+  BAMBULAB: {
+    name: 'Bambu Lab',
+    streamUrlTemplate: 'rtsps://bblp:{accessCode}@{ip}:322/streaming/live/1',
+  },
+  CREALITY: {
+    name: 'Creality',
+    streamUrlTemplate: 'http://{ip}:8080/?action=stream',
+  },
+  CUSTOM: {
+    name: 'Custom / Other',
+    streamUrlTemplate: '',
+  }
+};
+
 const AddPrinterDialog = ({ 
   open, 
   onClose, 
@@ -66,88 +61,20 @@ const AddPrinterDialog = ({
   onScan
 }) => {
   const [showGuide, setShowGuide] = useState(false);
-  const [printerType, setPrinterType] = useState('');
   const [newPrinter, setNewPrinter] = useState({
     name: '',
     ip: '',
     accessCode: '',
-    type: ''
+    type: 'BAMBULAB'
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
 
-  const handleTypeChange = (event) => {
-    const type = event.target.value;
-    setPrinterType(type);
-    setNewPrinter(prev => ({
-      ...prev,
-      type,
-      streamUrl: '',
-      accessCode: type === 'CREALITY' ? '' : prev.accessCode
-    }));
-  };
-
-  const handleIpChange = (event) => {
-    const ip = event.target.value;
-    setNewPrinter(prev => ({
-      ...prev,
-      ip,
-      streamUrl: printerType ? 
-        PRINTER_TYPES[printerType].streamUrlTemplate
-          .replace('{ip}', ip)
-          .replace('{accessCode}', prev.accessCode) 
-        : ''
-    }));
-  };
-
-  const handleAccessCodeChange = (event) => {
-    const accessCode = event.target.value;
-    setNewPrinter(prev => ({
-      ...prev,
-      accessCode,
-      streamUrl: printerType ? 
-        PRINTER_TYPES[printerType].streamUrlTemplate
-          .replace('{ip}', prev.ip)
-          .replace('{accessCode}', accessCode) 
-        : ''
-    }));
-  };
-
-  const handleAddPrinter = async () => {
-    try {
-      setSubmitting(true);
-      const printerData = {
-        name: newPrinter.name,
-        ip: newPrinter.ip,
-        type: printerType,
-        accessCode: newPrinter.accessCode || ''
-      };
-
-      console.log('Sending printer data:', printerData);
-      
-      // Übergebe die Daten an den Parent ohne API-Call
-      onAdd(printerData);
-      onClose();
-      
-    } catch (error) {
-      console.error('Error in handleAddPrinter:', error);
-      setError(error.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleScan = async () => {
-    try {
-      setIsScanning(true);
-      logger.info('Starting network scan...');
-      const response = await fetch(`${API_URL}/scan`);
-      const data = await response.json();
-      logger.info('Scan results:', data);
-      setScannedPrinters(data.printers);
-    } catch (error) {
-      logger.error('Scan error:', error);
-    }
+  const handleScannedPrinterSelect = (printer) => {
+    setNewPrinter({
+      name: printer.name,
+      ip: printer.ip,
+      type: 'BAMBULAB',
+      accessCode: ''
+    });
   };
 
   return (
@@ -163,73 +90,87 @@ const AddPrinterDialog = ({
         <IconButton
           onClick={() => setShowGuide(!showGuide)}
           title="Setup Guide"
-          sx={{ color: '#00ffff' }}
         >
           <InfoIcon />
         </IconButton>
       </DialogTitle>
+
       <DialogContent>
-        {/* Setup Guide */}
         <Collapse in={showGuide}>
           <Box sx={{ mb: 3, mt: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2, color: '#00ffff' }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
               BambuLab Printer Setup:
             </Typography>
-            <ol style={{ paddingLeft: '20px', color: '#00ffff' }}>
+            <ol style={{ paddingLeft: '20px' }}>
               <li>Connect the printer to your network via LAN cable</li>
               <li>Enable LAN Mode Liveview:
                 <ul>
-                  <li>Go to &quot;Settings&quot; (gear icon) {'->'} &quot;General&quot;</li>
-                  <li>Enable &quot;LAN Mode Liveview&quot;</li>
+                  <li>Go to "Settings" (gear icon) > "General"</li>
+                  <li>Enable "LAN Mode Liveview"</li>
                   <li>Note down the Access Code</li>
                 </ul>
               </li>
               <li>Find the IP address under:
                 <ul>
-                  <li>Settings {'->'} Network {'->'} IP Address</li>
+                  <li>Settings > Network > IP Address</li>
                 </ul>
               </li>
-              <li>Click &quot;Scan Network&quot; or enter the IP manually</li>
+              <li>Click "Scan Network" or enter the IP manually</li>
             </ol>
           </Box>
         </Collapse>
 
-        {/* Scan Button zuerst */}
-        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
-          <NeonButton
-            variant="contained"
-            onClick={onScan}
-            disabled={isScanning}
-            sx={{
-              background: 'rgba(0, 0, 0, 0.8)',
-              color: '#00ffff',
-              border: '2px solid #00ffff',
-              borderRadius: '25px',
-              padding: '10px 20px',
-              '&:hover': {
-                background: 'rgba(0, 255, 255, 0.1)',
-              }
-            }}
-          >
-            {isScanning ? `Scanning... (${scanTimer}s)` : 'SCAN NETWORK'}
-          </NeonButton>
-        </Box>
+        {/* Scan Button */}
+        <button 
+          className="neon-scan-button"
+          onClick={onScan}
+          disabled={isScanning}
+        >
+          {isScanning ? (
+            <>
+              <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
+              Scanning... ({scanTimer}s)
+            </>
+          ) : (
+            'Scan Network'
+          )}
+        </button>
 
-        {/* Dropdown Menü an zweiter Stelle */}
+        {/* Found Printers */}
+        {scannedPrinters.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ mb: 1 }}>
+              Found Printers:
+            </Typography>
+            <List>
+              {scannedPrinters.map((printer) => (
+                <ListItem 
+                  key={printer.id || printer.ip}
+                  button
+                  sx={{
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 1,
+                    mb: 1
+                  }}
+                  onClick={() => handleScannedPrinterSelect(printer)}
+                >
+                  <ListItemText 
+                    primary={printer.name}
+                    secondary={`${printer.ip} (${printer.model})`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        )}
+
+        {/* Manual Input */}
         <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel sx={{ color: '#00ffff' }}>Printer Type</InputLabel>
+          <InputLabel>Printer Type</InputLabel>
           <Select
-            value={printerType}
-            onChange={handleTypeChange}
-            sx={{
-              color: '#00ffff',
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(0, 255, 255, 0.3)'
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(0, 255, 255, 0.5)'
-              }
-            }}
+            value={newPrinter.type}
+            onChange={(e) => setNewPrinter({ ...newPrinter, type: e.target.value })}
+            label="Printer Type"
           >
             {Object.entries(PRINTER_TYPES).map(([key, value]) => (
               <MenuItem key={key} value={key}>{value.name}</MenuItem>
@@ -237,8 +178,7 @@ const AddPrinterDialog = ({
           </Select>
         </FormControl>
 
-        {/* Eingabefelder an dritter Stelle */}
-        <TextField
+        <NeonTextField
           autoFocus
           margin="dense"
           label="Printer Name"
@@ -246,15 +186,17 @@ const AddPrinterDialog = ({
           value={newPrinter.name}
           onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
         />
-        <TextField
+
+        <NeonTextField
           margin="dense"
           label="IP Address"
           fullWidth
           value={newPrinter.ip}
           onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
         />
-        {printerType === 'BAMBULAB' && (
-          <TextField
+
+        {newPrinter.type === 'BAMBULAB' && (
+          <NeonTextField
             margin="dense"
             label="Access Code"
             fullWidth
@@ -262,45 +204,49 @@ const AddPrinterDialog = ({
             onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
           />
         )}
-
-        {/* Rest bleibt gleich */}
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        {scannedPrinters.length > 0 && (
-          <List>
-            {scannedPrinters.map((printer, index) => (
-              <ListItem
-                key={index}
-                button
-                onClick={() => setNewPrinter({
-                  ...newPrinter,
-                  name: printer.name,
-                  ip: printer.ip
-                })}
-              >
-                <ListItemText
-                  primary={`${printer.name} (${printer.ip})`}
-                  secondary={`Type: ${printer.type}`}
-                />
-              </ListItem>
-            ))}
-          </List>
-        )}
       </DialogContent>
-      <DialogActions>
-        <NeonButton onClick={onClose}>CANCEL</NeonButton>
-        <NeonButton 
-          onClick={handleAddPrinter}
-          disabled={submitting || !newPrinter.name || !newPrinter.ip || 
-                   (printerType === 'BAMBULAB' && !newPrinter.accessCode) ||
-                   !printerType}
+
+      <DialogActions sx={{ padding: '16px 24px' }}>
+        <Button 
+          onClick={onClose}
+          disabled={isAdding}
+          sx={{
+            color: '#00ffff',
+            '&:hover': {
+              background: 'rgba(0, 255, 255, 0.1)',
+            },
+          }}
         >
-          {submitting ? 'ADDING...' : 'ADD'}
-        </NeonButton>
+          Cancel
+        </Button>
+        <Button 
+          onClick={() => {
+            const printerData = {
+              ...newPrinter,
+              streamUrl: newPrinter.type === 'BAMBULAB' 
+                ? `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`
+                : `http://${newPrinter.ip}:8080/?action=stream`
+            };
+            onAdd(printerData);
+          }}
+          disabled={isAdding || !newPrinter.name || !newPrinter.ip || (newPrinter.type === 'BAMBULAB' && !newPrinter.accessCode)}
+          variant="contained"
+          sx={{
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: '#00ffff',
+            border: '1px solid #00ffff',
+            '&:hover': {
+              background: 'rgba(0, 255, 255, 0.1)',
+            },
+            '&.Mui-disabled': {
+              background: 'rgba(0, 0, 0, 0.3)',
+              color: 'rgba(0, 255, 255, 0.3)',
+              border: '1px solid rgba(0, 255, 255, 0.3)',
+            },
+          }}
+        >
+          Add
+        </Button>
       </DialogActions>
     </GlassDialog>
   );
