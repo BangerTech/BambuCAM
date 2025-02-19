@@ -510,16 +510,19 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   if (fullscreenPrinter) {
     const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);
     return (
-      <div style={fullscreenStyle}>
-        <IconButton 
-          onClick={() => handleFullscreenToggle(null)}
-          style={{ position: 'absolute', top: 10, right: 10 }}
-        >
-          <CloseIcon />
-        </IconButton>
+      <div style={{ 
+        position: 'fixed',
+        top: '24px',
+        left: '24px',
+        right: '24px',
+        bottom: '24px',
+        zIndex: 1300,
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         <PrinterCard 
-          printer={printerWithStatus}  // Übergebe Drucker mit Status
-          onRemove={handleDelete}
+          printer={printerWithStatus}
+          onDelete={handleDelete}
           isFullscreen={true}
           onFullscreenToggle={handleFullscreenToggle}
         />
@@ -530,7 +533,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   return (
     <div style={{ 
       padding: '20px',
-      paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 70px)' : '90px' // Mehr Abstand zum Header
+      paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 70px)' : '90px'
     }}>
       <Header 
         onThemeToggle={onThemeToggle}
@@ -546,122 +549,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
               {displayPrinters.map((printer, index) => {
                 const printerWithStatus = getPrinterWithStatus(printer);
-                const dragId = printerWithStatus.id?.toString() || `printer-${index}`;
-                
                 return (
-                  <Draggable
-                    key={dragId}
-                    draggableId={dragId}
-                    index={index}
-                    isDragDisabled={mode === 'cloud'}  // Deaktiviere Drag im Cloud-Modus
-                  >
-                    {(provided, snapshot) => (
-                      <Grid item xs={12} sm={12} md={6} lg={6}
+                  <Draggable key={printer.id} draggableId={printer.id} index={index}>
+                    {(provided) => (
+                      <Grid item 
+                        xs={12} sm={12} md={6} lg={4}  // Größere Breiten für die Karten
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
-                        style={{
-                          ...provided.draggableProps.style,
-                          cursor: mode === 'cloud' ? 'default' : 'grab',
-                          opacity: snapshot.isDragging ? 0.8 : 1,
-                          zIndex: snapshot.isDragging ? 100 : 1
-                        }}
                       >
-                        <Paper 
-                          sx={{ 
-                            position: 'relative',
-                            height: 0,
-                            paddingBottom: 'calc(56.25% + 72px)',  // 16:9 (56.25%) + Header(32px) + Footer(40px)
-                            borderRadius: '15px',
-                            overflow: 'hidden',
-                            background: '#000',
-                            boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-                          }}
-                        >
-                          {/* Header */}
-                          <Box sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: '32px',
-                            padding: '8px',
-                            background: 'rgba(0,0,0,0.7)',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            color: 'white',
-                            zIndex: 2
-                          }}>
-                            <Typography variant="subtitle1">{printerWithStatus.name}</Typography>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleFullscreenToggle(printerWithStatus)}>
-                                <FullscreenIcon />
-                              </IconButton>
-                              <IconButton size="small" sx={{ color: 'white' }} onClick={() => handleDelete(printerWithStatus.id)}>
-                                <DeleteIcon />
-                              </IconButton>
-                            </Box>
-                          </Box>
-
-                          {/* Video Stream */}
-                          <Box sx={{
-                            position: 'absolute',
-                            top: '32px',
-                            left: 0,
-                            right: 0,
-                            bottom: '40px',
-                            background: '#000'
-                          }}>
-                            <RTSPStream printer={printerWithStatus} />
-                          </Box>
-
-                          {/* Footer */}
-                          <Box sx={{
-                            position: 'absolute',
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            padding: '8px',
-                            background: 'rgba(0,0,0,0.7)',
-                            color: 'white',
-                            zIndex: 2
-                          }}>
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                              <Typography variant="body2">
-                                {printer.type === 'BAMBULAB' ? 'Nozzle' : 'Hotend'}: {getTemperature(printerWithStatus, 'nozzle')}°C
-                              </Typography>
-                              <Typography variant="body2">
-                                Bed: {getTemperature(printerWithStatus, 'bed')}°C
-                              </Typography>
-                              <Typography variant="body2">
-                                Chamber: {getTemperature(printerWithStatus, 'chamber')}°C
-                              </Typography>
-                              <Typography variant="body2" sx={{ color: getPrintStatus(printerWithStatus).color }}>
-                                {getPrintStatus(printerWithStatus).text}
-                              </Typography>
-                            </Box>
-                            {getPrintStatus(printerWithStatus).text === 'Printing' && (
-                              <Box sx={{ mt: 1 }}>
-                                <LinearProgress 
-                                  variant="determinate" 
-                                  value={getPrintProgress(printerWithStatus)}
-                                  sx={{
-                                    height: 4,
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255,255,255,0.1)',
-                                    '& .MuiLinearProgress-bar': {
-                                      backgroundColor: '#4caf50'
-                                    }
-                                  }}
-                                />
-                                <Typography variant="body2" sx={{ mt: 0.5, textAlign: 'center' }}>
-                                  Remaining: {printerWithStatus.remaining_time || 0} min
-                                </Typography>
-                              </Box>
-                            )}
-                          </Box>
-                        </Paper>
+                        <PrinterCard
+                          printer={printerWithStatus}
+                          onDelete={handleDelete}
+                          isFullscreen={false}
+                          onFullscreenToggle={handleFullscreenToggle}
+                        />
                       </Grid>
                     )}
                   </Draggable>

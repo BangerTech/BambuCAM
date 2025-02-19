@@ -1,22 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, CardHeader, CardContent, IconButton, Box, Typography, LinearProgress, Chip, CircularProgress } from '@mui/material';
+import { IconButton, Box, Typography, Paper, Grid, Chip } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
-import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import RTSPStream from './RTSPStream';
-import BambuLabInfo from './printer-info/BambuLabInfo';
-import CrealityInfo from './printer-info/CrealityInfo';
-import GenericInfo from './printer-info/GenericInfo';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
-const PrinterCard = ({ printer, onDelete }) => {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const cardRef = useRef(null);
+// Status-Farben definieren
+const getStatusColor = (status) => {
+  switch(status?.toLowerCase()) {
+    case 'printing':
+      return '#00ff00';  // Grün
+    case 'finished':
+      return '#00ffff';  // Cyan
+    case 'standby':
+      return '#ffaa00';  // Orange
+    case 'error':
+      return '#ff0000';  // Rot
+    default:
+      return '#888888';  // Grau für offline/unbekannt
+  }
+};
 
-  const handleFullscreenClick = () => {
-    setIsFullscreen(prev => !prev);
-  };
+const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -27,13 +33,12 @@ const PrinterCard = ({ printer, onDelete }) => {
     }
   };
 
-  // Höre auf Fullscreen-Änderungen vom Browser
+  // Fullscreen change listener
   useEffect(() => {
     const handleFullscreenChange = () => {
-      // Nur setzen wenn sich der Status wirklich geändert hat
       const isCurrentlyFullscreen = document.fullscreenElement !== null;
       if (isFullscreen !== isCurrentlyFullscreen) {
-        setIsFullscreen(isCurrentlyFullscreen);
+        onFullscreenToggle(printer);
       }
     };
 
@@ -44,7 +49,7 @@ const PrinterCard = ({ printer, onDelete }) => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, onFullscreenToggle, printer]);
 
   useEffect(() => {
     Logger.printer('Printer data updated:', {
@@ -56,156 +61,176 @@ const PrinterCard = ({ printer, onDelete }) => {
     });
   }, [printer]);
 
-  const cardStyle = isFullscreen ? {
-    position: 'fixed',
-    top: '20px',
-    left: '20px',
-    right: '20px',
-    maxHeight: 'calc(100vh - 40px)',
-    background: '#1e1e1e',
-    zIndex: 1300,
-    display: 'flex',
-    flexDirection: 'column'
-  } : {};
-
-  const headerStyle = {
-    background: '#1e1e1e',
-    color: '#00ffff',
-    '& .MuiCardHeader-subheader': {
-      color: '#00ffff'
-    }
-  };
-
-  const videoContainerStyle = {
-    width: '100%',
-    aspectRatio: '16/9',
-    position: 'relative',
-    backgroundColor: '#000'
-  };
-
-  const statusStyle = {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: '8px',
-    background: 'rgba(0, 0, 0, 0.7)',
-    color: '#00ffff',
-    textAlign: 'center'
-  };
-
-  // Drucker-spezifische Rendering Logik
-  const renderPrinterInfo = () => {
-    Logger.debug('Rendering printer info:', {
-      type: printer.type,
-      temps: printer.temperatures,
-      state: printer.state
-    });
-    
-    const infoStyle = {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      zIndex: 10
-    };
-    
-    switch(printer.type) {
-      case 'BAMBULAB':
-        return <Box sx={infoStyle}><BambuLabInfo printer={printer} /></Box>;
-      case 'CREALITY':
-        return <Box sx={infoStyle}><CrealityInfo printer={printer} /></Box>;
-      default:
-        return null;
-    }
-  };
-
-  // Temperaturanzeige
-  const renderTemperatures = () => {
-    const temps = printer.temperatures || {};
-    const targets = printer.targets || {};
-    
-    // Unterschiedliches Rendering je nach Druckertyp
-    if (printer.type === 'BAMBULAB') {
-      // Original Bambulab-Anzeige beibehalten
-      return (
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Nozzle: {temps.nozzle || 0}°C
-            {targets.nozzle > 0 && ` / ${targets.nozzle}°C`}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Bed: {temps.bed || 0}°C
-            {targets.bed > 0 && ` / ${targets.bed}°C`}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Chamber: {temps.chamber || 0}°C
-          </Typography>
-        </Box>
-      );
-    }
-    
-    // Neue Creality-Anzeige
-    if (printer.type === 'CREALITY') {
-      return (
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Typography variant="body2" sx={{ color: '#00ffff' }}>
-            Hotend: {temps.hotend?.toFixed(1) || '0.0'}°C
-            {targets.hotend > 0 && ` / ${targets.hotend}°C`}
-          </Typography>
-          <Typography variant="body2" sx={{ color: '#00ffff' }}>
-            Bed: {temps.bed?.toFixed(1) || '0.0'}°C
-            {targets.bed > 0 && ` / ${targets.bed}°C`}
-          </Typography>
-          {temps.chamber !== undefined && (
-            <Typography variant="body2" sx={{ color: '#00ffff' }}>
-              Chamber: {temps.chamber?.toFixed(1) || '0.0'}°C
-            </Typography>
-          )}
-        </Box>
-      );
-    }
-  };
-
   return (
-    <Card ref={cardRef} sx={cardStyle}>
-      <CardHeader
-        sx={headerStyle}
-        action={
-          <div>
-            <IconButton onClick={handleFullscreenClick} sx={{ color: '#00ffff' }}>
-              {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
-            </IconButton>
-            <IconButton onClick={handleDelete} sx={{ color: '#00ffff' }}>
-              <DeleteIcon />
-            </IconButton>
-          </div>
+    <Paper
+      elevation={3}
+      sx={{
+        background: 'rgba(0, 0, 0, 0.9)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '15px',
+        overflow: 'hidden',
+        position: 'relative',
+        border: '1px solid rgba(0, 255, 255, 0.2)',
+        aspectRatio: '16/9',  // Festes Seitenverhältnis statt fester Höhe
+        '&:hover': {
+          boxShadow: '0 0 20px rgba(0, 255, 255, 0.2)'
         }
-        title={printer.name || 'Unnamed Printer'}
-        subheader={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              {printer.ip}
-            </Typography>
-            <Chip 
-              size="small"
-              label={printer.type}
-              color={printer.type === 'CLOUD' ? 'primary' : 'default'}
-            />
+      }}
+    >
+      {/* Stream Container */}
+      <Box sx={{ 
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+      }}>
+        <RTSPStream 
+          printer={printer} 
+          fullscreen={isFullscreen}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
+          }}
+        />
+        
+        {/* Header mit Name und Buttons */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            padding: '8px 12px',
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            zIndex: 2,
+            height: '48px'
+          }}
+        >
+          <Typography variant="h6" sx={{ 
+            color: '#fff', 
+            fontSize: '1.1rem',
+            textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+          }}>
+            {printer.name}
+          </Typography>
+          
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <IconButton
+              onClick={() => onFullscreenToggle(printer)}
+              sx={{
+                color: '#fff',
+                padding: '4px',
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)'
+                }
+              }}
+            >
+              <FullscreenIcon fontSize="small" />
+            </IconButton>
+            {!isFullscreen && (
+              <IconButton
+                onClick={handleDelete}
+                sx={{
+                  color: '#fff',
+                  padding: '4px',
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)'
+                  }
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            )}
           </Box>
-        }
-      />
-      <CardContent sx={{ p: 0, flex: 1 }}>
-        <Box sx={videoContainerStyle}>
-          <RTSPStream 
-            printer={printer} 
-            fullscreen={isFullscreen} 
-            key={`${printer.id}-${isFullscreen}`}
-          />
-          {renderPrinterInfo()}
         </Box>
-        {isDeleting && (
-          <Box sx={{
+
+        {/* Status Chip */}
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: '12px',  // Anpassung für vertikale Zentrierung mit Temperatur-Text
+            right: '12px',
+            zIndex: 2
+          }}
+        >
+          <Chip
+            label={printer.status || 'Unknown'}
+            sx={{
+              backgroundColor: `${getStatusColor(printer.status)}22`,
+              border: `1px solid ${getStatusColor(printer.status)}`,
+              color: getStatusColor(printer.status),
+              textTransform: 'capitalize',
+              fontSize: '0.8rem',
+              height: '24px',
+              '& .MuiChip-label': {
+                px: 1,
+                textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+              }
+            }}
+          />
+        </Box>
+
+        {/* Footer mit Temperaturen und Progress */}
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            transition: 'height 0.3s ease-in-out',
+            height: printer.status?.toLowerCase() === 'printing' ? '80px' : '40px',
+            background: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
+            zIndex: 2,
+          }}
+        >
+          {/* Progress und Zeit wenn der Drucker druckt */}
+          {printer.status?.toLowerCase() === 'printing' && (
+            <Box sx={{ 
+              padding: '8px 12px 0 12px',
+            }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#fff',
+                  fontSize: '0.9rem',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+                }}
+              >
+                Progress: {printer.progress || 0}% | 
+                Time Left: {printer.remaining_time || 0} min
+              </Typography>
+            </Box>
+          )}
+
+          <Typography
+            variant="body2"
+            sx={{
+              position: 'absolute',
+              bottom: '8px',
+              left: '12px',
+              color: '#fff',
+              fontSize: '0.9rem',
+              textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+            }}
+          >
+            {printer.type === 'BAMBULAB' ? 'Nozzle' : 'Hotend'}: {
+              printer.type === 'BAMBULAB' 
+                ? printer.temperatures?.nozzle?.toFixed(1) 
+                : printer.temperatures?.hotend?.toFixed(1) || '0.0'
+            }°C | 
+            Bed: {printer.temperatures?.bed?.toFixed(1) || '0.0'}°C | 
+            Chamber: {printer.temperatures?.chamber?.toFixed(1) || '0.0'}°C
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Loading Overlay während des Löschens */}
+      {isDeleting && (
+        <Box
+          sx={{
             position: 'absolute',
             top: 0,
             left: 0,
@@ -213,20 +238,17 @@ const PrinterCard = ({ printer, onDelete }) => {
             bottom: 0,
             backgroundColor: 'rgba(0,0,0,0.7)',
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 1,
-            zIndex: 9999
-          }}>
-            <CircularProgress sx={{ color: '#00ffff' }} />
-            <Typography color="#00ffff">
-              Deleting printer...
-            </Typography>
-          </Box>
-        )}
-      </CardContent>
-    </Card>
+            zIndex: 1000
+          }}
+        >
+          <Typography sx={{ color: '#fff' }}>
+            Deleting...
+          </Typography>
+        </Box>
+      )}
+    </Paper>
   );
 };
 
