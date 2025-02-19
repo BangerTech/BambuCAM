@@ -24,10 +24,11 @@ import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import Header from './Header';
 import { useVisibilityChange } from '../hooks/useVisibilityChange';
 import CloudPrinterCard from './CloudPrinterCard';
+import GodModeAddPrinterDialog from './GodModeAddPrinterDialog';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
-const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [], isMobile }) => {
+const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [], isMobile, isGodMode, onGodModeActivate }) => {
   // State Definitionen
   const [open, setOpen] = useState(false);
   const [addMethod, setAddMethod] = useState(0);
@@ -45,6 +46,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [showGuide, setShowGuide] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const [showGodModeDialog, setShowGodModeDialog] = useState(false);
 
   // Stelle sicher, dass printers immer ein Array ist
   const printerList = Array.isArray(printers) ? printers : [];
@@ -206,20 +208,28 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     localStorage.setItem('printerOrder', JSON.stringify(orderMap));
   };
 
-  // Modifizierte handleAddPrinter Funktion
+  // Kombinierte handleAddPrinter Funktion
   const handleAddPrinter = async (printer) => {
-    setIsAdding(true);
-    try {
+    if (isGodMode) {
+      setShowGodModeDialog(true);
+    } else if (printer) {
+      setIsAdding(true);
+      try {
+        const printerData = {
+          name: printer.name,
+          ip: printer.ip,
+          accessCode: printer.accessCode
+        };
         const response = await fetch(`${API_URL}/printers`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(printer)
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(printerData)
         });
 
         if (!response.ok) {
-            throw new Error('Failed to add printer');
+          throw new Error('Failed to add printer');
         }
 
         const data = await response.json();
@@ -228,19 +238,23 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         setNewPrinter({ name: '', ip: '', accessCode: '' });
         
         setSnackbar({
-            open: true,
-            message: 'Printer added successfully',
-            severity: 'success'
+          open: true,
+          message: 'Printer added successfully',
+          severity: 'success'
         });
-    } catch (err) {
+      } catch (err) {
         console.error('Error adding printer:', err);
         setSnackbar({
-            open: true,
-            message: 'Failed to add printer',
-            severity: 'error'
+          open: true,
+          message: 'Failed to add printer',
+          severity: 'error'
         });
-    } finally {
+      } finally {
         setIsAdding(false);
+      }
+    } else {
+      // Normaler Modus ohne Drucker-Daten: Öffne den normalen Dialog
+      setOpen(true);
     }
   };
 
@@ -551,6 +565,39 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     window.location.reload();
   });
 
+  // Handler für das Hinzufügen im God Mode
+  const handleGodModeAdd = async (printer) => {
+    try {
+      let endpoint = printer.isCloud ? '/cloud/printers' : '/printers';
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(printer.isCloud && {
+            'Authorization': `Bearer ${localStorage.getItem('cloudToken')}`
+          })
+        },
+        body: JSON.stringify(printer)
+      });
+
+      if (response.ok) {
+        setShowGodModeDialog(false);
+        setSnackbar({
+          open: true,
+          message: `${printer.isCloud ? 'Cloud' : 'LAN'} printer added successfully`,
+          severity: 'success'
+        });
+      }
+    } catch (error) {
+      console.error('Error adding printer in God Mode:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to add printer',
+        severity: 'error'
+      });
+    }
+  };
+
   if (fullscreenPrinter) {
     const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);
     return (
@@ -584,7 +631,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         isDarkMode={isDarkMode}
         mode={mode}
         onModeChange={onModeChange}
-        onAddPrinter={() => setOpen(true)}
+        onAddPrinter={handleAddPrinter}
+        isGodMode={isGodMode}
+        onGodModeActivate={onGodModeActivate}
       />
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -629,7 +678,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       </DragDropContext>
 
       <AddPrinterDialog 
-        open={open}
+        open={open && !isGodMode}
         onClose={handleClose}
         onAdd={handleAddPrinter}
         isAdding={isAdding}
@@ -638,6 +687,13 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         isScanning={isScanning}
         scanTimer={scanTimer}
         onScan={handleScan}
+      />
+
+      {/* God Mode Add Printer Dialog */}
+      <GodModeAddPrinterDialog
+        open={showGodModeDialog}
+        onClose={() => setShowGodModeDialog(false)}
+        onAdd={handleGodModeAdd}
       />
 
       {/* Styled Snackbar */}

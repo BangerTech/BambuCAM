@@ -7,6 +7,7 @@ import styled from '@emotion/styled';
 import CloudLoginDialog from './components/CloudLoginDialog';
 import CloudPrinterDialog from './components/CloudPrinterDialog';
 import { API_URL } from './config';
+import Header from './components/Header';
 
 const PageBackground = styled(Box)(({ theme }) => ({
   position: 'relative',
@@ -44,12 +45,16 @@ function App() {
   const [mode, setMode] = useState(() => {
     const savedMode = localStorage.getItem('mode');
     const hasToken = localStorage.getItem('cloudToken');
-    // Wenn Cloud-Mode gespeichert ist und ein Token existiert
-    if (savedMode === 'cloud' && hasToken) {
-      return 'cloud';
-    }
-    return 'lan';
+    return savedMode === 'cloud' && hasToken ? 'cloud' : 'lan';
   });
+
+  // Neuer God Mode State
+  const [isGodMode, setIsGodMode] = useState(() => {
+    return localStorage.getItem('godMode') === 'true';
+  });
+
+  // Kombinierte Drucker für God Mode
+  const [combinedPrinters, setCombinedPrinters] = useState([]);
 
   const [isLoginOpen, setLoginOpen] = useState(false);
   const [cloudPrinters, setCloudPrinters] = useState([]);
@@ -84,52 +89,47 @@ function App() {
     localStorage.setItem('theme', !isDarkMode ? 'dark' : 'light');
   };
 
-  // Mode-Änderung mit localStorage
-  const handleModeChange = async (newMode) => {
-    if (newMode === 'cloud') {
-      const token = localStorage.getItem('cloudToken');
-      if (token) {
-        // Wenn Token existiert, Cloud-Drucker laden
-        setMode('cloud');
-        localStorage.setItem('mode', 'cloud');
-        loadCloudPrinters(token);
-      } else {
-        // Login-Dialog öffnen, aber noch nicht auf Cloud wechseln
-        setLoginOpen(true);
-        
-        // Wenn Login fehlschlägt, bleibt der Switch auf LAN
-        try {
-          await new Promise((resolve, reject) => {
-            const cleanup = () => {
-              window.removeEventListener('cloud-login-success', handleSuccess);
-              window.removeEventListener('cloud-login-failed', handleFailure);
-            };
-            
-            const handleSuccess = () => {
-              cleanup();
-              setMode('cloud'); // Erst nach erfolgreichem Login auf Cloud setzen
-              resolve();
-            };
-            
-            const handleFailure = () => {
-              cleanup();
-              reject();
-            };
-            
-            window.addEventListener('cloud-login-success', handleSuccess);
-            window.addEventListener('cloud-login-failed', handleFailure);
-          });
-        } catch (error) {
-          // Bei Login-Fehler bleibt es bei LAN
-          setMode('lan');
-          localStorage.setItem('mode', 'lan');
-        }
-      }
-    } else {
-      setMode('lan');
-      localStorage.setItem('mode', 'lan');
-      localStorage.removeItem('cloudToken');
+  // God Mode Handler
+  const handleGodModeActivate = async () => {
+    setIsGodMode(true);
+    localStorage.setItem('godMode', 'true');
+    
+    // Wenn bereits ein Cloud-Token existiert, lade kombinierte Drucker
+    const token = localStorage.getItem('cloudToken');
+    if (token) {
+      await loadCombinedPrinters(token);
     }
+  };
+
+  // Lade kombinierte Drucker für God Mode
+  const loadCombinedPrinters = async (token) => {
+    try {
+      // Lade LAN Drucker
+      const lanResponse = await fetch(`${API_URL}/printers`);
+      const lanPrinters = await lanResponse.json();
+      
+      // Lade Cloud Drucker
+      const cloudResponse = await fetch(`${API_URL}/cloud/printers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const cloudPrinters = await cloudResponse.json();
+      
+      // Markiere die Drucker-Typen
+      const markedLanPrinters = lanPrinters.map(p => ({ ...p, isCloud: false }));
+      const markedCloudPrinters = cloudPrinters.map(p => ({ ...p, isCloud: true }));
+      
+      // Kombiniere und setze die Drucker
+      setCombinedPrinters([...markedLanPrinters, ...markedCloudPrinters]);
+    } catch (error) {
+      console.error('Error loading combined printers:', error);
+    }
+  };
+
+  // Modifiziere den existierenden Mode Change Handler
+  const handleModeChange = (newMode) => {
+    if (isGodMode) return; // Ignoriere Mode-Änderungen im God Mode
+    setMode(newMode);
+    localStorage.setItem('mode', newMode);
   };
 
   // Cloud-Drucker laden
@@ -209,12 +209,21 @@ function App() {
       <PageBackground>
         <BackgroundImage />
         <ContentWrapper>
-          <PrinterGrid 
+          <Header
             onThemeToggle={toggleTheme}
             isDarkMode={isDarkMode}
             mode={mode}
             onModeChange={handleModeChange}
-            printers={mode === 'cloud' ? cloudPrinters : lanPrinters}
+            onGodModeActivate={handleGodModeActivate}
+            isGodMode={isGodMode}
+          />
+          <PrinterGrid
+            printers={isGodMode ? combinedPrinters : (mode === 'cloud' ? cloudPrinters : lanPrinters)}
+            mode={mode}
+            isGodMode={isGodMode}
+            onModeChange={handleModeChange}
+            isDarkMode={isDarkMode}
+            onThemeToggle={toggleTheme}
             onAddPrinter={handleAddPrinter}
           />
         </ContentWrapper>

@@ -1,12 +1,26 @@
 import React from 'react';
-import { Box, useMediaQuery, useTheme, Button, Tooltip } from '@mui/material';
+import { Box, useMediaQuery, useTheme, Button, Tooltip, Dialog, DialogTitle, DialogContent } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { NeonSwitch } from '../styles/NeonSwitch';
+import GodModeSwitch from './GodModeSwitch';
+import CloudLoginDialog from './CloudLoginDialog';
 
-const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter }) => {
+const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, onGodModeActivate, isGodMode }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isExtraSmall = useMediaQuery('(max-width:375px)');
+  const [showLoginDialog, setShowLoginDialog] = React.useState(false);
+
+  const handleGodModeActivate = () => {
+    onGodModeActivate();
+    setTimeout(() => {
+      setShowLoginDialog(true);
+    }, 800);
+  };
+
+  const handleLoginSuccess = (token) => {
+    setShowLoginDialog(false);
+    localStorage.setItem('cloudToken', token);
+  };
 
   return (
     <Box sx={{
@@ -24,7 +38,13 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter })
       backgroundColor: 'transparent',
       zIndex: 1100,
       height: isMobile ? 'calc(env(safe-area-inset-top) + 50px)' : '70px',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      animation: isGodMode ? 'godModeHeaderGlow 2s infinite' : 'none',
+      '@keyframes godModeHeaderGlow': {
+        '0%': { borderColor: 'rgba(0, 255, 255, 0.2)' },
+        '50%': { borderColor: 'rgba(0, 255, 255, 0.8)' },
+        '100%': { borderColor: 'rgba(0, 255, 255, 0.2)' }
+      }
     }}>
       <Box sx={{ 
         display: 'flex',
@@ -58,9 +78,10 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter })
       }}>
         <Tooltip title={`Switch to ${mode === 'cloud' ? 'LAN' : 'Cloud'} Mode`}>
           <div>
-            <NeonSwitch
-              checked={mode === 'cloud'}
-              onChange={(e) => onModeChange(e.target.checked ? 'cloud' : 'lan')}
+            <GodModeSwitch
+              mode={mode}
+              onModeChange={onModeChange}
+              onGodModeActivate={handleGodModeActivate}
             />
           </div>
         </Tooltip>
@@ -73,7 +94,7 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter })
         flex: '0 0 auto',
         marginRight: isExtraSmall ? '8px' : isMobile ? '12px' : '20px'
       }}>
-        {mode === 'lan' && (
+        {(mode === 'lan' || isGodMode) && (
           <Button
             variant="contained"
             onClick={onAddPrinter}
@@ -85,7 +106,12 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter })
               padding: '8px 24px',
               border: '0.15rem solid #00ffff',
               backdropFilter: 'blur(10px)',
-              boxShadow: '0 0 2rem rgba(0, 255, 255, 0.3)',
+              animation: isGodMode ? 'godModeButtonGlow 2s infinite' : 'none',
+              '@keyframes godModeButtonGlow': {
+                '0%': { boxShadow: '0 0 5px #00ffff' },
+                '50%': { boxShadow: '0 0 15px #00ffff' },
+                '100%': { boxShadow: '0 0 5px #00ffff' }
+              },
               '&:hover': {
                 boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
                 background: 'rgba(0, 0, 0, 0.85)'
@@ -102,6 +128,12 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter })
           </Button>
         )}
       </Box>
+      <CloudLoginDialog
+        open={showLoginDialog}
+        onClose={() => setShowLoginDialog(false)}
+        onSuccess={handleLoginSuccess}
+        title="Enter God Mode"
+      />
     </Box>
   );
 };

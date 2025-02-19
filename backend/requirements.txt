@@ -14,3 +14,6 @@ paho-mqtt>=2.0.0
 bambulabs-api==2.5.8
 psutil==5.9.0
 python-telegram-bot==13.7
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6

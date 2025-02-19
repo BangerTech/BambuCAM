@@ -14,6 +14,7 @@ from src.routes.notifications import notifications_bp
 from src.routes.stream import stream_bp
 from src.routes.printers import printers_bp
 from src.routes.cloud import cloud_bp
+from src.godmode.routes import godmode_bp
 import logging  # Standard Python logging
 from src.routes import register_blueprints
 import os
@@ -115,6 +116,15 @@ def start_stream(printer_id):
     except Exception as e:
         logger.error(f"Error starting stream: {e}")
         return jsonify({'error': str(e)}), 500
+
+def register_blueprints(app):
+    """Registriert alle Blueprints"""
+    app.register_blueprint(cloud_bp, url_prefix='')
+    app.register_blueprint(system_bp, url_prefix='/api/system')    
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(stream_bp)
+    app.register_blueprint(printers_bp)
+    app.register_blueprint(godmode_bp)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=4000, debug=True) 
