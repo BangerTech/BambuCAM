@@ -23,6 +23,7 @@ import { printerApi } from '../api/printerApi';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import Header from './Header';
 import { useVisibilityChange } from '../hooks/useVisibilityChange';
+import CloudPrinterCard from './CloudPrinterCard';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
@@ -594,19 +595,28 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                 const printerWithStatus = getPrinterWithStatus(printer);
                 return (
                   <Draggable key={printer.id} draggableId={printer.id} index={index}>
-                    {(provided) => (
+                    {(provided, snapshot) => (
                       <Grid item 
-                        xs={12} sm={12} md={6} lg={4}  // Größere Breiten für die Karten
+                        xs={12} sm={12} md={6} lg={4}
                         ref={provided.innerRef}
                         {...provided.draggableProps}
                         {...provided.dragHandleProps}
                       >
-                        <PrinterCard
-                          printer={printerWithStatus}
-                          onDelete={handleDelete}
-                          isFullscreen={false}
-                          onFullscreenToggle={handleFullscreenToggle}
-                        />
+                        {printer.isCloud ? (
+                          <CloudPrinterCard
+                            printer={printerWithStatus}
+                            onDelete={handleDelete}
+                            isFullscreen={false}
+                            onFullscreenToggle={handleFullscreenToggle}
+                          />
+                        ) : (
+                          <PrinterCard
+                            printer={printerWithStatus}
+                            onDelete={handleDelete}
+                            isFullscreen={false}
+                            onFullscreenToggle={handleFullscreenToggle}
+                          />
+                        )}
                       </Grid>
                     )}
                   </Draggable>
