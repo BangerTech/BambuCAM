@@ -48,14 +48,54 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const printerList = Array.isArray(printers) ? printers : [];
   const [localPrinters, setLocalPrinters] = useState([]);
   const [cloudPrinters, setCloudPrinters] = useState([]);
+  const [printerOrder, setPrinterOrder] = useState(() => {
+    const savedOrder = localStorage.getItem('printerOrder');
+    try {
+      const parsed = savedOrder ? JSON.parse(savedOrder) : [];
+      // Stelle sicher, dass es ein Array ist
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn('Error parsing printerOrder from localStorage:', e);
+      return [];
+    }
+  });
   
   // Bestimme welche Drucker angezeigt werden sollen
   const displayPrinters = mode === 'cloud' ? cloudPrinters : localPrinters;
   
-  // Speichere Drucker bei Änderungen
+  // Sortiere Drucker nach gespeicherter Reihenfolge
+  const sortedPrinters = [...displayPrinters].sort((a, b) => {
+    const indexA = printerOrder.indexOf(a.id);
+    const indexB = printerOrder.indexOf(b.id);
+    if (indexA === -1) return 1;  // Neue Drucker ans Ende
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+
+  // Aktualisiere die Reihenfolge wenn sich die Drucker ändern
   useEffect(() => {
-    localStorage.setItem('printers', JSON.stringify(localPrinters));
+    if (localPrinters.length > 0) {
+      // Entferne gelöschte Drucker aus der Reihenfolge
+      const validOrder = printerOrder.filter(id => 
+        localPrinters.some(printer => printer.id === id)
+      );
+      
+      // Füge neue Drucker hinzu
+      const newOrder = [...validOrder];
+      localPrinters.forEach(printer => {
+        if (!newOrder.includes(printer.id)) {
+          newOrder.push(printer.id);
+        }
+      });
+      
+      setPrinterOrder(newOrder);
+    }
   }, [localPrinters]);
+
+  // Speichere Drucker-Reihenfolge bei Änderungen
+  useEffect(() => {
+    localStorage.setItem('printerOrder', JSON.stringify(printerOrder));
+  }, [printerOrder]);
 
   // Lade Drucker und ihre Positionen
   useEffect(() => {
@@ -69,7 +109,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         }
         const data = await response.json();
         setLocalPrinters(data);
-        setError(null);  // Fehler zurücksetzen wenn erfolgreich
+        setError(null);
       } catch (err) {
         console.error('Error loading printers:', err);
         setError(err.message);
@@ -280,8 +320,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       if (response.ok) {
         const updatedPrinters = localPrinters.filter(p => p.id !== printerId);
         setLocalPrinters(updatedPrinters);
-        // Aktualisiere Positionen nach Löschung
-        updatePrinterOrder(updatedPrinters);
+        
+        // Entferne den gelöschten Drucker aus der Reihenfolge
+        setPrinterOrder(prev => prev.filter(id => id !== printerId));
         
         setSnackbar({
           open: true,
@@ -303,20 +344,15 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Aktualisierte onDragEnd Funktion
   const onDragEnd = (result) => {
-    if (!result.destination || mode === 'cloud') return;  // Verhindere Drag & Drop im Cloud-Modus
+    if (!result.destination || mode === 'cloud') return;
     
-    const items = Array.from(localPrinters);
+    const items = Array.from(sortedPrinters);  // Benutze sortedPrinters statt localPrinters
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
     
-    // Speichere die neue Reihenfolge
-    const orderMap = {};
-    items.forEach((printer, index) => {
-      orderMap[printer.id] = index;
-    });
-    
-    localStorage.setItem('printerOrder', JSON.stringify(orderMap));
-    setLocalPrinters(items);
+    // Aktualisiere die Reihenfolge
+    const newOrder = items.map(printer => printer.id);
+    setPrinterOrder(newOrder);
   };
 
   const handleClose = () => {
@@ -547,7 +583,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         <Droppable droppableId="printers" direction="horizontal">
           {(provided) => (
             <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
-              {displayPrinters.map((printer, index) => {
+              {sortedPrinters.map((printer, index) => {
                 const printerWithStatus = getPrinterWithStatus(printer);
                 return (
                   <Draggable key={printer.id} draggableId={printer.id} index={index}>

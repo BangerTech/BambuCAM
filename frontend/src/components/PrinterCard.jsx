@@ -23,13 +23,24 @@ const getStatusColor = (status) => {
 
 const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) => {
   const [isDeleting, setIsDeleting] = useState(false);
+  const isMounted = useRef(true);  // Referenz um zu prüfen ob die Komponente mounted ist
+
+  // Cleanup beim Unmounting
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
       await onDelete(printer.id);
     } finally {
-      setIsDeleting(false);
+      // Nur State updaten wenn die Komponente noch mounted ist
+      if (isMounted.current) {
+        setIsDeleting(false);
+      }
     }
   };
 
