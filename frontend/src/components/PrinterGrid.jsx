@@ -25,10 +25,24 @@ import Header from './Header';
 import { useVisibilityChange } from '../hooks/useVisibilityChange';
 import CloudPrinterCard from './CloudPrinterCard';
 import GodModeAddPrinterDialog from './GodModeAddPrinterDialog';
+import GodModeHeader from './GodModeHeader';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
 const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [], isMobile, isGodMode, onGodModeActivate }) => {
+  console.log('🔍 Props in PrinterGrid:', {
+    type: typeof onGodModeActivate,
+    isFunction: typeof onGodModeActivate === 'function',
+    allProps: { onThemeToggle, isDarkMode, mode, onModeChange, isGodMode },
+    onGodModeActivate
+  });
+
+  // Debug Log für Add Printer
+  console.log('Add Printer Handler:', {
+    type: typeof onGodModeActivate,
+    isFunction: typeof onGodModeActivate === 'function'
+  });
+
   // State Definitionen
   const [open, setOpen] = useState(false);
   const [addMethod, setAddMethod] = useState(0);
@@ -136,7 +150,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   useEffect(() => {
     const fetchCloudPrinters = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/cloud/printers`);
+        const response = await fetch(`${API_URL}/cloud/printers`);
         const data = await response.json();
         if (data.message === "success" && data.devices && Array.isArray(data.devices)) {
           // Konvertiere Cloud-Drucker in das gleiche Format wie lokale Drucker
@@ -208,54 +222,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     localStorage.setItem('printerOrder', JSON.stringify(orderMap));
   };
 
-  // Kombinierte handleAddPrinter Funktion
-  const handleAddPrinter = async (printer) => {
-    if (isGodMode) {
-      setShowGodModeDialog(true);
-    } else if (printer) {
-      setIsAdding(true);
-      try {
-        const printerData = {
-          name: printer.name,
-          ip: printer.ip,
-          accessCode: printer.accessCode
-        };
-        const response = await fetch(`${API_URL}/printers`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(printerData)
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to add printer');
-        }
-
-        const data = await response.json();
-        setLocalPrinters([...localPrinters, data.printer]);
-        setOpen(false);
-        setNewPrinter({ name: '', ip: '', accessCode: '' });
-        
-        setSnackbar({
-          open: true,
-          message: 'Printer added successfully',
-          severity: 'success'
-        });
-      } catch (err) {
-        console.error('Error adding printer:', err);
-        setSnackbar({
-          open: true,
-          message: 'Failed to add printer',
-          severity: 'error'
-        });
-      } finally {
-        setIsAdding(false);
-      }
-    } else {
-      // Normaler Modus ohne Drucker-Daten: Öffne den normalen Dialog
-      setOpen(true);
-    }
+  // Einfacher handleAddPrinter der nur den Dialog öffnet
+  const handleAddPrinter = () => {
+    setShowAddDialog(true);
   };
 
   const handleScan = async () => {
@@ -598,6 +567,19 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     }
   };
 
+  // Debug Logs für God Mode Status
+  console.log('PrinterGrid empfängt God Mode Status:', {
+    isGodMode,
+    hasGodModeActivate: typeof onGodModeActivate === 'function'
+  });
+
+  // Effekt für God Mode Änderungen
+  useEffect(() => {
+    if (isGodMode) {
+      console.log('PrinterGrid: God Mode wurde aktiviert');
+    }
+  }, [isGodMode]);
+
   if (fullscreenPrinter) {
     const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);
     return (
@@ -626,15 +608,29 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       padding: '20px',
       paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 70px)' : '90px'
     }}>
-      <Header 
-        onThemeToggle={onThemeToggle}
-        isDarkMode={isDarkMode}
-        mode={mode}
-        onModeChange={onModeChange}
-        onAddPrinter={handleAddPrinter}
-        isGodMode={isGodMode}
-        onGodModeActivate={onGodModeActivate}
-      />
+      {console.log('PrinterGrid gibt weiter an Header:', {
+        onGodModeActivate: typeof onGodModeActivate,
+        isFunction: typeof onGodModeActivate === 'function'
+      })}
+      {isGodMode ? (
+        <GodModeHeader
+          onThemeToggle={onThemeToggle}
+          isDarkMode={isDarkMode}
+          onAddPrinter={handleAddPrinter}
+          isMobile={isMobile}
+        />
+      ) : (
+        <Header 
+          onThemeToggle={onThemeToggle}
+          isDarkMode={isDarkMode}
+          mode={mode}
+          onModeChange={onModeChange}
+          onGodModeActivate={onGodModeActivate}
+          isGodMode={isGodMode}
+          onAddPrinter={handleAddPrinter}
+          isMobile={isMobile}
+        />
+      )}
 
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="printers" direction="horizontal">
@@ -677,24 +673,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         </Droppable>
       </DragDropContext>
 
-      <AddPrinterDialog 
-        open={open && !isGodMode}
-        onClose={handleClose}
-        onAdd={handleAddPrinter}
-        isAdding={isAdding}
-        isDarkMode={isDarkMode}
-        scannedPrinters={scannedPrinters}
-        isScanning={isScanning}
-        scanTimer={scanTimer}
-        onScan={handleScan}
-      />
-
-      {/* God Mode Add Printer Dialog */}
-      <GodModeAddPrinterDialog
-        open={showGodModeDialog}
-        onClose={() => setShowGodModeDialog(false)}
-        onAdd={handleGodModeAdd}
-      />
+      {/* Zeige den korrekten Dialog basierend auf God Mode */}
+      {isGodMode ? (
+        <GodModeAddPrinterDialog
+          open={showAddDialog}
+          onClose={() => setShowAddDialog(false)}
+          onAdd={handleGodModeAdd}
+        />
+      ) : (
+        <AddPrinterDialog 
+          open={showAddDialog}
+          onClose={() => setShowAddDialog(false)}
+          onAdd={handleAddPrinter}
+          isAdding={isAdding}
+          isDarkMode={isDarkMode}
+          scannedPrinters={scannedPrinters}
+          isScanning={isScanning}
+          scanTimer={scanTimer}
+          onScan={handleScan}
+        />
+      )}
 
       {/* Styled Snackbar */}
       <Snackbar
