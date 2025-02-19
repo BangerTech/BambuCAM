@@ -1,6 +1,5 @@
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import { API_URL } from '../config';
-import Logger from '../utils/logger';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
@@ -17,13 +16,13 @@ export const printerApi = {
       }
       
       // Debug-Log für die API-Response
-      logger.apiResponse(`/printers/${printerId}/status`, data);
+      Logger.logApiResponse(LOG_CATEGORIES.API, `/printers/${printerId}/status`, data);
       
       handlePrinterStatus(data);
       
       return data;
     } catch (error) {
-      logger.error('Error fetching printer status:', error);
+      Logger.error('Error fetching printer status:', error);
       throw error;
     }
   },
@@ -37,10 +36,10 @@ export const printerApi = {
         body: JSON.stringify(printerData)
       });
       const data = await response.json();
-      logger.api('Added printer:', data);
+      Logger.logApi(LOG_CATEGORIES.API, 'Added printer:', data);
       return data;
     } catch (error) {
-      logger.error('Error adding printer:', error);
+      Logger.error('Error adding printer:', error);
       throw error;
     }
   },
@@ -52,10 +51,10 @@ export const printerApi = {
         method: 'DELETE'
       });
       const data = await response.json();
-      logger.api('Deleted printer:', { printerId, response: data });
+      Logger.logApi(LOG_CATEGORIES.API, 'Deleted printer:', { printerId, response: data });
       return data;
     } catch (error) {
-      logger.error('Error deleting printer:', error);
+      Logger.error('Error deleting printer:', error);
       throw error;
     }
   }

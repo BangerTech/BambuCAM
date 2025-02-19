@@ -8,57 +8,66 @@ import uuid
 import time
 from urllib3.exceptions import InsecureRequestWarning
 import ipaddress
+import paho.mqtt.client as mqtt
 
 # Warnungen für selbst-signierte Zertifikate unterdrücken
 requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
-def scan_printer(ip, port, result_queue):
-    """Scannt einen einzelnen Drucker via HTTP"""
+def test_lan_mode(ip):
+    """Tests if printer is in LAN mode by checking RTSP port"""
     try:
-        logger.debug(f"Scanning IP {ip} on port {port}")
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        
-        if sock.connect_ex((ip, port)) == 0:
-            logger.debug(f"Port {port} is open on {ip}")
-            try:
-                response = requests.get(
-                    f"http://{ip}:8989/api/info",
-                    timeout=2,
-                    verify=False
-                )
-                
-                if response.status_code == 200:
-                    printer_info = response.json()
-                    logger.info(f"Found printer at {ip}: {printer_info}")
-                    result_queue.put({
-                        'id': str(uuid.uuid4()),
-                        'ip': ip,
-                        'name': printer_info.get('name', f'Printer {ip}'),
-                        'model': printer_info.get('model', 'X1C'),
-                        'type': 'BAMBULAB',
-                        'status': printer_info.get('status', 'unknown'),
-                        'accessCode': '',
-                        'streamUrl': ''
-                    })
-            except Exception as e:
-                logger.debug(f"Error getting printer info from {ip}: {e}")
-                result_queue.put({
-                    'id': str(uuid.uuid4()),
-                    'ip': ip,
-                    'name': f'Printer {ip}',
-                    'model': 'X1C',
-                    'type': 'BAMBULAB',
-                    'status': 'unknown',
-                    'accessCode': '',
-                    'streamUrl': ''
-                })
-    except Exception as e:
-        logger.debug(f"Error scanning {ip}: {e}")
-    finally:
+        sock.settimeout(2)
+        result = sock.connect_ex((ip, 322))
         sock.close()
+        
+        return result == 0
+    except Exception as e:
+        logger.error(f"Error testing LAN mode for {ip}: {e}")
+        return False
+
+def parse_printer_info(response, ip):
+    """Extrahiert detaillierte Drucker-Informationen aus der SSDP-Antwort"""
+    printer_info = {
+        'id': str(uuid.uuid4()),
+        'ip': ip,
+        'type': 'BAMBULAB',
+        'status': 'online',
+        'mode': 'unknown',
+        'serial': '',
+        'name': f'Printer {ip}',
+        'model': 'X1C',
+        'version': '',
+        'lan_mode_enabled': False,
+        'access_code': ''
+    }
+    
+    try:
+        # Check LAN mode using RTSP port
+        if test_lan_mode(ip):
+            printer_info['mode'] = 'lan'
+            printer_info['lan_mode_enabled'] = True
+        else:
+            printer_info['mode'] = 'cloud'
+            printer_info['lan_mode_enabled'] = False
+
+        # Parse SSDP response for additional info
+        for line in response.split('\r\n'):
+            if 'DevName.bambu.com:' in line:
+                printer_info['name'] = line.split(':', 1)[1].strip()
+            elif 'DevModel.bambu.com:' in line:
+                printer_info['model'] = line.split(':', 1)[1].strip()
+            elif 'DevFWVer.bambu.com:' in line:
+                printer_info['version'] = line.split(':', 1)[1].strip()
+
+        logger.debug(f"Found printer: {printer_info}")
+        return printer_info
+        
+    except Exception as e:
+        logger.error(f"Error parsing printer info for {ip}: {e}")
+        return printer_info
 
 def scanNetwork(network_range=None):
     """Scannt das Netzwerk nach Bambu Lab Druckern"""
@@ -122,27 +131,11 @@ def scanNetwork(network_range=None):
                     logger.debug(f"Received from {addr}: {response}")
                     
                     if 'bambulab' in response.lower():
-                        printer_info = {
-                            'id': str(uuid.uuid4()),
-                            'ip': addr[0],
-                            'type': 'BAMBULAB',
-                            'status': 'online'
-                        }
-                        
-                        for line in response.split('\r\n'):
-                            if 'DevName.bambu.com:' in line:
-                                printer_info['name'] = line.split(':', 1)[1].strip()
-                            elif 'DevModel.bambu.com:' in line:
-                                printer_info['model'] = line.split(':', 1)[1].strip()
-                        
+                        printer_info = parse_printer_info(response, addr[0])
                         if not any(p['ip'] == addr[0] for p in found_printers):
-                            if 'name' not in printer_info:
-                                printer_info['name'] = f'Bambu Lab Printer ({addr[0]})'
-                            if 'model' not in printer_info:
-                                printer_info['model'] = 'X1C'
                             found_printers.append(printer_info)
                             logger.info(f"Found printer via SSDP: {printer_info}")
-                            
+                        
                 except socket.timeout:
                     continue
                 except Exception as e:

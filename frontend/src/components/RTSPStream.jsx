@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
-import Logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 // Dynamische API URL basierend auf dem aktuellen Host
 const API_URL = `http://${window.location.hostname}:4000`;

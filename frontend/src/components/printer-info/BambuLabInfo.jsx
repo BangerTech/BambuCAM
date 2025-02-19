@@ -1,10 +1,10 @@
 import React from 'react';
 import { Box, Typography, LinearProgress } from '@mui/material';
-import logger from '../../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../../utils/logger';
 
 const BambuLabInfo = ({ printer, status }) => {
   // Debug-Logging
-  logger.debug('BambuLabInfo render:', {
+  Logger.debug('BambuLabInfo render:', {
     printer_id: printer?.id,
     status: status?.status,
     temperatures: status?.temperatures,

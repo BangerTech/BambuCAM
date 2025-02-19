@@ -11,7 +11,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import { API_URL } from '../config';
 import { styled } from '@mui/material/styles';
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 // Styled Components
 const NeonDialog = styled(Dialog)(({ theme }) => ({
@@ -55,11 +55,11 @@ const SystemStatsDialog = ({ open, onClose }) => {
     try {
       const response = await fetch(`${API_URL}/system/stats`);
       const data = await response.json();
-      logger.info('System stats:', data);
+      Logger.info('System stats:', data);
       setStats(data);
       setError(null);
     } catch (error) {
-      logger.error('Error fetching system stats:', error);
+      Logger.error('Error fetching system stats:', error);
       setError('Failed to load system statistics');
     }
   };

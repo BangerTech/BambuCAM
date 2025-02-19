@@ -1,4 +1,4 @@
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 const audio = document.getElementById('notificationSound');
 
@@ -13,7 +13,7 @@ const playSound = (type) => {
 };
 
 export const showNotification = async (printer, status) => {
-  logger.notification('Showing notification:', { printer, status });
+  Logger.notification('Showing notification:', { printer, status });
   const notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
   if (!notificationsEnabled) return;
 

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Box, Typography, LinearProgress } from '@mui/material';
-import logger from '../../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../../utils/logger';
 
 const CrealityInfo = ({ printer }) => {
-  logger.printer('Rendering CrealityInfo with data:', {
+  Logger.printer('Rendering CrealityInfo with data:', {
     temps: printer.temperatures,
     targets: printer.targets,
     state: printer.state,

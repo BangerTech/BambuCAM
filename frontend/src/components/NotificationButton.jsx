@@ -4,7 +4,7 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import NotificationDialog from './NotificationDialog';
 import { API_URL } from '../config';
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 const NotificationButton = () => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -20,10 +20,10 @@ const NotificationButton = () => {
       
       if (response.ok) {
         setNotificationsEnabled(data.enabled);
-        logger.notification('Checking notification status:', data);
+        Logger.notification('Checking notification status:', data);
       }
     } catch (error) {
-      logger.error('Error checking notification status:', error);
+      Logger.error('Error checking notification status:', error);
     }
   };
 
@@ -49,12 +49,12 @@ const NotificationButton = () => {
         });
         const data = await response.json();
         if (data.success) {
-          logger.notification('Notification configuration reset');
+          Logger.notification('Notification configuration reset');
           setNotificationsEnabled(false);
           setSnackbarOpen(true);
         }
       } catch (error) {
-        logger.error('Error resetting notification config:', error);
+        Logger.error('Error resetting notification config:', error);
       }
     }, 1000);
     setPressTimer(timer);
@@ -76,10 +76,10 @@ const NotificationButton = () => {
         const data = await response.json();
         if (data.success) {
           setNotificationsEnabled(false);
-          logger.notification('Notifications disabled');
+          Logger.notification('Notifications disabled');
         }
       } catch (error) {
-        logger.error('Error disabling notifications:', error);
+        Logger.error('Error disabling notifications:', error);
       }
     } else {
       try {
@@ -95,14 +95,14 @@ const NotificationButton = () => {
           const enableData = await enableResponse.json();
           if (enableData.success) {
             setNotificationsEnabled(true);
-            logger.notification('Notifications enabled');
+            Logger.notification('Notifications enabled');
           }
         } else {
           // Bot muss erst eingerichtet werden
           setDialogOpen(true);
         }
       } catch (error) {
-        logger.error('Error checking telegram status:', error);
+        Logger.error('Error checking telegram status:', error);
         setDialogOpen(true);
       }
     }

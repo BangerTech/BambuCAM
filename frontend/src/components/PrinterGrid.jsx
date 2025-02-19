@@ -20,7 +20,7 @@ import SystemStatsDialog from './SystemStatsDialog';
 import { API_URL } from '../config';
 import AddPrinterDialog from './AddPrinterDialog';
 import { printerApi } from '../api/printerApi';
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
@@ -136,7 +136,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             [printer.id]: data
           }));
         } catch (error) {
-          logger.error('Error updating printer status:', error);
+          Logger.error('Error updating printer status:', error);
         }
       }
     };

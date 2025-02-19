@@ -1,138 +1,124 @@
+const LOG_LEVELS = {
+    DEBUG: 'DEBUG',
+    INFO: 'INFO',
+    WARN: 'WARN',
+    ERROR: 'ERROR'
+};
+
+const LOG_CATEGORIES = {
+    PRINTER: 'PRINTER',
+    STREAM: 'STREAM',
+    NETWORK: 'NETWORK',
+    API: 'API',
+    SYSTEM: 'SYSTEM',
+    NOTIFICATION: 'NOTIFICATION'
+};
+
 class Logger {
-  static logLevels = {
-    DEBUG: 0,
-    INFO: 1,
-    WARN: 2,
-    ERROR: 3
-  };
+    static formatPrinterStatus(printer, status) {
+        const name = printer?.name || 'Unknown Printer';
+        const temps = [];
+        
+        // Vereinheitlichte Temperatur-Bezeichnungen
+        if (status.temps) {
+            if (status.temps.bed !== undefined) {
+                temps.push(`Bed: ${status.temps.bed.toFixed(1)}°C`);
+            }
+            if (status.temps.nozzle !== undefined || status.temps.hotend !== undefined) {
+                const temp = status.temps.nozzle || status.temps.hotend;
+                temps.push(`Tool: ${temp.toFixed(1)}°C`);
+            }
+            if (status.temps.chamber !== undefined) {
+                temps.push(`Chamber: ${status.temps.chamber.toFixed(1)}°C`);
+            }
+        }
 
-  static currentLevel = this.logLevels.INFO; // Default Level
-  static lastPrinterStatus = {};
-  static lastLogTime = {};
-  static lastNotificationStatus = null;
-  static LOG_INTERVAL = 10000; // 10 Sekunden zwischen gleichen Logs
-
-  static setLogLevel(level) {
-    this.currentLevel = this.logLevels[level] || this.logLevels.INFO;
-  }
-
-  static shouldLog(type, message) {
-    const now = Date.now();
-    const key = `${type}-${message}`;
-    if (this.lastLogTime[key] && (now - this.lastLogTime[key] < this.LOG_INTERVAL)) {
-      return false;
+        return {
+            message: `Printer "${name}": ${status.status} | Progress: ${status.progress}% | Temps - ${temps.join(', ')}`,
+            data: { printer, status }
+        };
     }
-    this.lastLogTime[key] = now;
-    return true;
-  }
 
-  static debug(...args) {
-    if (this.currentLevel <= this.logLevels.DEBUG && this.shouldLog('debug', args[0])) {
-      console.debug(...args);
+    // Spezielle Logger-Methoden
+    static logPrinterStatus(printerId, status) {
+        return this.debug(
+            LOG_CATEGORIES.PRINTER,
+            `Printer ${printerId} status:`,
+            status
+        );
     }
-  }
 
-  static info(...args) {
-    if (this.currentLevel <= this.logLevels.INFO && this.shouldLog('info', args[0])) {
-      console.info(...args);
+    static logStream(message, data = null) {
+        return this.debug(LOG_CATEGORIES.STREAM, message, data);
     }
-  }
 
-  static warn(...args) {
-    if (this.currentLevel <= this.logLevels.WARN) {
-      console.warn(...args);
+    static logApi(message, data = null) {
+        return this.debug(LOG_CATEGORIES.API, message, data);
     }
-  }
 
-  static error(...args) {
-    if (this.currentLevel <= this.logLevels.ERROR) {
-      console.error(...args);
+    static logApiResponse(endpoint, data = null) {
+        return this.debug(LOG_CATEGORIES.API, `Response from ${endpoint}`, data);
     }
-  }
 
-  static notification(message, data = null) {
-    // Für Status-Checks
-    if (message.includes('Checking notification status')) {
-      // Nur loggen wenn sich der Status geändert hat
-      const statusStr = JSON.stringify(data);
-      if (statusStr !== this.lastNotificationStatus) {
-        this.info(`[Notification] ${message}`, data);
-        this.lastNotificationStatus = statusStr;
-      }
-      return;
+    static logPrinter(message, data = null) {
+        return this.debug(LOG_CATEGORIES.PRINTER, message, data);
     }
-    
-    // Alle anderen Notification-Logs normal ausgeben
-    this.info(`[Notification] ${message}`, data);
-  }
 
-  static apiResponse(endpoint, data) {
-    if (this.currentLevel <= this.logLevels.DEBUG) {
-      const temps = data?.temperatures || data?.temps;
-      const status = data?.status;
-      const progress = data?.progress;
-
-      // Kompaktes Logging in einer Zeile
-      this.debug(
-        `[API] ${endpoint} | ` +
-        `Status: ${status || 'N/A'} | ` +
-        `Progress: ${progress || 0}% | ` +
-        `Temps: ${temps ? `Bed: ${temps.bed}°C, Nozzle: ${temps.nozzle}°C` : 'N/A'}`
-      );
+    static notification(message, data = null) {
+        return this.info(LOG_CATEGORIES.NOTIFICATION, message, data);
     }
-  }
 
-  static logPrinterStatus(printerId, status) {
-    const lastStatus = this.lastPrinterStatus[printerId];
-    
-    // Nur loggen wenn sich etwas Wichtiges geändert hat
-    if (!lastStatus || 
-        lastStatus.status !== status.status ||
-        lastStatus.progress !== status.progress ||
-        Math.abs(lastStatus.temperatures?.bed - status.temperatures?.bed) > 1 ||
-        Math.abs(lastStatus.temperatures?.nozzle - status.temperatures?.nozzle) > 1) {
-      
-      // Kompaktes Status-Logging
-      const temps = status.temperatures || {};
-      const nozzleTemp = temps.hotend || temps.nozzle;
-      const printerName = status.name || printerId || 'unknown';
-      
-      this.info(
-        `Printer "${printerName}": ${status.status || 'unknown'} | ` +
-        `Progress: ${status.progress || 0}% | ` +
-        `Temps - Bed: ${temps.bed?.toFixed(1) || 0}°C, ` +
-        `Nozzle: ${nozzleTemp?.toFixed(1) || 0}°C`
-      );
-      
-      this.lastPrinterStatus[printerId] = status;
+    static printer(message, data = null) {
+        return this.debug(LOG_CATEGORIES.PRINTER, message, data);
     }
-  }
 
-  // Spezielle Methode für Stream-Logs
-  static logStream(type, message) {
-    if (this.currentLevel <= this.logLevels.DEBUG && this.shouldLog('stream', `${type}-${message}`)) {
-      this.debug(`[Stream] ${type}: ${message}`);
-    }
-  }
+    // Basis Logger-Methoden
+    static log(level, category, message, data = null) {
+        const timestamp = new Date().toISOString();
+        const logEntry = {
+            timestamp,
+            level,
+            category,
+            message,
+            data
+        };
 
-  static printer(...args) {
-    if (this.currentLevel <= this.logLevels.DEBUG && this.shouldLog('printer', args[0])) {
-      this.debug(`[Printer]`, ...args);
-    }
-  }
+        // Formatierung für die Konsole
+        const prefix = `[${timestamp}] [${level}] [${category}]`;
+        
+        switch (level) {
+            case LOG_LEVELS.DEBUG:
+                console.debug(`${prefix} ${message}`, data ? data : '');
+                break;
+            case LOG_LEVELS.INFO:
+                console.info(`${prefix} ${message}`, data ? data : '');
+                break;
+            case LOG_LEVELS.WARN:
+                console.warn(`${prefix} ${message}`, data ? data : '');
+                break;
+            case LOG_LEVELS.ERROR:
+                console.error(`${prefix} ${message}`, data ? data : '');
+                break;
+        }
 
-  static api(...args) {
-    if (this.currentLevel <= this.logLevels.DEBUG && this.shouldLog('api', args[0])) {
-      this.debug(`[API]`, ...args);
+        return logEntry;
     }
-  }
+
+    static debug(category, message, data = null) {
+        return this.log(LOG_LEVELS.DEBUG, category, message, data);
+    }
+
+    static info(category, message, data = null) {
+        return this.log(LOG_LEVELS.INFO, category, message, data);
+    }
+
+    static warn(category, message, data = null) {
+        return this.log(LOG_LEVELS.WARN, category, message, data);
+    }
+
+    static error(category, message, data = null) {
+        return this.log(LOG_LEVELS.ERROR, category, message, data);
+    }
 }
 
-// Setze Log-Level basierend auf Umgebung
-if (process.env.NODE_ENV === 'production') {
-  Logger.setLogLevel('WARN');
-} else {
-  Logger.setLogLevel('DEBUG');
-}
-
-export default Logger; 
+export { Logger, LOG_LEVELS, LOG_CATEGORIES }; 

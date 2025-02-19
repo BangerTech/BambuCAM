@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse, Grid, Chip } from '@mui/material';
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
 import { CircularProgress } from '@mui/material';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 const NeonButton = styled(Button)({
   background: 'rgba(0, 0, 0, 0.8)',
@@ -31,6 +32,52 @@ const GlassDialog = styled(Dialog)({
     border: '1px solid #00ffff',
     borderRadius: '10px',
     minWidth: '400px'
+  }
+});
+
+const PrinterCard = styled(Box)(({ theme }) => ({
+  background: 'rgba(0, 0, 0, 0.6)',
+  borderRadius: '10px',
+  padding: '15px',
+  border: '1px solid rgba(0, 255, 255, 0.3)',
+  transition: 'all 0.3s ease',
+  cursor: 'pointer',
+  '&:hover': {
+    border: '1px solid rgba(0, 255, 255, 0.8)',
+    boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+    transform: 'translateY(-2px)'
+  }
+}));
+
+const ModeBadge = styled(Chip)(({ mode }) => ({
+  position: 'absolute',
+  top: '10px',
+  right: '10px',
+  backgroundColor: mode === 'lan' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(0, 150, 255, 0.2)',
+  color: mode === 'lan' ? '#00ff00' : '#00ffff',
+  border: `1px solid ${mode === 'lan' ? '#00ff00' : '#00ffff'}`,
+  fontSize: '0.75rem',
+  height: '24px'
+}));
+
+const ScanButton = styled(Button)({
+  width: '100%',
+  marginTop: '20px',
+  marginBottom: '20px',
+  padding: '10px',
+  background: 'rgba(0, 0, 0, 0.8)',
+  color: '#00ffff',
+  border: '1px solid #00ffff',
+  borderRadius: '8px',
+  textTransform: 'none',
+  fontSize: '1rem',
+  '&:hover': {
+    background: 'rgba(0, 255, 255, 0.1)',
+    boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+  },
+  '&.Mui-disabled': {
+    color: 'rgba(0, 255, 255, 0.3)',
+    borderColor: 'rgba(0, 255, 255, 0.3)',
   }
 });
 
@@ -121,50 +168,77 @@ const AddPrinterDialog = ({
         </Collapse>
 
         {/* Scan Button */}
-        <button 
-          className="neon-scan-button"
-          onClick={onScan}
+        <ScanButton
+          onClick={() => {
+            Logger.info('Starting printer scan');
+            onScan();
+          }}
           disabled={isScanning}
+          startIcon={isScanning && <CircularProgress size={20} color="inherit" />}
         >
-          {isScanning ? (
-            <>
-              <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-              Scanning... ({scanTimer}s)
-            </>
-          ) : (
-            'Scan Network'
-          )}
-        </button>
+          {isScanning ? `Scanning... (${scanTimer}s)` : 'SCAN NETWORK'}
+        </ScanButton>
 
-        {/* Found Printers */}
+        {/* Found Printers Grid */}
         {scannedPrinters.length > 0 && (
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          <Box sx={{ mt: 2, mb: 3 }}>
+            <Typography variant="subtitle1" sx={{ mb: 1, color: '#00ffff' }}>
               Found Printers:
             </Typography>
-            <List>
+            <Grid container spacing={2}>
               {scannedPrinters.map((printer) => (
-                <ListItem 
-                  key={printer.id || printer.ip}
-                  button
-                  sx={{
-                    border: '1px solid #e0e0e0',
-                    borderRadius: 1,
-                    mb: 1
-                  }}
-                  onClick={() => handleScannedPrinterSelect(printer)}
-                >
-                  <ListItemText 
-                    primary={printer.name}
-                    secondary={`${printer.ip} (${printer.model})`}
-                  />
-                </ListItem>
+                <Grid item xs={12} sm={6} key={printer.id}>
+                  <PrinterCard 
+                    onClick={() => handleScannedPrinterSelect(printer)}
+                    sx={{ position: 'relative', minHeight: '140px' }}
+                  >
+                    <ModeBadge 
+                      label={printer.mode.toUpperCase()} 
+                      mode={printer.mode}
+                      size="small"
+                    />
+                    <Typography variant="h6" sx={{ 
+                      color: '#00ffff',
+                      mb: 1,
+                      fontSize: '1rem',
+                      fontWeight: 500
+                    }}>
+                      {printer.name}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                      IP: {printer.ip}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                      Model: {printer.model}
+                    </Typography>
+                    {printer.serial && (
+                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                        S/N: {printer.serial}
+                      </Typography>
+                    )}
+                    {printer.version && (
+                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                        Version: {printer.version}
+                      </Typography>
+                    )}
+                  </PrinterCard>
+                </Grid>
               ))}
-            </List>
+            </Grid>
           </Box>
         )}
 
-        {/* Manual Input */}
+        {/* Manual Input Section */}
+        <Typography variant="subtitle1" sx={{ 
+          mt: 2, 
+          mb: 1,
+          color: '#00ffff',
+          borderTop: '1px solid rgba(0, 255, 255, 0.1)',
+          paddingTop: '20px'
+        }}>
+          Manual Setup:
+        </Typography>
+
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel>Printer Type</InputLabel>
           <Select

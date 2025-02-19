@@ -77,13 +77,13 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
       const response = await fetch(`${API_URL}/api/cloud/login`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           email: credentials.email,
           password: credentials.password,
           verification_code: verificationCode || undefined
-        }),
+        })
       });
 
       const data = await response.json();
@@ -96,7 +96,7 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
       }
       
       if (data.success) {
-        await onLogin(data); // Warten auf onLogin
+        await onLogin(data);
         onClose();
       } else {
         setError(data.error || 'Login fehlgeschlagen');

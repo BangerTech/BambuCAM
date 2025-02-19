@@ -19,7 +19,7 @@ import {
 } from '@mui/material';
 import { API_URL } from '../config';
 import { styled } from '@mui/material/styles';
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import InfoIcon from '@mui/icons-material/Info';
 
 // Styled Components
@@ -105,7 +105,7 @@ const NotificationDialog = ({ open, onClose }) => {
       setIsLoading(true);
       
       // Debug-Log hinzufügen
-      logger.notification('Sending token:', { token });
+      Logger.notification('Sending token:', { token });
       
       const response = await fetch(`${API_URL}/notifications/telegram/setup`, {
         method: 'POST',

@@ -7,7 +7,7 @@ import RTSPStream from './RTSPStream';
 import BambuLabInfo from './printer-info/BambuLabInfo';
 import CrealityInfo from './printer-info/CrealityInfo';
 import GenericInfo from './printer-info/GenericInfo';
-import logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 const PrinterCard = ({ printer, onDelete }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -47,7 +47,7 @@ const PrinterCard = ({ printer, onDelete }) => {
   }, [isFullscreen]);
 
   useEffect(() => {
-    logger.printer('Printer data updated:', {
+    Logger.printer('Printer data updated:', {
       id: printer.id,
       name: printer.name,
       status: printer.status,
@@ -96,7 +96,7 @@ const PrinterCard = ({ printer, onDelete }) => {
 
   // Drucker-spezifische Rendering Logik
   const renderPrinterInfo = () => {
-    logger.debug('Rendering printer info:', {
+    Logger.debug('Rendering printer info:', {
       type: printer.type,
       temps: printer.temperatures,
       state: printer.state

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Dialog, IconButton, Box, Typography, AppBar, Toolbar, LinearProgress, Paper } from '@mui/material';
 import { Close as CloseIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import RTSPStream from './RTSPStream';
-import Logger from '../utils/logger';
+import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import BambuLabInfo from './printer-info/BambuLabInfo';
 import CrealityInfo from './printer-info/CrealityInfo';
 

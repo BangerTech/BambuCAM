@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 
 cloud_bp = Blueprint('cloud', __name__)
 
-@cloud_bp.route('/cloud/login', methods=['POST'])
+@cloud_bp.route('/api/cloud/login', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def cloud_login():
+    if request.method == 'OPTIONS':
+        return '', 204
+
     try:
         data = request.get_json()
         email = data.get('email')
@@ -44,9 +47,12 @@ def cloud_login():
         logger.error(f"Error during cloud login: {e}")
         return jsonify({'error': str(e)}), 500
 
-@cloud_bp.route('/cloud/printers', methods=['GET'])
+@cloud_bp.route('/api/cloud/printers', methods=['GET', 'OPTIONS'])
 @cross_origin()
 def get_cloud_printers():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
     try:
         printers = bambu_cloud_service.get_cloud_printers()
         return jsonify(printers)
@@ -54,8 +60,12 @@ def get_cloud_printers():
         logger.error(f"Error fetching cloud printers: {e}")
         return jsonify({'error': str(e)}), 500
 
-@cloud_bp.route('/cloud/status', methods=['GET'])
+@cloud_bp.route('/api/cloud/status', methods=['GET', 'OPTIONS'])
+@cross_origin()
 def get_cloud_status():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
     try:
         if os.path.exists(Config.BAMBU_CLOUD_FILE):
             with open(Config.BAMBU_CLOUD_FILE, 'r') as f:
