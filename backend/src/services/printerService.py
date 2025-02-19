@@ -186,14 +186,14 @@ class PrinterService:
             
             elif printer['type'] == 'CREALITY':
                 # Moonraker API Abfrage
-                response = requests.get(f"http://{printer['ip']}/printer/objects/query?heater_bed&extruder&temperature_sensor chamber_temp", timeout=5)
+                response = requests.get(f"http://{printer['ip']}:7125/printer/objects/query?heater_bed&extruder&temperature_sensor%20chamber_temp", timeout=5)
                 if response.status_code == 200:
                     data = response.json()
                     logger.debug(f"Moonraker response: {data}")
                     temps = {
-                        'bed': data.get('status', {}).get('heater_bed', {}).get('temperature', 0),
-                        'hotend': data.get('status', {}).get('extruder', {}).get('temperature', 0),
-                        'chamber': data.get('status', {}).get('temperature_sensor chamber_temp', {}).get('temperature', 0)
+                        'bed': data.get('result', {}).get('status', {}).get('heater_bed', {}).get('temperature', 0),
+                        'hotend': data.get('result', {}).get('status', {}).get('extruder', {}).get('temperature', 0),
+                        'chamber': data.get('result', {}).get('status', {}).get('temperature_sensor chamber_temp', {}).get('temperature', 0)
                     }
                     
                     return {
@@ -310,14 +310,14 @@ class PrinterService:
             
             def poll_status():
                 logger.info(f"Starting polling thread for printer {printer_id}")
-                while printer_id in self.polling_threads:  # Neue Bedingung
+                while printer_id in self.polling_threads:
                     try:
                         url = f"http://{printer_ip}:7125/printer/objects/query"
                         params = {
                             "objects": {
                                 "extruder": None,
                                 "heater_bed": None,
-                                "temperature_sensor chamber": None,
+                                "temperature_sensor chamber_temp": None,
                                 "print_stats": None,
                                 "virtual_sdcard": None
                             }
@@ -334,7 +334,7 @@ class PrinterService:
                                 'temperatures': {
                                     'hotend': status.get('extruder', {}).get('temperature', 0),
                                     'bed': status.get('heater_bed', {}).get('temperature', 0),
-                                    'chamber': status.get('temperature_sensor chamber', {}).get('temperature', 0)
+                                    'chamber': status.get('temperature_sensor chamber_temp', {}).get('temperature', 0)
                                 },
                                 'targets': {
                                     'hotend': status.get('extruder', {}).get('target', 0),
@@ -668,14 +668,14 @@ def getPrinterStatus(printer_id):
             return mqtt_service.get_printer_status(printer_id)
         elif printer['type'] == 'CREALITY':
             # Moonraker API Abfrage
-            response = requests.get(f"http://{printer['ip']}/printer/objects/query?heater_bed&extruder&temperature_sensor chamber_temp", timeout=5)
+            response = requests.get(f"http://{printer['ip']}:7125/printer/objects/query?heater_bed&extruder&temperature_sensor%20chamber_temp", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 logger.debug(f"Moonraker response: {data}")
                 temps = {
-                    'bed': data.get('status', {}).get('heater_bed', {}).get('temperature', 0),
-                    'hotend': data.get('status', {}).get('extruder', {}).get('temperature', 0),
-                    'chamber': data.get('status', {}).get('temperature_sensor chamber_temp', {}).get('temperature', 0)
+                    'bed': data.get('result', {}).get('status', {}).get('heater_bed', {}).get('temperature', 0),
+                    'hotend': data.get('result', {}).get('status', {}).get('extruder', {}).get('temperature', 0),
+                    'chamber': data.get('result', {}).get('status', {}).get('temperature_sensor chamber_temp', {}).get('temperature', 0)
                 }
                 
                 return {

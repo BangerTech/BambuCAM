@@ -15,6 +15,13 @@ const LOG_CATEGORIES = {
 };
 
 class Logger {
+    static lastLogs = new Map();  // Speichert die letzten Logs pro Kategorie/Message
+    
+    static formatLogKey(level, category, message, data) {
+        // Erstellt einen eindeutigen Schlüssel für den Log
+        return `${level}-${category}-${message}-${JSON.stringify(data)}`;
+    }
+
     static formatPrinterStatus(printer, status) {
         const name = printer?.name || 'Unknown Printer';
         const temps = [];
@@ -75,33 +82,43 @@ class Logger {
     // Basis Logger-Methoden
     static log(level, category, message, data = null) {
         const timestamp = new Date().toISOString();
-        const logEntry = {
+        const logKey = this.formatLogKey(level, category, message, data);
+        
+        if (this.lastLogs.has(logKey)) {
+            const lastLog = this.lastLogs.get(logKey);
+            lastLog.count++;
+            lastLog.lastTimestamp = timestamp;
+            
+            // Nur alle 10 Wiederholungen oder nach 30 Sekunden ausgeben
+            if (lastLog.count % 10 === 0 || 
+                (new Date(timestamp) - new Date(lastLog.firstTimestamp)) > 30000) {
+                console.log(
+                    `${lastLog.firstTimestamp} [${level}] [${category}] ${message} ` +
+                    `(${lastLog.count}x in ${Math.round((new Date(timestamp) - new Date(lastLog.firstTimestamp))/1000)}s)`,
+                    data || ''
+                );
+            }
+        } else {
+            // Neuer Log-Eintrag
+            this.lastLogs.set(logKey, {
+                firstTimestamp: timestamp,
+                lastTimestamp: timestamp,
+                count: 1
+            });
+            
+            console.log(
+                `${timestamp} [${level}] [${category}] ${message}`,
+                data || ''
+            );
+        }
+
+        return {
             timestamp,
             level,
             category,
             message,
             data
         };
-
-        // Formatierung für die Konsole
-        const prefix = `[${timestamp}] [${level}] [${category}]`;
-        
-        switch (level) {
-            case LOG_LEVELS.DEBUG:
-                console.debug(`${prefix} ${message}`, data ? data : '');
-                break;
-            case LOG_LEVELS.INFO:
-                console.info(`${prefix} ${message}`, data ? data : '');
-                break;
-            case LOG_LEVELS.WARN:
-                console.warn(`${prefix} ${message}`, data ? data : '');
-                break;
-            case LOG_LEVELS.ERROR:
-                console.error(`${prefix} ${message}`, data ? data : '');
-                break;
-        }
-
-        return logEntry;
     }
 
     static debug(category, message, data = null) {

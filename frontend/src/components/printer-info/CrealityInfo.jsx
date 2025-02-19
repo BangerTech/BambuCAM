@@ -12,6 +12,9 @@ const CrealityInfo = ({ printer }) => {
 
   const temps = printer.temperatures || {};
   const targets = printer.targets || {};
+  
+  // Chamber temp kann entweder direkt oder als chamber_temp kommen
+  const chamberTemp = temps.chamber || (temps.chamber_temp?.temperature);
 
   return (
     <Box sx={{
@@ -37,9 +40,11 @@ const CrealityInfo = ({ printer }) => {
             Bed: {temps.bed?.toFixed(1) || '-.--'}°C
             {targets.bed > 0 && ` / ${targets.bed}°C`}
           </Typography>
-          <Typography variant="body2">
-            Chamber: {temps.chamber?.toFixed(1) || '-.--'}°C
-          </Typography>
+          {chamberTemp !== undefined && (
+            <Typography variant="body2">
+              Chamber: {chamberTemp.toFixed(1) || '-.--'}°C
+            </Typography>
+          )}
         </Box>
       </Box>
       {printer.progress > 0 && (
