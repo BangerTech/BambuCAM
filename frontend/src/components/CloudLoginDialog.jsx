@@ -17,14 +17,18 @@ const GlassDialog = styled(Dialog)(({ theme }) => ({
     backdropFilter: 'blur(10px)',
     border: '1px solid rgba(0, 255, 255, 0.2)',
     borderRadius: '15px',
-    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)'
+    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
+    color: '#00ffff',
+    '& .MuiDialogTitle-root': {
+      color: '#00ffff'
+    }
   }
 }));
 
 const NeonTextField = styled(TextField)(({ theme }) => ({
   '& .MuiOutlinedInput-root': {
     '& fieldset': {
-      borderColor: 'rgba(0, 255, 255, 0.3)',
+      borderColor: 'rgba(0, 255, 255, 0.5)',
     },
     '&:hover fieldset': {
       borderColor: 'rgba(0, 255, 255, 0.5)',
@@ -34,13 +38,13 @@ const NeonTextField = styled(TextField)(({ theme }) => ({
     }
   },
   '& .MuiInputLabel-root': {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#00ffff',
     '&.Mui-focused': {
       color: '#00ffff'
     }
   },
   '& .MuiInputBase-input': {
-    color: 'white'
+    color: '#00ffff'
   }
 }));
 
@@ -115,11 +119,15 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
       <DialogContent>
         {error && (
           <Alert 
-            severity={needsVerification ? "info" : "error"}  // Info statt Error bei Verification
+            severity={needsVerification ? "info" : "error"}
             sx={{ 
               mb: 2,
               background: needsVerification ? 'rgba(0, 255, 255, 0.1)' : 'rgba(255, 0, 0, 0.1)',
-              border: needsVerification ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(255, 0, 0, 0.3)'
+              border: needsVerification ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(255, 0, 0, 0.3)',
+              color: needsVerification ? '#00ffff' : '#ff0000',
+              '& .MuiAlert-icon': {
+                color: needsVerification ? '#00ffff' : '#ff0000'
+              }
             }}
           >
             {error}

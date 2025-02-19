@@ -5,33 +5,54 @@ import InfoIcon from '@mui/icons-material/Info';
 import { CircularProgress } from '@mui/material';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
+const GlassDialog = styled(Dialog)(({ theme }) => ({
+  '& .MuiDialog-paper': {
+    background: 'rgba(0, 0, 0, 0.8)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(0, 255, 255, 0.2)',
+    borderRadius: '15px',
+    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
+    minWidth: { xs: '90vw', sm: '400px' },
+    maxWidth: { xs: '95vw', sm: '90vw', md: '600px' },
+    maxHeight: { xs: '95vh', sm: '90vh' },
+    margin: { xs: '10px', sm: 'auto' },
+    color: '#00ffff'
+  }
+}));
+
 const NeonButton = styled(Button)({
   background: 'rgba(0, 0, 0, 0.8)',
   color: '#00ffff',
+  border: '1px solid rgba(0, 255, 255, 0.3)',
   '&:hover': {
-    background: 'rgba(0, 255, 255, 0.1)',
+    background: 'rgba(0, 255, 255, 0.2)',
+    boxShadow: '0 0 20px rgba(0, 255, 255, 0.3)'
   }
 });
 
 const NeonTextField = styled(TextField)({
-  '& .MuiOutlinedInput-notchedOutline': {
-    borderColor: 'rgba(0, 255, 255, 0.3)',
+  '& .MuiOutlinedInput-root': {
+    '& fieldset': {
+      borderColor: 'rgba(0, 255, 255, 0.5)'
+    },
+    '&:hover fieldset': {
+      borderColor: 'rgba(0, 255, 255, 0.5)',
+    },
+    '&.Mui-focused fieldset': {
+      borderColor: '#00ffff',
+    }
   },
-  '&:hover .MuiOutlinedInput-notchedOutline': {
-    borderColor: 'rgba(0, 255, 255, 0.5)',
-  },
-  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-    borderColor: '#00ffff',
-  }
-});
-
-const GlassDialog = styled(Dialog)({
-  '& .MuiPaper-root': {
-    background: '#1e1e1e',
+  '& .MuiInputLabel-root': {
     color: '#00ffff',
-    border: '1px solid #00ffff',
-    borderRadius: '10px',
-    minWidth: '400px'
+    '&.Mui-focused': {
+      color: '#00ffff'
+    }
+  },
+  '& .MuiInputBase-input': {
+    color: '#00ffff'
+  },
+  '& .MuiSelect-icon': {
+    color: '#00ffff'
   }
 });
 
@@ -125,24 +146,18 @@ const AddPrinterDialog = ({
   };
 
   return (
-    <GlassDialog open={open} onClose={onClose}>
+    <GlassDialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ 
-        borderBottom: '1px solid rgba(0,0,0,0.1)',
-        pb: 2,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
+        color: '#00ffff'
       }}>
-        <span>Add New Printer</span>
-        <IconButton
-          onClick={() => setShowGuide(!showGuide)}
-          title="Setup Guide"
-        >
-          <InfoIcon />
-        </IconButton>
+        Add New Printer
       </DialogTitle>
-
-      <DialogContent>
+      <DialogContent sx={{ 
+        pt: 2,
+        overflowY: 'auto',
+        maxHeight: { xs: 'calc(100vh - 200px)', sm: 'auto' }
+      }}>
         <Collapse in={showGuide}>
           <Box sx={{ mb: 3, mt: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>
@@ -240,11 +255,41 @@ const AddPrinterDialog = ({
         </Typography>
 
         <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel>Printer Type</InputLabel>
+          <InputLabel sx={{ color: '#00ffff' }}>Printer Type</InputLabel>
           <Select
             value={newPrinter.type}
             onChange={(e) => setNewPrinter({ ...newPrinter, type: e.target.value })}
             label="Printer Type"
+            sx={{ 
+              color: '#00ffff',
+              '& .MuiSelect-icon': { color: '#00ffff' },
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'rgba(0, 255, 255, 0.5)'
+              },
+              '& .MuiPaper-root': {
+                backgroundColor: 'rgba(0, 0, 0, 0.9)'
+              }
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  bgcolor: 'rgba(0, 0, 0, 0.9)',
+                  border: '1px solid rgba(0, 255, 255, 0.3)',
+                  '& .MuiMenuItem-root': {
+                    color: '#00ffff',
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 255, 255, 0.1)'
+                    },
+                    '&.Mui-selected': {
+                      backgroundColor: 'rgba(0, 255, 255, 0.2)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 255, 255, 0.3)'
+                      }
+                    }
+                  }
+                }
+              }
+            }}
           >
             {Object.entries(PRINTER_TYPES).map(([key, value]) => (
               <MenuItem key={key} value={key}>{value.name}</MenuItem>
@@ -280,47 +325,26 @@ const AddPrinterDialog = ({
         )}
       </DialogContent>
 
-      <DialogActions sx={{ padding: '16px 24px' }}>
-        <Button 
-          onClick={onClose}
-          disabled={isAdding}
-          sx={{
-            color: '#00ffff',
-            '&:hover': {
-              background: 'rgba(0, 255, 255, 0.1)',
-            },
-          }}
-        >
+      <DialogActions sx={{
+        borderTop: '1px solid rgba(0, 255, 255, 0.1)',
+        padding: 2
+      }}>
+        <NeonButton onClick={onClose}>
           Cancel
-        </Button>
-        <Button 
-          onClick={() => {
-            const printerData = {
-              ...newPrinter,
-              streamUrl: newPrinter.type === 'BAMBULAB' 
-                ? `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`
-                : `http://${newPrinter.ip}:8080/?action=stream`
-            };
-            onAdd(printerData);
-          }}
+        </NeonButton>
+        <NeonButton onClick={() => {
+          const printerData = {
+            ...newPrinter,
+            streamUrl: newPrinter.type === 'BAMBULAB' 
+              ? `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`
+              : `http://${newPrinter.ip}:8080/?action=stream`
+          };
+          onAdd(printerData);
+        }}
           disabled={isAdding || !newPrinter.name || !newPrinter.ip || (newPrinter.type === 'BAMBULAB' && !newPrinter.accessCode)}
-          variant="contained"
-          sx={{
-            background: 'rgba(0, 0, 0, 0.8)',
-            color: '#00ffff',
-            border: '1px solid #00ffff',
-            '&:hover': {
-              background: 'rgba(0, 255, 255, 0.1)',
-            },
-            '&.Mui-disabled': {
-              background: 'rgba(0, 0, 0, 0.3)',
-              color: 'rgba(0, 255, 255, 0.3)',
-              border: '1px solid rgba(0, 255, 255, 0.3)',
-            },
-          }}
         >
-          Add
-        </Button>
+          {isAdding ? <CircularProgress size={24} /> : 'Add'}
+        </NeonButton>
       </DialogActions>
     </GlassDialog>
   );

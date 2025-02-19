@@ -29,17 +29,17 @@ const GlassDialog = styled(Dialog)(({ theme }) => ({
     borderRadius: '15px',
     boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
     minWidth: '400px',
-    color: '#fff',
+    color: '#00ffff',
     '& .MuiDialogTitle-root': {
       borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
       color: '#00ffff'
     },
     '& .MuiListItemText-primary': {
-      color: '#fff',
+      color: '#00ffff',
       fontSize: '1.1rem'
     },
     '& .MuiListItemText-secondary': {
-      color: 'rgba(255, 255, 255, 0.7)',
+      color: 'rgba(0, 255, 255, 0.7)',
       fontSize: '0.9rem'
     },
     '& .MuiIconButton-root': {
@@ -55,7 +55,9 @@ const GlassDialog = styled(Dialog)(({ theme }) => ({
       }
     },
     '& .MuiChip-root': {
-      margin: '0 10px'
+      margin: '0 10px',
+      color: '#00ffff',
+      borderColor: 'rgba(0, 255, 255, 0.5)'
     }
   }
 }));

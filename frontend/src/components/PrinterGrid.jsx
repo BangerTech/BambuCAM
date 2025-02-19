@@ -21,10 +21,11 @@ import { API_URL } from '../config';
 import AddPrinterDialog from './AddPrinterDialog';
 import { printerApi } from '../api/printerApi';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
+import Header from './Header';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
-const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [] }) => {
+const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers = [], isMobile }) => {
   // State Definitionen
   const [open, setOpen] = useState(false);
   const [addMethod, setAddMethod] = useState(0);
@@ -527,75 +528,17 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        marginBottom: '20px'
-      }}>
-        {/* Logo mit onClick */}
-        <img 
-          src={`${process.env.PUBLIC_URL}/logo.png`}
-          alt="BambuCam" 
-          style={{
-            height: '40px',
-            cursor: 'pointer',
-            transition: 'transform 0.3s ease',
-            transform: 'scale(1)'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-          onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          onClick={onThemeToggle}
-          title={`Click to switch to ${isDarkMode ? 'Light' : 'Dark'} Mode`}
-        />
-
-        {/* Cloud/LAN Switch in der Mitte */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center',
-          flex: 1
-        }}>
-          <Tooltip title={`Switch to ${mode === 'cloud' ? 'LAN' : 'Cloud'} Mode`}>
-            <div>  {/* Wrapper div needed for Tooltip to work with custom component */}
-              <NeonSwitch
-                checked={mode === 'cloud'}
-                onChange={(e) => onModeChange(e.target.checked ? 'cloud' : 'lan')}
-              />
-            </div>
-          </Tooltip>
-        </div>
-        
-        {/* Neon Button nur im LAN-Mode anzeigen */}
-        {mode === 'lan' && (
-          <Button
-            variant="contained"
-            onClick={() => setOpen(true)}
-            sx={{
-              background: 'rgba(0, 0, 0, 0.8)',
-              color: '#00ffff',
-              borderRadius: '1.5rem',
-              textTransform: 'none',
-              padding: '8px 24px',
-              border: '0.15rem solid #00ffff',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 0 2rem rgba(0, 255, 255, 0.3)',
-              '&:hover': {
-                boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
-                background: 'rgba(0, 0, 0, 0.85)'
-              },
-              '& .hover-text': {
-                display: 'none'
-              },
-              '&:hover .hover-text': {
-                display: 'inline'
-              }
-            }}
-          >
-            + <span className="hover-text">ADD PRINTER</span>
-          </Button>
-        )}
-      </div>
+    <div style={{ 
+      padding: '20px',
+      paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 70px)' : '90px' // Mehr Abstand zum Header
+    }}>
+      <Header 
+        onThemeToggle={onThemeToggle}
+        isDarkMode={isDarkMode}
+        mode={mode}
+        onModeChange={onModeChange}
+        onAddPrinter={() => setOpen(true)}
+      />
 
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="printers" direction="horizontal">
