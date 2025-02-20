@@ -9,6 +9,11 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
   const [needs2FA, setNeeds2FA] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [savedCredentials, setSavedCredentials] = useState(() => {
+    // Prüfe ob gespeicherte Credentials existieren
+    const saved = sessionStorage.getItem('godModeCredentials');
+    return saved ? JSON.parse(saved) : null;
+  });
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -22,17 +27,28 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
     setError(null);
     
     try {
+      // Verwende gespeicherte Credentials falls vorhanden
+      const loginEmail = savedCredentials?.email || email;
+      const loginPassword = savedCredentials?.password || password;
+      
       const response = await fetch(`${API_URL}/cloud/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email,
-          password,
-          verification_code: verificationCode
+          email: loginEmail,
+          password: loginPassword,
+          verification_code: needs2FA ? verificationCode : undefined
         }),
       });
+
+      if (!response.ok) {
+        // Bei Fehler: Lösche gespeicherte Credentials
+        sessionStorage.removeItem('godModeCredentials');
+        setSavedCredentials(null);
+        throw new Error('Login failed');
+      }
 
       const data = await response.json();
       console.log('Login response:', data);
@@ -47,10 +63,24 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
         // Speichere Token
         localStorage.setItem('cloudToken', data.token);
         
+        // Speichere erfolgreiche Credentials für die Session
+        if (!savedCredentials) {
+          const credentials = { email: loginEmail, password: loginPassword };
+          sessionStorage.setItem('godModeCredentials', JSON.stringify(credentials));
+          setSavedCredentials(credentials);
+        }
+        
         // Coole Aktivierungs-Animation
         startGodModeAnimation();
+      } else if (data.error) {
+        setError(data.error);
+        if (needs2FA) {
+          // Bei 2FA Fehler: Zurück zum normalen Login
+          setNeeds2FA(false);
+          setVerificationCode('');
+        }
       } else {
-        setError(data.error || 'Login fehlgeschlagen');
+        setError('Login fehlgeschlagen');
       }
     } catch (err) {
       console.log('Login error:', err);
@@ -67,46 +97,67 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
   const startGodModeAnimation = () => {
     console.log('Starte God Mode Animation...');
     
-    // Overlay für Fullscreen-Animation
-    const overlay = document.createElement('div');
-    overlay.style.position = 'fixed';
-    overlay.style.top = '0';
-    overlay.style.left = '0';
-    overlay.style.width = '100vw';
-    overlay.style.height = '100vh';
-    overlay.style.backgroundColor = 'transparent';
-    overlay.style.transition = 'all 0.5s ease';
-    overlay.style.zIndex = '9999';
-    document.body.appendChild(overlay);
-
+    // Erstelle Lightning Overlay
+    const lightningOverlay = document.createElement('div');
+    lightningOverlay.style.position = 'fixed';
+    lightningOverlay.style.top = '0';
+    lightningOverlay.style.left = '0';
+    lightningOverlay.style.width = '100vw';
+    lightningOverlay.style.height = '100vh';
+    lightningOverlay.style.zIndex = '9999';
+    lightningOverlay.style.pointerEvents = 'none';
+    lightningOverlay.style.mixBlendMode = 'screen'; // Macht Schwarz transparent
+    
+    // Video Lightning hinzufügen
+    lightningOverlay.innerHTML = `
+      <video
+        autoplay
+        muted
+        style="
+          position: fixed;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          mix-blend-mode: screen;
+          filter: brightness(1.2) contrast(1.2);
+        "
+      >
+        <source src="/lightning.mp4" type="video/mp4">
+      </video>
+    `;
+    
+    document.body.appendChild(lightningOverlay);
+    
     // Sequenz von Effekten
     setTimeout(() => {
-      overlay.style.backgroundColor = 'rgba(0, 255, 255, 0.3)';  // Cyan
       document.body.style.filter = 'brightness(1.5) contrast(1.2)';
     }, 0);
-
+    
     setTimeout(() => {
-      overlay.style.backgroundColor = 'rgba(147, 51, 234, 0.6)'; // Violett
       document.body.style.filter = 'brightness(2) contrast(1.4)';
     }, 500);
-
+    
     setTimeout(() => {
-      overlay.style.backgroundColor = 'rgba(0, 255, 255, 0.2)'; // Cyan
       document.body.style.filter = 'brightness(1.2) contrast(1.1)';
     }, 1000);
-
+    
     setTimeout(() => {
-      overlay.style.backgroundColor = 'transparent';
       document.body.style.filter = '';
-      overlay.remove();
+      lightningOverlay.remove();
       console.log('God Mode Animation abgeschlossen!');
-      // Aktiviere God Mode nach der Animation
       if (typeof onGodModeActivate === 'function') {
         onGodModeActivate();
       }
       onClose();
-    }, 1500);
+    }, 2500); // Längere Dauer für das Video
   };
+
+  // Automatischer Login wenn Credentials vorhanden
+  useEffect(() => {
+    if (open && savedCredentials) {
+      handleLogin();
+    }
+  }, [open]);
 
   return (
     <Dialog 
@@ -128,7 +179,27 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
         fontSize: '1.5rem',
         textShadow: '0 0 10px #00ffff'
       }}>
-        🔮 Enter God Mode 🔮
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <img 
+            src="/thunder.png" 
+            alt="Thunder"
+            style={{ 
+              width: '24px',
+              height: '24px',
+              filter: 'drop-shadow(0 0 5px #00ffff)'
+            }} 
+          />
+          Enter God Mode
+          <img 
+            src="/thunder.png" 
+            alt="Thunder"
+            style={{ 
+              width: '24px',
+              height: '24px',
+              filter: 'drop-shadow(0 0 5px #00ffff)'
+            }} 
+          />
+        </Box>
       </DialogTitle>
       
       <DialogContent>
@@ -139,22 +210,26 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
             </Alert>
           )}
           
-          <TextField
-            label="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            variant="outlined"
-            disabled={loading || needs2FA}
-          />
+          {!savedCredentials && (
+            <TextField
+              label="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              variant="outlined"
+              disabled={loading || needs2FA}
+            />
+          )}
           
-          <TextField
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            variant="outlined"
-            disabled={loading || needs2FA}
-          />
+          {!savedCredentials && (
+            <TextField
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              variant="outlined"
+              disabled={loading || needs2FA}
+            />
+          )}
           
           {needs2FA && (
             <TextField

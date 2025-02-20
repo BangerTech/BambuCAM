@@ -14,11 +14,12 @@ from src.routes.notifications import notifications_bp
 from src.routes.stream import stream_bp
 from src.routes.printers import printers_bp
 from src.routes.cloud import cloud_bp
-from src.godmode.routes import godmode_bp
 import logging  # Standard Python logging
 from src.routes import register_blueprints
 import os
 from pathlib import Path
+from src.godmode.godmode_scanner import scanner as godmode_scanner
+from dataclasses import asdict
 
 # Logging-Konfiguration
 logging.basicConfig(
@@ -124,6 +125,8 @@ def register_blueprints(app):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(stream_bp)
     app.register_blueprint(printers_bp)
+    # Registriere den God Mode Blueprint
+    from src.godmode.routes import godmode_bp
     app.register_blueprint(godmode_bp)
 
 if __name__ == '__main__':

@@ -53,28 +53,21 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
 
     console.log('Header: handlePressStart');
     // Starte den Timer für God Mode
-    const timer = setTimeout(() => {
-      // Timer abgelaufen
-      if (progress >= 100) {
-        if (isGodMode) {
-          // Deaktiviere God Mode
-          setIsGodMode(false);
-          localStorage.removeItem('godMode');
-          // Animation rückwärts
-          document.body.style.transition = 'all 0.5s ease';
-          document.body.style.filter = 'brightness(0.8) contrast(0.9) hue-rotate(-180deg)';
-          setTimeout(() => {
-            document.body.style.filter = '';
-          }, 500);
-        } else {
-          // Zeige God Mode Login Dialog
-          console.log('God Mode Login wird angezeigt...');
-          setIsGodModeLogin(true);
-          setShowLoginDialog(true);
-          // Nicht direkt aktivieren - warte auf erfolgreichen Login
+    const timer = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(timer);
+          // Timer abgelaufen
+          if (!isGodMode) {
+            console.log('God Mode Login wird angezeigt...');
+            setIsGodModeLogin(true);
+            setShowLoginDialog(true);
+          }
+          return 0;
         }
-      }
-    }, 2000);
+        return prev + 2;
+      });
+    }, 40);
     setPressTimer(timer);
   };
 
@@ -156,8 +149,6 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
         alignItems: 'center',
         flex: '0 0 auto',
         marginLeft: isExtraSmall ? '8px' : isMobile ? '12px' : '20px',
-        width: isExtraSmall ? '24px' : isMobile ? '30px' : '40px',
-        height: isExtraSmall ? '24px' : isMobile ? '30px' : '40px'
       }}>
         <Tooltip title={`Toggle ${isDarkMode ? 'Light' : 'Dark'} Mode`} arrow>
           <img 
@@ -165,7 +156,6 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
             alt="BambuCam" 
             style={{
               height: isExtraSmall ? '24px' : isMobile ? '30px' : '40px',
-              width: isExtraSmall ? '24px' : isMobile ? '30px' : '40px',
               cursor: 'pointer',
               transition: 'transform 0.3s ease',
               transform: 'scale(1)'

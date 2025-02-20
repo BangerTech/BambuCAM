@@ -332,15 +332,17 @@ const AddPrinterDialog = ({
         <NeonButton onClick={onClose}>
           Cancel
         </NeonButton>
-        <NeonButton onClick={() => {
-          const printerData = {
-            ...newPrinter,
-            streamUrl: newPrinter.type === 'BAMBULAB' 
-              ? `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`
-              : `http://${newPrinter.ip}:8080/?action=stream`
-          };
-          onAdd(printerData);
-        }}
+        <NeonButton 
+          onClick={() => {
+            const printerData = {
+              ...newPrinter,
+              streamUrl: newPrinter.type === 'BAMBULAB' 
+                ? `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`
+                : `http://${newPrinter.ip}:8080/?action=stream`
+            };
+            console.log('Sending printer data:', printerData);
+            onAdd(printerData);
+          }}
           disabled={isAdding || !newPrinter.name || !newPrinter.ip || (newPrinter.type === 'BAMBULAB' && !newPrinter.accessCode)}
         >
           {isAdding ? <CircularProgress size={24} /> : 'Add'}

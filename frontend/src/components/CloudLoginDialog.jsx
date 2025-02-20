@@ -72,7 +72,7 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (isLoading) return; // Verhindert doppelte Ausführung
+    if (isLoading) return;
     
     try {
       setIsLoading(true);
@@ -99,7 +99,11 @@ const CloudLoginDialog = ({ open, onClose, onLogin }) => {
         return;
       }
       
-      if (data.success) {
+      if (data.success && data.token) {
+        // Speichere Token
+        localStorage.setItem('cloudToken', data.token);
+        
+        // Rufe onLogin mit den Daten auf
         await onLogin(data);
         onClose();
       } else {

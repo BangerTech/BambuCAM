@@ -3,12 +3,14 @@ import {
   Dialog, DialogTitle, DialogContent, Box, CircularProgress, 
   List, ListItem, ListItemText, ListItemSecondaryAction, 
   IconButton, Typography, Tabs, Tab, Divider, Button,
-  Tooltip
+  Tooltip, TextField, FormControl, InputLabel, Select, MenuItem,
+  Paper, Grid
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import styled from '@emotion/styled';
 import { API_URL } from '../config';
+import SearchIcon from '@mui/icons-material/Search';
 
 const StyledDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
@@ -34,11 +36,17 @@ const StyledDialog = styled(Dialog)(({ theme }) => ({
   }
 }));
 
-const GodModeAddPrinterDialog = ({ open, onClose, onAdd }) => {
+const GodModeAddPrinterDialog = ({ open, onClose, onAdd, printers }) => {
   const [scanning, setScanning] = useState(false);
-  const [printers, setPrinters] = useState({ lan: [], cloud: [] });
+  const [scannedPrinters, setScannedPrinters] = useState({ lan: [], cloud: [] });
   const [activeTab, setActiveTab] = useState(0);
   const [scanProgress, setScanProgress] = useState(0);
+  const [manualPrinter, setManualPrinter] = useState({
+    name: '',
+    ip: '',
+    type: 'BAMBULAB',
+    accessCode: ''
+  });
   
   const startScan = async () => {
     setScanning(true);
@@ -50,13 +58,26 @@ const GodModeAddPrinterDialog = ({ open, onClose, onAdd }) => {
         setScanProgress(prev => Math.min(prev + 2, 95));
       }, 100);
 
-      const response = await fetch(`${API_URL}/godmode/scan`);
-      const data = await response.json();
+      // Starte beide Scans parallel
+      const [lanResponse, cloudResponse] = await Promise.all([
+        fetch(`${API_URL}/api/godmode/scan`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('cloudToken')}`
+          }
+        }),
+        fetch(`${API_URL}/cloud/printers`)
+      ]);
+      
+      const lanData = await lanResponse.json();
+      const cloudData = await cloudResponse.json();
       
       clearInterval(progressInterval);
       setScanProgress(100);
       
-      setPrinters(data);
+      setScannedPrinters({
+        lan: lanData.printers || [],
+        cloud: cloudData.devices || []
+      });
     } catch (error) {
       console.error('God Mode Scan failed:', error);
     } finally {
@@ -64,14 +85,44 @@ const GodModeAddPrinterDialog = ({ open, onClose, onAdd }) => {
     }
   };
 
-  useEffect(() => {
-    if (open) {
-      startScan();
-    }
-  }, [open]);
-
   const handleAddPrinter = (printer, type) => {
     onAdd({ ...printer, isCloud: type === 'cloud' });
+  };
+
+  const handleManualAdd = () => {
+    const printerData = {
+      ...manualPrinter,
+      streamUrl: manualPrinter.type === 'BAMBULAB' 
+        ? `rtsps://bblp:${manualPrinter.accessCode}@${manualPrinter.ip}:322/streaming/live/1`
+        : `http://${manualPrinter.ip}:8080/?action=stream`
+    };
+    
+    handleAddPrinter(printerData, 'lan');
+    setManualPrinter({
+      name: '',
+      ip: '',
+      type: 'BAMBULAB',
+      accessCode: ''
+    });
+  };
+
+  const textFieldStyle = {
+    '& .MuiOutlinedInput-root': {
+      '& fieldset': { borderColor: '#00ffff' },
+      '&:hover fieldset': { borderColor: '#00ffff' },
+      '&.Mui-focused fieldset': { borderColor: '#00ffff' }
+    },
+    '& .MuiInputLabel-root': { color: '#00ffff' },
+    '& .MuiInputBase-input': { color: '#00ffff' }
+  };
+
+  const buttonStyle = {
+    color: '#00ffff',
+    borderColor: '#00ffff',
+    '&:hover': {
+      borderColor: '#00ffff',
+      backgroundColor: 'rgba(0, 255, 255, 0.1)'
+    }
   };
 
   return (
@@ -87,112 +138,211 @@ const GodModeAddPrinterDialog = ({ open, onClose, onAdd }) => {
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <Typography variant="h6">God Mode Printer Discovery</Typography>
-        <Tooltip title="Rescan">
-          <IconButton 
-            onClick={startScan}
-            disabled={scanning}
-            sx={{ color: '#00ffff' }}
-          >
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+        <Typography component="div" variant="h6">God Mode Printer Discovery</Typography>
       </DialogTitle>
 
       <DialogContent>
-        {scanning ? (
+        <Box sx={{ width: '100%', mb: 2 }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={(e, v) => setActiveTab(v)}
+            sx={{
+              '& .MuiTab-root': { color: '#00ffff' },
+              '& .Mui-selected': { color: '#00ffff !important' },
+              '& .MuiTabs-indicator': { backgroundColor: '#00ffff' }
+            }}
+          >
+            <Tab label="LAN PRINTERS" />
+            <Tab label="CLOUD PRINTERS" />
+          </Tabs>
+        </Box>
+
+        {scanning && (
           <Box sx={{ 
             display: 'flex', 
             flexDirection: 'column', 
-            alignItems: 'center', 
-            p: 3 
+            alignItems: 'center',
+            p: 3,
+            background: 'rgba(0, 255, 255, 0.05)',
+            borderRadius: '10px',
+            border: '1px solid rgba(0, 255, 255, 0.1)'
           }}>
             <CircularProgress 
               variant="determinate" 
               value={scanProgress} 
               sx={{ color: '#00ffff', mb: 2 }} 
             />
-            <Typography>
-              Scanning for printers... {scanProgress}%
+            <Typography sx={{ color: '#00ffff' }}>
+              Scanning network... {scanProgress}%
             </Typography>
           </Box>
-        ) : (
-          <Box>
-            <Tabs 
-              value={activeTab} 
-              onChange={(e, v) => setActiveTab(v)}
-              sx={{
-                '& .MuiTab-root': { color: '#00ffff' },
-                '& .Mui-selected': { color: '#00ffff !important' },
-                '& .MuiTabs-indicator': { backgroundColor: '#00ffff' }
-              }}
-            >
-              <Tab label="LAN Printers" />
-              <Tab label="Cloud Printers" />
-            </Tabs>
+        )}
 
-            <Box sx={{ mt: 2 }}>
-              {activeTab === 0 ? (
-                <List>
-                  {printers.lan.map((printer) => (
-                    <ListItem 
-                      key={printer.id}
-                      sx={{
-                        border: '1px solid rgba(0, 255, 255, 0.2)',
-                        borderRadius: '8px',
-                        mb: 1,
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 255, 255, 0.05)'
-                        }
-                      }}
+        {activeTab === 0 && !scanning && (
+          <Box>
+            <Paper sx={{
+              p: 2,
+              mb: 3,
+              background: 'rgba(0, 0, 0, 0.6)',
+              border: '1px solid rgba(0, 255, 255, 0.2)',
+              borderRadius: '10px'
+            }}>
+              <Typography variant="h6" sx={{ mb: 2, color: '#00ffff' }}>
+                Manual Add
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth sx={textFieldStyle}>
+                    <InputLabel>Printer Type</InputLabel>
+                    <Select
+                      value={manualPrinter.type}
+                      onChange={(e) => setManualPrinter(prev => ({ ...prev, type: e.target.value }))}
+                      label="Printer Type"
                     >
-                      <ListItemText 
-                        primary={printer.name}
-                        secondary={printer.ip}
-                      />
-                      <ListItemSecondaryAction>
-                        <IconButton
-                          onClick={() => handleAddPrinter(printer, 'lan')}
-                          sx={{ color: '#00ffff' }}
-                        >
-                          <AddIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  ))}
-                </List>
-              ) : (
-                <List>
-                  {printers.cloud.map((printer) => (
-                    <ListItem 
-                      key={printer.id}
-                      sx={{
-                        border: '1px solid rgba(0, 255, 255, 0.2)',
-                        borderRadius: '8px',
-                        mb: 1,
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 255, 255, 0.05)'
-                        }
-                      }}
-                    >
-                      <ListItemText 
-                        primary={printer.name}
-                        secondary={`Device ID: ${printer.dev_id}`}
-                      />
-                      <ListItemSecondaryAction>
-                        <IconButton
-                          onClick={() => handleAddPrinter(printer, 'cloud')}
-                          sx={{ color: '#00ffff' }}
-                        >
-                          <AddIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-            </Box>
+                      <MenuItem value="BAMBULAB">Bambu Lab</MenuItem>
+                      <MenuItem value="CREALITY">Creality</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                {manualPrinter.type === 'BAMBULAB' && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Access Code"
+                      value={manualPrinter.accessCode}
+                      onChange={(e) => setManualPrinter(prev => ({ ...prev, accessCode: e.target.value }))}
+                      sx={textFieldStyle}
+                    />
+                  </Grid>
+                )}
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Name"
+                    value={manualPrinter.name}
+                    onChange={(e) => setManualPrinter(prev => ({ ...prev, name: e.target.value }))}
+                    sx={textFieldStyle}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="IP Address"
+                    value={manualPrinter.ip}
+                    onChange={(e) => setManualPrinter(prev => ({ ...prev, ip: e.target.value }))}
+                    sx={textFieldStyle}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button
+                    variant="outlined"
+                    onClick={handleManualAdd}
+                    disabled={!manualPrinter.name || !manualPrinter.ip || 
+                      (manualPrinter.type === 'BAMBULAB' && !manualPrinter.accessCode)}
+                    sx={buttonStyle}
+                  >
+                    Add Printer
+                  </Button>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            <Paper sx={{
+              p: 2,
+              background: 'rgba(0, 0, 0, 0.6)',
+              border: '1px solid rgba(0, 255, 255, 0.2)',
+              borderRadius: '10px'
+            }}>
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mb: 2 
+              }}>
+                <Typography variant="h6" sx={{ color: '#00ffff' }}>
+                  Network Scan
+                </Typography>
+                <Button
+                  variant="outlined"
+                  onClick={startScan}
+                  disabled={scanning}
+                  startIcon={<SearchIcon />}
+                  sx={buttonStyle}
+                >
+                  Scan Network
+                </Button>
+              </Box>
+
+              <List>
+                {scannedPrinters.lan?.map((printer) => (
+                  <ListItem 
+                    key={printer.id}
+                    sx={{
+                      border: '1px solid rgba(0, 255, 255, 0.1)',
+                      borderRadius: '8px',
+                      mb: 1,
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 255, 255, 0.05)'
+                      }
+                    }}
+                  >
+                    <ListItemText 
+                      primary={printer.name}
+                      secondary={printer.ip}
+                      sx={{ color: '#00ffff' }}
+                    />
+                    <ListItemSecondaryAction>
+                      <IconButton
+                        onClick={() => handleAddPrinter(printer, 'lan')}
+                        sx={{ color: '#00ffff' }}
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
           </Box>
+        )}
+
+        {activeTab === 1 && !scanning && (
+          <Paper sx={{
+            p: 2,
+            background: 'rgba(0, 0, 0, 0.6)',
+            border: '1px solid rgba(0, 255, 255, 0.2)',
+            borderRadius: '10px'
+          }}>
+            <List>
+              {scannedPrinters.cloud?.map((printer) => (
+                <ListItem 
+                  key={printer.id}
+                  sx={{
+                    border: '1px solid rgba(0, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    mb: 1,
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 255, 255, 0.05)'
+                    }
+                  }}
+                >
+                  <ListItemText 
+                    primary={printer.name}
+                    secondary={`Device ID: ${printer.dev_id}`}
+                    sx={{ color: '#00ffff' }}
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      onClick={() => handleAddPrinter(printer, 'cloud')}
+                      sx={{ color: '#00ffff' }}
+                    >
+                      <AddIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
         )}
       </DialogContent>
     </StyledDialog>

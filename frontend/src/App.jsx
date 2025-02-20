@@ -58,7 +58,7 @@ const App = () => {
   // States
   const [mode, setMode] = useState(() => localStorage.getItem('mode') || 'lan');
   const [isGodMode, setIsGodMode] = useState(() => localStorage.getItem('godMode') === 'true');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') !== 'light');
   const [printers, setPrinters] = useState([]);
   const [isLoginOpen, setLoginOpen] = useState(false);
   const [cloudPrinterDialogOpen, setCloudPrinterDialogOpen] = useState(false);
@@ -303,13 +303,34 @@ const App = () => {
             <AddPrinterDialog 
               open={showAddDialog}
               onClose={() => setShowAddDialog(false)}
-              onAdd={(printer) => {
-                setIsAdding(true);
-                // Hier die eigentliche Logik zum Hinzufügen des Druckers
-                console.log('Füge Drucker hinzu:', printer);
-                setPrinters(prev => [...prev, printer]);
-                setIsAdding(false);
-                setShowAddDialog(false);
+              onAdd={async (printer) => {
+                try {
+                  setIsAdding(true);
+                  console.log('Sende Drucker an Backend:', printer);
+                  
+                  const response = await fetch(`${API_URL}/printers`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(printer)
+                  });
+
+                  if (!response.ok) {
+                    throw new Error('Failed to add printer');
+                  }
+
+                  const data = await response.json();
+                  console.log('Drucker erfolgreich hinzugefügt:', data);
+                  
+                  // Aktualisiere die Drucker-Liste
+                  setPrinters(prev => [...prev, data]);
+                  setShowAddDialog(false);
+                } catch (error) {
+                  console.error('Fehler beim Hinzufügen des Druckers:', error);
+                } finally {
+                  setIsAdding(false);
+                }
               }}
               isAdding={isAdding}
               isDarkMode={isDarkMode}

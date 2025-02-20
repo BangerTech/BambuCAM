@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, useMediaQuery, useTheme, Button, Tooltip } from '@mui/material';
+import { Box, useMediaQuery, useTheme, Button, Tooltip, Typography } from '@mui/material';
 import GodModeBadge from './GodModeBadge';
 
 const GodModeHeader = ({ onThemeToggle, isDarkMode, onAddPrinter, isMobile }) => {
@@ -78,21 +78,27 @@ const GodModeHeader = ({ onThemeToggle, isDarkMode, onAddPrinter, isMobile }) =>
           onClick={onAddPrinter}
           sx={{
             background: 'rgba(0, 0, 0, 0.8)',
-            color: '#9333ea',
+            color: '#00ffff',
             borderRadius: '1.5rem',
             textTransform: 'none',
             padding: '8px 24px',
-            border: '0.15rem solid #9333ea',
+            border: '0.15rem solid #00ffff',
             backdropFilter: 'blur(10px)',
             animation: 'godModeButtonGlow 2s infinite',
             '@keyframes godModeButtonGlow': {
-              '0%': { boxShadow: '0 0 5px #9333ea' },
-              '50%': { boxShadow: '0 0 15px #9333ea' },
-              '100%': { boxShadow: '0 0 5px #9333ea' }
+              '0%': { boxShadow: '0 0 5px #00ffff' },
+              '50%': { boxShadow: '0 0 15px #00ffff' },
+              '100%': { boxShadow: '0 0 5px #00ffff' }
             },
             '&:hover': {
-              boxShadow: '0 0 5rem rgba(147, 51, 234, 0.6)',
+              boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
               background: 'rgba(0, 0, 0, 0.85)'
+            },
+            '& .hover-text': {
+              display: 'none'
+            },
+            '&:hover .hover-text': {
+              display: 'inline'
             }
           }}
         >
