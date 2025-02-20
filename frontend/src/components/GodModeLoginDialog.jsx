@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Dialog, DialogTitle, DialogContent, TextField, Button, Box, CircularProgress, Alert } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, TextField, Button, Box, CircularProgress, Alert, DialogActions } from '@mui/material';
 import { API_URL } from '../config';
 
 const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
@@ -9,27 +9,40 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
   const [needs2FA, setNeeds2FA] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [savedCredentials, setSavedCredentials] = useState(() => {
-    // Prüfe ob gespeicherte Credentials existieren
-    const saved = sessionStorage.getItem('godModeCredentials');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [savedCredentials, setSavedCredentials] = useState(null);
   const mounted = useRef(true);
 
   useEffect(() => {
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+    if (open) {
+      // Prüfe auf gespeicherte Credentials in bambu_cloud.json
+      fetch(`${API_URL}/cloud/check-credentials`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.hasCredentials) {
+            setSavedCredentials({
+              email: data.email,
+              useStoredCredentials: true
+            });
+            // Starte direkt den Login-Prozess
+            handleLogin();
+          }
+        })
+        .catch(error => {
+          console.error('Error checking credentials:', error);
+        });
+    }
+    return () => { mounted.current = false; };
+  }, [open]);
 
   const handleLogin = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // Verwende gespeicherte Credentials falls vorhanden
-      const loginEmail = savedCredentials?.email || email;
-      const loginPassword = savedCredentials?.password || password;
+      const loginData = savedCredentials || {
+        email: email,
+        password: password
+      };
       
       const response = await fetch(`${API_URL}/cloud/login`, {
         method: 'POST',
@@ -37,55 +50,47 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: loginEmail,
-          password: loginPassword,
-          verification_code: needs2FA ? verificationCode : undefined
+          email: loginData.email,
+          useStoredCredentials: Boolean(savedCredentials),
+          password: savedCredentials ? undefined : loginData.password,
+          verification_code: verificationCode ? verificationCode : undefined
         }),
       });
-
-      if (!response.ok) {
-        // Bei Fehler: Lösche gespeicherte Credentials
-        sessionStorage.removeItem('godModeCredentials');
-        setSavedCredentials(null);
-        throw new Error('Login failed');
-      }
 
       const data = await response.json();
       console.log('Login response:', data);
 
       if (data.needs_verification) {
         setNeeds2FA(true);
-        setError('2FA erforderlich. Bitte prüfen Sie Ihre E-Mail für den Code.');
+        setError(data.message || '2FA required. Please check your email for the code.');
         return;
+      }
+
+      if (!data.success) {
+        setSavedCredentials(null);
+        throw new Error(data.error || 'Login failed');
       }
 
       if (data.success && data.token) {
         // Speichere Token
         localStorage.setItem('cloudToken', data.token);
         
-        // Speichere erfolgreiche Credentials für die Session
-        if (!savedCredentials) {
-          const credentials = { email: loginEmail, password: loginPassword };
-          sessionStorage.setItem('godModeCredentials', JSON.stringify(credentials));
-          setSavedCredentials(credentials);
-        }
-        
         // Coole Aktivierungs-Animation
         startGodModeAnimation();
       } else if (data.error) {
         setError(data.error);
         if (needs2FA) {
-          // Bei 2FA Fehler: Zurück zum normalen Login
+          // On 2FA error: Back to normal login
           setNeeds2FA(false);
           setVerificationCode('');
         }
       } else {
-        setError('Login fehlgeschlagen');
+        setError('Login failed');
       }
     } catch (err) {
       console.log('Login error:', err);
       if (mounted.current) {
-        setError('Verbindungsfehler');
+        setError('Connection error');
       }
     } finally {
       if (mounted.current) {
@@ -152,12 +157,23 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
     }, 2500); // Längere Dauer für das Video
   };
 
-  // Automatischer Login wenn Credentials vorhanden
-  useEffect(() => {
-    if (open && savedCredentials) {
-      handleLogin();
+  const handleReset = async () => {
+    try {
+      const response = await fetch(`${API_URL}/cloud/reset-credentials`, {
+        method: 'POST'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSavedCredentials(null);
+        setNeeds2FA(false);
+        setError(null);
+        // Optional: Zeige Erfolgs-Nachricht
+      }
+    } catch (error) {
+      console.error('Error resetting credentials:', error);
+      setError('Failed to reset credentials');
     }
-  }, [open]);
+  };
 
   return (
     <Dialog 
@@ -205,7 +221,12 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ 
+              mb: 2,
+              background: 'rgba(255, 0, 0, 0.1)',
+              border: '1px solid rgba(255, 0, 0, 0.3)',
+              color: '#ff4444'
+            }}>
               {error}
             </Alert>
           )}
@@ -217,6 +238,25 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
               onChange={(e) => setEmail(e.target.value)}
               variant="outlined"
               disabled={loading || needs2FA}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': {
+                    borderColor: 'rgba(0, 255, 255, 0.5)',
+                  },
+                  '&:hover fieldset': {
+                    borderColor: '#00ffff',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#00ffff',
+                  }
+                },
+                '& .MuiInputLabel-root': {
+                  color: '#00ffff'
+                },
+                '& .MuiInputBase-input': {
+                  color: '#00ffff'
+                }
+              }}
             />
           )}
           
@@ -259,6 +299,25 @@ const GodModeLoginDialog = ({ open, onClose, onGodModeActivate }) => {
           </Button>
         </Box>
       </DialogContent>
+      <DialogActions>
+        {needs2FA && (
+          <Button
+            onClick={handleReset}
+            sx={{
+              mr: 'auto',
+              color: '#ff4444',
+              borderColor: 'rgba(255, 0, 0, 0.5)',
+              '&:hover': {
+                borderColor: '#ff4444',
+                backgroundColor: 'rgba(255, 0, 0, 0.1)'
+              }
+            }}
+          >
+            Reset Login
+          </Button>
+        )}
+        <Button onClick={onClose}>Cancel</Button>
+      </DialogActions>
     </Dialog>
   );
 };

@@ -19,14 +19,49 @@ def cloud_login():
     try:
         data = request.get_json()
         email = data.get('email')
-        password = data.get('password')
         verification_code = data.get('verification_code')
+        use_stored = data.get('useStoredCredentials', False)
         
-        if not email or not password:
-            return jsonify({'error': 'Email and password required'}), 400
+        # Wenn useStoredCredentials true ist, verwende gespeicherte Credentials
+        if use_stored:
+            if os.path.exists(Config.BAMBU_CLOUD_FILE):
+                with open(Config.BAMBU_CLOUD_FILE, 'r') as f:
+                    config = json.load(f)
+                    password = config.get('password')
+                    # Wenn kein Verification Code übergeben wurde, prüfe ob der letzte noch gültig ist
+                    if not verification_code:
+                        # Versuche Login ohne Code
+                        result = bambu_cloud_service.login(email, password)
+                        if not result.get('needs_verification'):
+                            return jsonify(result)
+                        # Wenn Verification benötigt wird, gib das zurück
+                        return jsonify({
+                            'needs_verification': True,
+                            'message': 'Please enter the verification code'
+                        })
+            else:
+                return jsonify({'error': 'No stored credentials found'}), 400
+        else:
+            if not data.get('password'):
+                return jsonify({'error': 'Password required'}), 400
+            password = data.get('password')
+        
+        if not email:
+            return jsonify({'error': 'Email required'}), 400
             
         # 1. Login zur Cloud API
         result = bambu_cloud_service.login(email, password, verification_code)
+        
+        # Wenn der Code abgelaufen ist, automatisch einen neuen anfordern
+        if (result.get('error') and 
+            'Code does not exist or has expired' in result.get('error')):
+            # Neuen Login-Versuch ohne Code um neuen Code anzufordern
+            result = bambu_cloud_service.login(email, password)
+            if result.get('needs_verification'):
+                return jsonify({
+                    'needs_verification': True,
+                    'message': 'A new verification code has been sent to your email'
+                })
         
         if result.get('success'):
             # 2. Speichere erfolgreiche Zugangsdaten
@@ -76,4 +111,32 @@ def get_cloud_status():
         return jsonify({'connected': False})
     except Exception as e:
         logger.error(f"Error getting cloud status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@cloud_bp.route('/api/cloud/check-credentials', methods=['GET'])
+def check_credentials():
+    """Prüft ob gespeicherte Cloud-Credentials existieren"""
+    try:
+        config_file = os.path.join(Config.BAMBU_CLOUD_DIR, 'bambu_cloud.json')
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                return jsonify({
+                    'hasCredentials': True,
+                    'email': config.get('email')
+                })
+        return jsonify({'hasCredentials': False})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@cloud_bp.route('/api/cloud/reset-credentials', methods=['POST'])
+@cross_origin()
+def reset_credentials():
+    """Löscht die gespeicherten Cloud-Credentials"""
+    try:
+        if os.path.exists(Config.BAMBU_CLOUD_FILE):
+            os.remove(Config.BAMBU_CLOUD_FILE)
+            return jsonify({'success': True, 'message': 'Credentials successfully reset'})
+        return jsonify({'success': True, 'message': 'No credentials found'})
+    except Exception as e:
         return jsonify({'error': str(e)}), 500 

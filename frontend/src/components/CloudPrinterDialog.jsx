@@ -69,7 +69,6 @@ const CloudPrinterDialog = ({ open, onClose }) => {
 
   useEffect(() => {
     if (open) {
-      console.log('Dialog opened, fetching printers...');
       fetchPrinters();
     }
   }, [open]);
@@ -77,48 +76,14 @@ const CloudPrinterDialog = ({ open, onClose }) => {
   const fetchPrinters = async () => {
     try {
       setLoading(true);
-      console.log('Fetching cloud printers...');
-      
-      const response = await fetch(`${API_URL}/api/cloud/printers`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      console.log('Response:', {
-        status: response.status,
-        statusText: response.statusText
-      });
-      
+      const response = await fetch(`${API_URL}/api/cloud/printers`);
       const data = await response.json();
-      console.log('Response data:', data);
-      
-      if (Array.isArray(data) && data.length > 0) {
-        console.log('Found printers:', data);
-        const cloudPrinters = data.map(printer => {
-          console.log('Mapping printer:', printer);
-          return {
-            name: printer.name,
-            ip: null,
-            accessCode: printer.access_code,
-            model: printer.model,
-            online: printer.online,
-            isCloud: true,
-            cloudId: printer.id,
-            status: printer.status,
-            type: 'CLOUD'
-          };
-        });
-        console.log('Mapped printers:', cloudPrinters);
-        setPrinters(cloudPrinters);
-      } else {
-        console.log('No printers found');
-        setPrinters([]);
+      if (Array.isArray(data)) {
+        setPrinters(data);
       }
     } catch (error) {
-      console.error('Fetch error:', error);
-      setError('Network error');
+      console.error('Error fetching printers:', error);
+      setError('Failed to fetch printers');
     } finally {
       setLoading(false);
     }

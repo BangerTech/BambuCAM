@@ -18,7 +18,6 @@ import logging  # Standard Python logging
 from src.routes import register_blueprints
 import os
 from pathlib import Path
-from src.godmode.godmode_scanner import scanner as godmode_scanner
 from dataclasses import asdict
 
 # Logging-Konfiguration

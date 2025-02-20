@@ -5,8 +5,9 @@ import CloudLoginDialog from './CloudLoginDialog';
 import GodModeLoginDialog from './GodModeLoginDialog';
 import GodModeBadge from './GodModeBadge';
 import { NeonSwitch } from '../styles/NeonSwitch';
+import { API_URL } from '../config';
 
-const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, onGodModeActivate, isGodMode }) => {
+const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, onGodModeActivate, isGodMode, onCloudLoginSuccess }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isExtraSmall = useMediaQuery('(max-width:375px)');
@@ -14,6 +15,7 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
   const [progress, setProgress] = useState(0);
   const [showLoginDialog, setShowLoginDialog] = React.useState(false);
   const [isGodModeLogin, setIsGodModeLogin] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   // Speichere den Progress-Status
   const progressRef = React.useRef(0);
@@ -91,8 +93,40 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
     }
     
     if (mode === 'lan') {
-      setShowLoginDialog(true);
-      setIsGodModeLogin(false);
+      setIsGodModeLogin(false);  // Reset God Mode Login State
+      // Prüfe ob gespeicherte Credentials existieren
+      fetch(`${API_URL}/cloud/check-credentials`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.hasCredentials) {
+            // Wenn ja, starte direkt den Login-Prozess mit Verification
+            fetch(`${API_URL}/cloud/login`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                email: data.email,
+                useStoredCredentials: true
+              })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.needs_verification) {
+                setShowLoginDialog(true);
+                setNeedsVerification(true);
+              } else if (data.success && data.token) {
+                // Wenn kein Verification Code benötigt wird
+                localStorage.setItem('cloudToken', data.token);
+                onModeChange('cloud');
+              }
+            });
+          } else {
+            // Nur wenn keine Credentials existieren, normalen Login Dialog zeigen
+            setShowLoginDialog(true);
+            setIsGodModeLogin(false);
+          }
+        });
     } else {
       onModeChange('lan');
     }
@@ -101,16 +135,14 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
   const handleLoginSuccess = (token) => {
     setShowLoginDialog(false);
     localStorage.setItem('cloudToken', token);
-    // Unterscheide zwischen God Mode und normalem Cloud Login
     if (isGodModeLogin) {
       console.log('God Mode Login erfolgreich!');
-      // Aktiviere God Mode nach erfolgreichem Login
-      if (typeof onGodModeActivate === 'function') {
-        onGodModeActivate();
-      }
+      onGodModeActivate();
     } else {
       console.log('Normaler Cloud Login erfolgreich!');
       onModeChange('cloud');
+      setShowLoginDialog(false);
+      setNeedsVerification(false);
     }
   };
 
@@ -262,24 +294,23 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter, o
           </Button>
         )}
       </Box>
-      {isGodModeLogin ? (
-        <GodModeLoginDialog
-          open={showLoginDialog}
-          onClose={() => {
-            setShowLoginDialog(false);
-            setIsGodModeLogin(false);
-          }}
-          onGodModeActivate={onGodModeActivate}
-        />
-      ) : (
+      {!isGodModeLogin ? (
         <CloudLoginDialog
           open={showLoginDialog}
           onClose={() => {
             setShowLoginDialog(false);
-            setIsGodModeLogin(false);
+            setNeedsVerification(false);  // Reset beim Schließen
+            setIsGodModeLogin(false);     // Reset God Mode Login State
           }}
           onLogin={handleLoginSuccess}
-          title="Cloud Login"
+          needsVerification={needsVerification}
+          setNeedsVerification={setNeedsVerification}
+        />
+      ) : (
+        <GodModeLoginDialog
+          open={showLoginDialog}
+          onClose={() => setShowLoginDialog(false)}
+          onLogin={handleLoginSuccess}
         />
       )}
     </Box>

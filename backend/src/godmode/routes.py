@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from .scanner import god_mode_scan
+from .godmode_scanner import scanner as godmode_scanner
 from .auth import require_cloud_token
 from .types import Printer
 
@@ -14,7 +14,7 @@ async def scan_all_printers():
     """
     try:
         token = request.headers.get('Authorization').split(' ')[1]
-        results = await god_mode_scan(token)
+        results = await godmode_scanner.scan_network()
         return jsonify(results)
     except Exception as e:
         return jsonify({

@@ -136,10 +136,23 @@ const App = () => {
   });
 
   // Modifiziere den existierenden Mode Change Handler
-  const handleModeChange = (newMode) => {
-    if (isGodMode) return; // Ignoriere Mode-Änderungen im God Mode
-    setMode(newMode);
-    localStorage.setItem('mode', newMode);
+  const handleModeChange = async (newMode) => {
+    if (newMode === 'cloud') {
+      const token = localStorage.getItem('cloudToken');
+      if (token) {
+        // Wenn Token existiert, Cloud-Drucker laden
+        setMode('cloud');
+        localStorage.setItem('mode', 'cloud');
+        loadCloudPrinters(token);
+      } else {
+        // Login-Dialog öffnen
+        setLoginOpen(true);
+      }
+    } else {
+      setMode('lan');
+      localStorage.setItem('mode', 'lan');
+      localStorage.removeItem('cloudToken');
+    }
   };
 
   const handleThemeToggle = () => {
@@ -164,6 +177,7 @@ const App = () => {
     try {
       if (loginData.success && loginData.token) {
         localStorage.setItem('cloudToken', loginData.token);
+        localStorage.setItem('mode', 'cloud');
         
         const response = await fetch(`${API_URL}/cloud/printers`, {
           headers: {
@@ -173,8 +187,7 @@ const App = () => {
         
         if (response.ok) {
           const printers = await response.json();
-          setAvailableCloudPrinters(printers);
-          localStorage.setItem('mode', 'cloud');
+          setAvailableCloudPrinters(printers.devices || []);
           setLoginOpen(false);
           setCloudPrinterDialogOpen(true);
           // Login erfolgreich Event
@@ -185,8 +198,11 @@ const App = () => {
       }
     } catch (error) {
       console.error('Cloud login error:', error);
-      // Login fehlgeschlagen Event
       window.dispatchEvent(new Event('cloud-login-failed'));
+      // Bei Fehler zurück zu LAN
+      setMode('lan');
+      localStorage.setItem('mode', 'lan');
+      localStorage.removeItem('cloudToken');
       throw error;
     }
   };
@@ -247,6 +263,27 @@ const App = () => {
       loadCombinedPrinters(token);
     }
   }, []);
+
+  // Cloud-Drucker laden
+  const loadCloudPrinters = async (token) => {
+    try {
+      const response = await fetch(`${API_URL}/cloud/printers`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableCloudPrinters(data.devices || []);
+        setCloudPrinterDialogOpen(true);
+      }
+    } catch (error) {
+      console.error('Error loading cloud printers:', error);
+      setMode('lan');
+      localStorage.setItem('mode', 'lan');
+      localStorage.removeItem('cloudToken');
+    }
+  };
 
   return (
     <ThemeProvider theme={isDarkMode ? darkTheme : lightTheme}>
