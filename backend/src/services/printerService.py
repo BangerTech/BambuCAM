@@ -17,6 +17,7 @@ import struct
 import queue
 from .networkScanner import scanNetwork
 from .mqttService import mqtt_service
+from .octoprintService import octoprint_service
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -472,7 +473,26 @@ def addPrinter(data):
         }
 
         # Spezifische Konfiguration je nach Druckertyp
-        if printer['type'] == 'BAMBULAB':
+        if printer['type'] == 'OCTOPRINT':
+            printer.update({
+                'streamUrl': f"http://{data['ip']}/webcam/?action=stream",
+                'mqtt': {
+                    'broker': data['mqttBroker'],
+                    'port': data['mqttPort']
+                },
+                'octoprint': {
+                    'temperatures': {
+                        'tool0': {'actual': 0, 'target': 0},
+                        'bed': {'actual': 0, 'target': 0}
+                    },
+                    'currentFile': None
+                }
+            })
+            # Initialisiere OctoPrint Service
+            octoprint_service.add_printer(printer)
+            logger.info(f"OctoPrint service initialized for printer {printer['id']}")
+
+        elif printer['type'] == 'BAMBULAB':
             printer.update({
                 'accessCode': data.get('accessCode', ''),
                 'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"

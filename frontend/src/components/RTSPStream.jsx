@@ -65,8 +65,13 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       }
     }
     if (videoRef.current) {
-      videoRef.current.src = '';
-      videoRef.current.load();
+      // Prüfe ob es ein Video oder Image Element ist
+      if (videoRef.current instanceof HTMLVideoElement) {
+        videoRef.current.src = '';
+        videoRef.current.load();
+      } else if (videoRef.current instanceof HTMLImageElement) {
+        videoRef.current.src = '';
+      }
     }
     bufferQueue.current = [];
     isProcessing.current = false;
@@ -144,15 +149,37 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       setLoading(true);
       setError(null);
 
-      const video = videoRef.current;
-      if (!video) return;
-
       // Stream vom Backend anfordern
       const response = await fetch(`/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
       const data = await response.json();
       
       if (!data.success) {
         throw new Error(data.error || 'Failed to start stream');
+      }
+
+      // Wenn es ein direkter Stream ist (OctoPrint/Creality)
+      if (data.direct) {
+        const container = videoRef.current?.parentElement;
+        if (!container) return;
+
+        const img = document.createElement('img');
+        img.src = data.url;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'contain';
+        
+        img.onerror = () => {
+          setError('Failed to load video stream');
+          setLoading(false);
+        };
+        
+        img.onload = () => {
+          setLoading(false);
+        };
+
+        container.replaceChild(img, videoRef.current);
+        videoRef.current = img;
+        return;
       }
 
       // MediaSource Setup
@@ -169,7 +196,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
             sourceBuffer.addEventListener('updateend', () => {
               try {
                 if (sourceBuffer.buffered.length > 0) {
-                  const currentTime = video.currentTime;
+                  const currentTime = videoRef.current.currentTime;
                   const bufferEnd = sourceBuffer.buffered.end(0);
                   
                   if (bufferEnd - currentTime > 5) {
@@ -188,7 +215,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         });
       });
 
-      video.src = URL.createObjectURL(mediaSource);
+      videoRef.current.src = URL.createObjectURL(mediaSource);
 
       // WebSocket Setup
       const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
@@ -264,13 +291,44 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   // 6. Initialer Stream-Start und Cleanup
   useEffect(() => {
+    if (!printer) return;
+
+    // Für MJPEG Streams (OctoPrint und Creality)
+    if (printer.type === 'OCTOPRINT' || printer.type === 'CREALITY') {
+      const container = videoRef.current?.parentElement;
+      if (!container) return;
+
+      const img = document.createElement('img');
+      // Nutze die konfigurierte streamUrl für OctoPrint
+      img.src = printer.type === 'OCTOPRINT' ? printer.streamUrl : `http://${printer.ip}:8080/?action=stream`;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'contain';
+      
+      img.onerror = () => {
+        setError('Failed to load video stream');
+        setLoading(false);
+      };
+      
+      img.onload = () => {
+        setLoading(false);
+      };
+
+      container.replaceChild(img, videoRef.current);
+      videoRef.current = img;
+
+      // Cleanup Funktion
+      return () => {
+        if (videoRef.current instanceof HTMLImageElement) {
+          videoRef.current.src = '';
+        }
+      };
+    }
+
+    // Für Bambu Lab den WebSocket Stream
     initStream();
-    return () => {
-      console.debug('Component unmounting, cleaning up...');
-      mountedRef.current = false;
-      cleanup();
-    };
-  }, [initStream, cleanup]);
+    return cleanup;
+  }, [printer]);
 
   const processNextBuffer = useCallback(() => {
     if (!sourceBufferRef.current || !bufferQueue.current.length || isProcessing.current) {
@@ -845,7 +903,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   // Prüfe regelmäßig auf Datenverlust - nur für Bambu Lab
   useEffect(() => {
-    if (printer.type !== 'CREALITY') {
+    if (printer.type === 'BAMBULAB') {
       const checkInterval = setInterval(() => {
         if (Date.now() - lastDataReceived.current > 5000 && !isReconnecting.current) {
           console.log('Keine Daten für 5 Sekunden - Neustart');
@@ -865,9 +923,26 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       zIndex: 1
     }}>
       {printer.type === 'CREALITY' ? (
+        // Creality: Direkt das img-Element mit der Stream-URL
         <img 
-          src={streamUrl} 
-          alt="RTSP Stream" 
+          src={`http://${printer.ip}:8080/?action=stream`}
+          alt="Printer Stream" 
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: fullscreen ? 'contain' : 'cover'
+          }}
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            setError('Failed to load stream');
+            setLoading(false);
+          }}
+        />
+      ) : printer.type === 'OCTOPRINT' ? (
+        // OctoPrint: Auch direktes img-Element
+        <img 
+          src={printer.streamUrl}
+          alt="Printer Stream" 
           style={{
             width: '100%',
             height: '100%',
@@ -880,6 +955,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
           }}
         />
       ) : (
+        // Bambu Lab: WebSocket Video-Stream
         <video
           ref={videoRef}
           autoPlay

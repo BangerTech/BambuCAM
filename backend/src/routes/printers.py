@@ -16,6 +16,7 @@ import requests
 import os
 from src.config import Config  # Importiere Config
 from src.services.mqttService import mqtt_service
+from src.services.octoprintService import octoprint_service
 
 logger = logging.getLogger(__name__)
 printers_bp = Blueprint('printers', __name__, url_prefix='/api')
@@ -143,18 +144,23 @@ def scan_network():
 
 @printers_bp.route('/printers/<printer_id>/status', methods=['GET'])
 def get_printer_status(printer_id: str):
-    """Holt den Status eines Druckers"""
     try:
-        # Hole den Drucker aus der Datenbank
         printer = getPrinterById(printer_id)
         
         if printer['type'] == 'BAMBULAB':
-            # Neue MQTT-Logik für Bambulab
+            # Bestehender Bambulab Code bleibt unverändert
             status = mqtt_service.get_printer_status(printer_id)
-            logger.debug(f"Returning Bambulab status: {status}")
             return jsonify(status)
+        elif printer['type'] == 'OCTOPRINT':
+            # Hole Status vom OctoPrint Service
+            status = octoprint_service.get_printer_status(printer_id)
+            return jsonify(status or {
+                'temps': {'hotend': 0, 'bed': 0},
+                'status': 'offline',
+                'progress': 0
+            })
         else:
-            # Existierende Logik für Creality
+            # Bestehender Code für Creality bleibt unverändert
             printer_file = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
             with open(printer_file, 'r') as f:
                 printer_data = json.load(f)
@@ -166,7 +172,6 @@ def get_printer_status(printer_id: str):
                     ip=printer_data['ip']
                 )
             
-            logger.debug(f"Returning Creality status: {printer_data}")
             return jsonify(printer_data)
             
     except Exception as e:
@@ -185,4 +190,39 @@ def update_status(printer_id):
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Error updating printer status: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@printers_bp.route('/api/printers/octoprint/add', methods=['POST'])
+@cross_origin()
+def add_octoprint_printer():
+    try:
+        data = request.get_json()
+        
+        # Validiere erforderliche Felder
+        required = ['ip', 'name', 'mqttBroker', 'mqttPort']
+        if not all(field in data for field in required):
+            return jsonify({'error': 'Missing required fields'}), 400
+            
+        # Füge Drucker hinzu
+        printer_data = {
+            'id': str(uuid.uuid4()),
+            'type': 'OCTOPRINT',
+            'name': data['name'],
+            'ip': data['ip'],
+            'mqttBroker': data['mqttBroker'],
+            'mqttPort': data['mqttPort'],
+            'streamUrl': f"http://{data['ip']}/webcam/?action=stream",
+            'status': 'connecting'
+        }
+        
+        # Speichere in PrinterService
+        printer = addPrinter(printer_data)
+        
+        # Füge zu OctoPrint Service hinzu
+        octoprint_service.add_printer(printer)
+        
+        return jsonify({'success': True, 'printer': printer})
+        
+    except Exception as e:
+        logger.error(f"Error adding OctoPrint printer: {e}")
         return jsonify({'error': str(e)}), 500 

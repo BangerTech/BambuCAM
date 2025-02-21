@@ -102,20 +102,11 @@ const ScanButton = styled(Button)({
   }
 });
 
-const PRINTER_TYPES = {
-  BAMBULAB: {
-    name: 'Bambu Lab',
-    streamUrlTemplate: 'rtsps://bblp:{accessCode}@{ip}:322/streaming/live/1',
-  },
-  CREALITY: {
-    name: 'Creality',
-    streamUrlTemplate: 'http://{ip}:8080/?action=stream',
-  },
-  CUSTOM: {
-    name: 'Custom / Other',
-    streamUrlTemplate: '',
-  }
-};
+const PRINTER_TYPES = [
+  { value: 'BAMBULAB', label: 'Bambu Lab' },
+  { value: 'CREALITY', label: 'Creality / Moonraker' },
+  { value: 'OCTOPRINT', label: 'OctoPrint' }
+];
 
 const AddPrinterDialog = ({ 
   open, 
@@ -129,20 +120,76 @@ const AddPrinterDialog = ({
   onScan
 }) => {
   const [showGuide, setShowGuide] = useState(false);
-  const [newPrinter, setNewPrinter] = useState({
+  const [printerData, setPrinterData] = useState({
     name: '',
     ip: '',
+    type: 'BAMBULAB',
     accessCode: '',
-    type: 'BAMBULAB'
+    mqttBroker: 'localhost',
+    mqttPort: 1883
   });
 
   const handleScannedPrinterSelect = (printer) => {
-    setNewPrinter({
+    setPrinterData({
       name: printer.name,
       ip: printer.ip,
       type: 'BAMBULAB',
-      accessCode: ''
+      accessCode: '',
+      mqttBroker: 'localhost',
+      mqttPort: 1883
     });
+  };
+
+  const handleInputChange = (field, value) => {
+    setPrinterData({
+      ...printerData,
+      [field]: value
+    });
+  };
+
+  const renderTypeSpecificFields = () => {
+    switch(printerData.type) {
+      case 'BAMBULAB':
+        return (
+          <NeonTextField
+            label="Access Code"
+            value={printerData.accessCode}
+            onChange={(e) => handleInputChange('accessCode', e.target.value)}
+            fullWidth
+            margin="normal"
+          />
+        );
+      
+      case 'OCTOPRINT':
+        return (
+          <Grid container spacing={2}>
+            <Grid item xs={8}>
+              <NeonTextField
+                label="MQTT Broker"
+                value={printerData.mqttBroker}
+                onChange={(e) => handleInputChange('mqttBroker', e.target.value)}
+                fullWidth
+                margin="normal"
+                helperText="MQTT Broker URL (default: localhost)"
+              />
+            </Grid>
+            <Grid item xs={4}>
+              <NeonTextField
+                label="MQTT Port"
+                value={printerData.mqttPort}
+                onChange={(e) => handleInputChange('mqttPort', e.target.value)}
+                type="number"
+                fullWidth
+                margin="normal"
+                helperText="default: 1883"
+              />
+            </Grid>
+          </Grid>
+        );
+      
+      default:
+        return null;
+    }
   };
 
   return (
@@ -257,8 +304,8 @@ const AddPrinterDialog = ({
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel sx={{ color: '#00ffff' }}>Printer Type</InputLabel>
           <Select
-            value={newPrinter.type}
-            onChange={(e) => setNewPrinter({ ...newPrinter, type: e.target.value })}
+            value={printerData.type}
+            onChange={(e) => handleInputChange('type', e.target.value)}
             label="Printer Type"
             sx={{ 
               color: '#00ffff',
@@ -291,8 +338,8 @@ const AddPrinterDialog = ({
               }
             }}
           >
-            {Object.entries(PRINTER_TYPES).map(([key, value]) => (
-              <MenuItem key={key} value={key}>{value.name}</MenuItem>
+            {PRINTER_TYPES.map((type) => (
+              <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
             ))}
           </Select>
         </FormControl>
@@ -302,27 +349,19 @@ const AddPrinterDialog = ({
           margin="dense"
           label="Printer Name"
           fullWidth
-          value={newPrinter.name}
-          onChange={(e) => setNewPrinter({ ...newPrinter, name: e.target.value })}
+          value={printerData.name}
+          onChange={(e) => handleInputChange('name', e.target.value)}
         />
 
         <NeonTextField
           margin="dense"
           label="IP Address"
           fullWidth
-          value={newPrinter.ip}
-          onChange={(e) => setNewPrinter({ ...newPrinter, ip: e.target.value })}
+          value={printerData.ip}
+          onChange={(e) => handleInputChange('ip', e.target.value)}
         />
 
-        {newPrinter.type === 'BAMBULAB' && (
-          <NeonTextField
-            margin="dense"
-            label="Access Code"
-            fullWidth
-            value={newPrinter.accessCode}
-            onChange={(e) => setNewPrinter({ ...newPrinter, accessCode: e.target.value })}
-          />
-        )}
+        {renderTypeSpecificFields()}
       </DialogContent>
 
       <DialogActions sx={{
@@ -333,15 +372,17 @@ const AddPrinterDialog = ({
           Cancel
         </NeonButton>
         <NeonButton onClick={() => {
-          const printerData = {
-            ...newPrinter,
-            streamUrl: newPrinter.type === 'BAMBULAB' 
-              ? `rtsps://bblp:${newPrinter.accessCode}@${newPrinter.ip}:322/streaming/live/1`
-              : `http://${newPrinter.ip}:8080/?action=stream`
+          const submitData = {
+            ...printerData,
+            streamUrl: printerData.type === 'BAMBULAB' 
+              ? `rtsps://bblp:${printerData.accessCode}@${printerData.ip}:322/streaming/live/1`
+              : printerData.type === 'OCTOPRINT'
+                ? `http://${printerData.ip}/webcam/?action=stream`
+                : `http://${printerData.ip}:8080/?action=stream`
           };
-          onAdd(printerData);
+          onAdd(submitData);
         }}
-          disabled={isAdding || !newPrinter.name || !newPrinter.ip || (newPrinter.type === 'BAMBULAB' && !newPrinter.accessCode)}
+          disabled={isAdding || !printerData.name || !printerData.ip || (printerData.type === 'BAMBULAB' && !printerData.accessCode)}
         >
           {isAdding ? <CircularProgress size={24} /> : 'Add'}
         </NeonButton>

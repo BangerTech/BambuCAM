@@ -40,13 +40,34 @@ class StreamService:
         self.next_port += 1
         return port
 
-    def start_stream(self, printer_id: str, url: str) -> dict:
+    def start_stream(self, printer_id: str, stream_url: str = None) -> dict:
         try:
-            logger.info(f"Starting stream for {printer_id}")
-            self.stop_stream(printer_id)  # Cleanup alter Stream
+            if not stream_url:
+                logger.error("No stream URL provided")
+                return {'success': False, 'error': 'No stream URL provided'}
 
+            logger.info(f"Starting stream for {printer_id}")
+            
+            # Hole Drucker-Informationen
+            from .printerService import getPrinterById
+            printer = getPrinterById(printer_id)
+            if not printer:
+                return {'success': False, 'error': 'Printer not found'}
+
+            # Für OctoPrint und Creality direkt die Stream-URL zurückgeben
+            if printer['type'] in ['OCTOPRINT', 'CREALITY']:
+                logger.info(f"Direct MJPEG stream for {printer['type']}")
+                return {
+                    'success': True,
+                    'direct': True,
+                    'url': stream_url
+                }
+
+            # Für andere Drucker (Bambu Lab) FFmpeg verwenden
+            self.stop_stream(printer_id)  # Cleanup alter Stream
+            
             # FFmpeg mit Retry
-            process = self._start_ffmpeg(url)
+            process = self._start_ffmpeg(stream_url)
             
             # WebSocket Server im Event Loop erstellen
             port = self.get_next_port()
@@ -58,39 +79,59 @@ class StreamService:
             
             # Stream-Überwachung
             monitor_future = asyncio.run_coroutine_threadsafe(
-                self._monitor_stream(printer_id, url, process),
+                self._monitor_stream(printer_id, stream_url, process),
                 self.loop
             )
             
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
-                'url': url,
+                'url': stream_url,
                 'monitor_task': monitor_future
             }
             
             return {'success': True, 'port': port}
 
         except Exception as e:
-            logger.error(f"Stream start failed: {e}")
+            logger.error(f"Error starting stream: {e}")
             return {'success': False, 'error': str(e)}
 
     def _start_ffmpeg(self, url: str):
-        """Startet FFmpeg mit optimierten Parametern"""
-        cmd = [
-            'ffmpeg',
-            '-fflags', 'nobuffer',
-            '-flags', 'low_delay',
-            '-rtsp_transport', 'tcp',
-            '-i', url,
-            '-c:v', 'copy',
-            '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-            '-f', 'mp4',
-            '-frag_duration', '500000',
-            'pipe:1'
-        ]
-        
+        """Startet FFmpeg mit korrekten Parametern"""
         try:
+            logger.info(f"Starting FFmpeg stream from URL: {url}")
+            
+            # Unterschiedliche Parameter für MJPEG und RTSP
+            if 'action=stream' in url:  # MJPEG Stream (OctoPrint/Creality)
+                logger.info("Detected MJPEG stream, using MJPEG parameters")
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'mjpeg',
+                    '-reconnect', '1',
+                    '-reconnect_streamed', '1',
+                    '-reconnect_delay_max', '5',
+                    '-i', url,
+                    '-c:v', 'copy',
+                    '-f', 'mp4',
+                    '-movflags', 'frag_keyframe+empty_moov',
+                    'pipe:1'
+                ]
+            else:  # RTSP Stream (Bambu Lab)
+                logger.info("Detected RTSP stream, using RTSP parameters")
+                cmd = [
+                    'ffmpeg',
+                    '-fflags', 'nobuffer',
+                    '-flags', 'low_delay',
+                    '-rtsp_transport', 'tcp',
+                    '-i', url,
+                    '-c:v', 'copy',
+                    '-f', 'mp4',
+                    '-movflags', 'frag_keyframe+empty_moov',
+                    'pipe:1'
+                ]
+            
+            logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+            
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -98,16 +139,19 @@ class StreamService:
                 bufsize=10**8
             )
             
-            # Warte und prüfe FFmpeg-Start
-            time.sleep(0.5)
+            # Warte kurz und prüfe ob FFmpeg gestartet ist
+            time.sleep(1)
             if process.poll() is not None:
                 error = process.stderr.read().decode()
+                logger.error(f"FFmpeg failed to start: {error}")
                 raise Exception(f"FFmpeg failed to start: {error}")
                 
+            logger.info("FFmpeg process started successfully")
             return process
             
         except Exception as e:
-            raise Exception(f"FFmpeg start error: {str(e)}")
+            logger.error(f"FFmpeg start error: {str(e)}", exc_info=True)
+            raise
 
     async def _monitor_stream(self, printer_id: str, url: str, process):
         """Überwacht den Stream und handhabt Neustarts"""
@@ -132,8 +176,8 @@ class StreamService:
                     
                     # Neustart
                     success = self.start_stream(printer_id, url)
-                    if not success.get('success'):
-                        logger.error(f"Stream restart failed: {success.get('error')}")
+                    if not success:
+                        logger.error("Stream restart failed")
                         continue
                         
                     logger.info(f"Stream {printer_id} successfully restarted")
@@ -243,11 +287,14 @@ def startStream(printer_id, stream_url=None):
             stream_url = printer['streamUrl']
             
         port = getNextPort()
-        return stream_service.start_stream(printer_id, stream_url)
+        success = stream_service.start_stream(printer_id, stream_url)
+        if success:
+            return {'success': True, 'port': port}  # Port muss zurückgegeben werden
+        return {'success': False, 'error': 'Stream start failed'}
         
     except Exception as e:
         logger.error(f"Fehler beim Starten des Streams: {str(e)}")
-        raise e
+        return {'success': False, 'error': str(e)}
 
 # Verschiebe diese Route in app.py
 # @app.route('/stream/<printer_id>/stop', methods=['POST'])
