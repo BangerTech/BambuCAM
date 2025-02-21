@@ -134,7 +134,10 @@ const AddPrinterDialog = ({
     type: 'BAMBULAB',
     accessCode: '',
     mqttBroker: 'localhost',
-    mqttPort: 1883
+    mqttPort: 1883,
+    cloudId: '',
+    model: '',
+    status: ''
   });
   const [activeTab, setActiveTab] = useState(0);
 
@@ -143,9 +146,10 @@ const AddPrinterDialog = ({
       name: printer.name,
       ip: printer.ip,
       type: 'BAMBULAB',
-      accessCode: '',
-      mqttBroker: 'localhost',
-      mqttPort: 1883
+      accessCode: printer.dev_access_code || '',
+      cloudId: printer.dev_id || '',
+      model: printer.dev_product_name || '',
+      status: printer.online ? 'online' : 'offline'
     });
   };
 
@@ -208,7 +212,10 @@ const AddPrinterDialog = ({
         ? `rtsps://bblp:${printerData.accessCode}@${printerData.ip}:322/streaming/live/1`
         : printerData.type === 'OCTOPRINT'
           ? `http://${printerData.ip}/webcam/?action=stream`
-          : `http://${printerData.ip}:8080/?action=stream`
+          : `http://${printerData.ip}:8080/?action=stream`,
+      cloudId: printerData.cloudId,
+      model: printerData.model,
+      status: printerData.status
     };
     onAdd(submitData);
   };

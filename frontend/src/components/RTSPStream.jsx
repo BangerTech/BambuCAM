@@ -915,6 +915,27 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     }
   }, [reconnect, printer.type]);
 
+  const setupWebSocket = useCallback(async () => {
+    try {
+      // Hole Stream-URL mit Port vom Backend
+      const response = await fetch(`${API_URL}/api/stream/${printer.id}/start`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to start stream');
+      }
+
+      // Nutze den zugewiesenen Port für die WebSocket-Verbindung
+      const wsUrl = `ws://${window.location.hostname}:${data.port}`;
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      // ...
+    } catch (error) {
+      // ...
+    }
+  }, [printer.id]);
+
   return (
     <Box sx={{
       position: 'relative',

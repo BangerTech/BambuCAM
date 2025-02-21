@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 class StreamService:
     def __init__(self):
-        self.active_streams = {}  # Speichert alle aktiven Streams
+        self.active_streams = {}  # Format: {printer_id: {port: int, process: Process, ws_server: WebSocketServer}}
         self.BASE_PORT = 9000
+        self.port_lock = threading.Lock()  # Thread-safe Port-Verwaltung
         self.next_port = self.BASE_PORT
         self.CHUNK_SIZE = 65536  # 64KB Chunks
         
@@ -36,9 +37,14 @@ class StreamService:
         self.loop.run_forever()
 
     def get_next_port(self):
-        port = self.next_port
-        self.next_port += 1
-        return port
+        """Findet den nächsten freien Port für einen Stream"""
+        used_ports = set(stream['port'] for stream in self.active_streams.values())
+        
+        # Suche den nächsten freien Port
+        for port in range(self.BASE_PORT, self.BASE_PORT + 100):
+            if port not in used_ports:
+                return port
+        raise Exception("Keine freien Ports verfügbar")
 
     def start_stream(self, printer_id: str, stream_url: str = None) -> dict:
         try:
@@ -90,7 +96,12 @@ class StreamService:
                 'monitor_task': monitor_future
             }
             
-            return {'success': True, 'port': port}
+            return {
+                'success': True,
+                'direct': False,
+                'port': port,
+                'url': f'ws://localhost:{port}'
+            }
 
         except Exception as e:
             logger.error(f"Error starting stream: {e}")
@@ -258,6 +269,16 @@ class StreamService:
                 del self.active_streams[printer_id]
             except Exception as e:
                 logger.error(f"Stop stream error: {e}")
+
+    def cleanup_stream(self, printer_id: str):
+        """Säubert einen Stream und gibt seinen Port frei"""
+        if printer_id in self.active_streams:
+            stream = self.active_streams[printer_id]
+            if stream['process']:
+                stream['process'].terminate()
+            if stream['ws_server']:
+                stream['ws_server'].close()
+            del self.active_streams[printer_id]
 
 # Globale Instanz
 stream_service = StreamService()
