@@ -116,6 +116,80 @@ const SetupHeader = styled(Box)({
   }
 });
 
+const PrinterTypeCard = styled(Box)(({ selected }) => ({
+  background: 'rgba(0, 0, 0, 0.6)',
+  borderRadius: '10px',
+  padding: '20px',
+  border: `1px solid ${selected ? '#00ffff' : 'rgba(0, 255, 255, 0.3)'}`,
+  transition: 'all 0.3s ease',
+  cursor: 'pointer',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '10px',
+  width: '160px',
+  height: '160px',
+  position: 'relative',
+  '&:hover': {
+    border: '1px solid rgba(0, 255, 255, 0.8)',
+    boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+    transform: 'translateY(-2px)'
+  }
+}));
+
+const PrinterIcon = styled('img')({
+  width: '50px',
+  height: '50px',
+  filter: 'brightness(0) invert(1) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(0.9)',
+  opacity: 0.9,
+  transition: 'all 0.2s ease',
+  '&:hover': {
+    opacity: 1,
+    filter: 'brightness(0) invert(1) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(1)'
+  }
+});
+
+// Guides for each printer type
+const PRINTER_GUIDES = {
+  BAMBULAB: {
+    title: 'Bambu Lab Setup Guide',
+    steps: [
+      'Connect the printer to your network via LAN cable',
+      'Enable LAN Mode Liveview:',
+      '- Go to "Settings" (gear icon) > "General"',
+      '- Enable "LAN Mode Liveview"',
+      '- Note down the Access Code',
+      'Find the IP address under:',
+      '- Settings > Network > IP Address',
+      'Click "Scan Network" or enter the IP manually'
+    ]
+  },
+  CREALITY: {
+    title: 'Creality/Moonraker Setup Guide',
+    steps: [
+      'Make sure your printer is running Klipper firmware',
+      'Connect the printer to your network',
+      'Access the Mainsail/Fluidd interface',
+      'Enable the webcam stream in Moonraker settings',
+      'Note down the printer\'s IP address',
+      'The stream will be available at: http://IP:8080/?action=stream'
+    ]
+  },
+  OCTOPRINT: {
+    title: 'OctoPrint Setup Guide',
+    steps: [
+      'Install OctoPrint on your Raspberry Pi',
+      'Connect the printer and webcam to the Pi',
+      'Configure MQTT in OctoPrint settings:',
+      '- Install "MQTT Plugin" from Plugin Manager',
+      '- Configure broker address and port',
+      'Enable webcam streaming in OctoPrint settings',
+      'Note down the Pi\'s IP address'
+    ]
+  }
+};
+
 const AddPrinterDialog = ({ 
   open, 
   onClose, 
@@ -127,6 +201,7 @@ const AddPrinterDialog = ({
   scanTimer,
   onScan
 }) => {
+  const [selectedType, setSelectedType] = useState('BAMBULAB');
   const [showGuide, setShowGuide] = useState(false);
   const [printerData, setPrinterData] = useState({
     name: '',
@@ -222,13 +297,23 @@ const AddPrinterDialog = ({
 
   return (
     <GlassDialog open={open} onClose={onClose}>
-      <DialogTitle>Add Printer</DialogTitle>
+      <DialogTitle 
+        sx={{ 
+          borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
+          textAlign: 'center'
+        }}
+      >
+        Add Printer
+      </DialogTitle>
       <DialogContent>
         <Tabs
           value={activeTab}
           onChange={(e, newValue) => setActiveTab(newValue)}
           sx={{
             mb: 2,
+            '& .MuiTabs-flexContainer': {
+              justifyContent: 'center'
+            },
             '& .MuiTab-root': {
               color: '#00ffff',
               '&.Mui-selected': {
@@ -245,41 +330,65 @@ const AddPrinterDialog = ({
         </Tabs>
 
         <Collapse in={activeTab === 0}>
-          <SetupHeader>
-            <Typography variant="subtitle2">
-              BambuLab Printer Setup
-            </Typography>
-            <IconButton 
-              onClick={() => setShowGuide(!showGuide)}
-              size="small"
-              sx={{ 
-                color: showGuide ? '#00ffff' : 'rgba(0, 255, 255, 0.6)',
-                '&:hover': {
-                  color: '#00ffff'
-                }
-              }}
-            >
-              <InfoIcon fontSize="small" />
-            </IconButton>
-          </SetupHeader>
+          <Box sx={{ 
+            display: 'flex', 
+            gap: 2, 
+            mb: 3, 
+            mt: 2,
+            justifyContent: 'center'
+          }}>
+            {PRINTER_TYPES.map((type) => (
+              <PrinterTypeCard
+                key={type.value}
+                selected={selectedType === type.value}
+                onClick={() => {
+                  setSelectedType(type.value);
+                  setPrinterData(prev => ({ ...prev, type: type.value }));
+                }}
+              >
+                <PrinterIcon src="/3d-printer.png" alt={type.label} />
+                <Typography 
+                  variant="body2" 
+                  align="center"
+                  sx={{ 
+                    width: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {type.label}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowGuide(prev => prev === type.value ? null : type.value);
+                  }}
+                  sx={{ 
+                    position: 'absolute',
+                    top: 5,
+                    right: 5,
+                    color: showGuide === type.value ? '#00ffff' : 'rgba(0, 255, 255, 0.6)'
+                  }}
+                >
+                  <InfoIcon fontSize="small" />
+                </IconButton>
+              </PrinterTypeCard>
+            ))}
+          </Box>
 
-          <Collapse in={showGuide}>
-            <Box sx={{ mb: 3, mt: 2 }}>
-              <ol style={{ paddingLeft: '20px' }}>
-                <li>Connect the printer to your network via LAN cable</li>
-                <li>Enable LAN Mode Liveview:
-                  <ul>
-                    <li>Go to "Settings" (gear icon) > "General"</li>
-                    <li>Enable "LAN Mode Liveview"</li>
-                    <li>Note down the Access Code</li>
-                  </ul>
-                </li>
-                <li>Find the IP address under:
-                  <ul>
-                    <li>Settings > Network > IP Address</li>
-                  </ul>
-                </li>
-                <li>Click "Scan Network" or enter the IP manually</li>
+          <Collapse in={!!showGuide}>
+            <Box sx={{ mb: 3, p: 2, border: '1px solid rgba(0, 255, 255, 0.2)', borderRadius: 1 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                {PRINTER_GUIDES[showGuide]?.title}
+              </Typography>
+              <ol style={{ margin: 0, paddingLeft: '20px' }}>
+                {PRINTER_GUIDES[showGuide]?.steps.map((step, index) => (
+                  <li key={index} style={{ marginBottom: '4px' }}>
+                    {step}
+                  </li>
+                ))}
               </ol>
             </Box>
           </Collapse>
