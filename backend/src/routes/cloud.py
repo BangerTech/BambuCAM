@@ -76,4 +76,106 @@ def get_cloud_status():
         return jsonify({'connected': False})
     except Exception as e:
         logger.error(f"Error getting cloud status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@cloud_bp.route('/api/cloud/printers/add', methods=['POST'])
+@cross_origin()
+def add_cloud_printer():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    try:
+        data = request.get_json()
+        logger.info(f"Adding cloud printer with data: {data}")
+        
+        # Formatiere die Druckerdaten ins richtige Format
+        printer_data = {
+            'name': data.get('name'),
+            'type': 'CLOUD',
+            'ip': None,  # Cloud Drucker haben keine direkte IP
+            'cloudId': data.get('cloudId'),
+            'accessCode': data.get('accessCode'),
+            'model': data.get('model'),
+            'status': data.get('status', 'offline'),
+            'isCloud': True,
+            'temperatures': {
+                'hotend': 0,
+                'bed': 0,
+                'chamber': 0
+            },
+            'progress': 0,
+            'port': 8554
+        }
+        
+        # Überprüfe ob erforderliche Daten vorhanden sind
+        if not printer_data['cloudId'] or not printer_data['accessCode']:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required cloud printer data (cloudId or accessCode)'
+            }), 400
+        
+        # Füge den Drucker hinzu
+        from src.services.printerService import addPrinter
+        new_printer = addPrinter(printer_data)
+        
+        return jsonify({
+            'success': True,
+            'printer': new_printer
+        })
+        
+    except Exception as e:
+        logger.error(f"Error adding cloud printer: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@cloud_bp.route('/api/cloud/printer/<printer_id>/status', methods=['GET'])
+@cross_origin()
+def get_cloud_printer_status(printer_id):
+    try:
+        # Hole den Drucker aus der Datenbank/Config
+        from src.services.printerService import getPrinter
+        printer = getPrinter(printer_id)
+        
+        if not printer or not printer.get('cloudId') or not printer.get('accessCode'):
+            return jsonify({'error': 'Printer not found or missing cloud data'}), 404
+            
+        # Hole den Status über die Cloud API
+        status = bambu_cloud_service.get_cloud_printer_status(
+            printer['cloudId'], 
+            printer['accessCode']
+        )
+        
+        if status:
+            return jsonify(status)
+        return jsonify({'error': 'Could not get printer status'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error getting cloud printer status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@cloud_bp.route('/api/cloud/printer/<printer_id>/stream', methods=['GET'])
+@cross_origin()
+def get_printer_stream(printer_id):
+    try:
+        # Hole den Drucker aus der Datenbank/Config
+        from src.services.printerService import getPrinter
+        printer = getPrinter(printer_id)
+        
+        if not printer or not printer.get('cloudId') or not printer.get('accessCode'):
+            return jsonify({'error': 'Printer not found or missing cloud data'}), 404
+            
+        # Hole Stream URL über die Cloud API
+        stream_data = bambu_cloud_service.get_stream_url(
+            printer['cloudId'], 
+            printer['accessCode']
+        )
+        
+        if stream_data:
+            return jsonify(stream_data)
+        return jsonify({'error': 'Could not get stream URL'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error getting printer stream URL: {e}")
         return jsonify({'error': str(e)}), 500 

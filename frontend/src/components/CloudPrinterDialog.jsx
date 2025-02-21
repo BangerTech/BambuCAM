@@ -96,20 +96,17 @@ const CloudPrinterDialog = ({ open, onClose }) => {
       
       if (Array.isArray(data) && data.length > 0) {
         console.log('Found printers:', data);
-        const cloudPrinters = data.map(printer => {
-          console.log('Mapping printer:', printer);
-          return {
-            name: printer.name,
-            ip: null,
-            accessCode: printer.access_code,
-            model: printer.model,
-            online: printer.online,
-            isCloud: true,
-            cloudId: printer.id,
-            status: printer.status,
-            type: 'CLOUD'
-          };
-        });
+        const cloudPrinters = data.map(printer => ({
+          name: printer.name,
+          ip: null,
+          accessCode: printer.dev_access_code,
+          model: printer.dev_product_name,
+          online: printer.online,
+          isCloud: true,
+          cloudId: printer.dev_id,
+          status: printer.online ? 'online' : 'offline',
+          type: 'CLOUD'
+        }));
         console.log('Mapped printers:', cloudPrinters);
         setPrinters(cloudPrinters);
       } else {
@@ -129,14 +126,14 @@ const CloudPrinterDialog = ({ open, onClose }) => {
       const printerData = {
         name: printer.name,
         type: 'CLOUD',
-        cloudId: printer.dev_id,
-        accessCode: printer.dev_access_code,
-        model: printer.dev_product_name,
+        cloudId: printer.cloudId,
+        accessCode: printer.accessCode,
+        model: printer.model,
         status: printer.online ? 'online' : 'offline'
       };
 
       console.log('Sending printer data:', printerData);
-      const response = await fetch(`${API_URL}/printers`, {
+      const response = await fetch(`${API_URL}/api/cloud/printers/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

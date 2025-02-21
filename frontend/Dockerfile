@@ -5,6 +5,7 @@ WORKDIR /app
 # Dependencies installieren
 COPY package*.json ./
 RUN npm install
+RUN npm install hls.js --save
 
 # Anwendungscode kopieren
 COPY . .

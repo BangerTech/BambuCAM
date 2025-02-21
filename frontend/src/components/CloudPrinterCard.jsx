@@ -1,34 +1,70 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { IconButton, Box, Typography, Paper, Chip } from '@mui/material';
+import React, { useEffect, useState, useRef } from 'react';
+import { Paper, Typography, Box } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { IconButton } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
+import Hls from 'hls.js';
+import { API_URL } from '../config';  // Importiere API_URL aus der Config
 
-// Status-Farben definieren (gleich wie bei PrinterCard)
-const getStatusColor = (status) => {
-  switch(status?.toLowerCase()) {
-    case 'printing':
-      return '#00ff00';
-    case 'finished':
-      return '#00ffff';
-    case 'standby':
-      return '#ffaa00';
-    case 'error':
-      return '#ff0000';
-    default:
-      return '#888888';
-  }
-};
+const GlassPaper = styled(Paper)(({ theme }) => ({
+  background: 'rgba(0, 0, 0, 0.9)',
+  backdropFilter: 'blur(10px)',
+  borderRadius: '15px',
+  position: 'relative',
+  width: '100%',
+  aspectRatio: '16/9',
+  overflow: 'hidden',
+  border: '1px solid rgba(0, 255, 255, 0.2)',
+  boxShadow: '0 0 20px rgba(0, 255, 255, 0.2)',
+  padding: '1rem',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'space-between'
+}));
+
+const StatusBadge = styled(Box)(({ status }) => ({
+  position: 'absolute',
+  top: '10px',
+  right: '10px',
+  padding: '4px 12px',
+  borderRadius: '12px',
+  backgroundColor: status === 'online' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)',
+  border: `1px solid ${status === 'online' ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)'}`,
+  color: status === 'online' ? '#00ff00' : '#ff0000',
+  fontSize: '0.8rem',
+  fontWeight: 'bold'
+}));
+
+const VideoStream = styled('video')({
+  width: '100%',
+  height: '100%',
+  objectFit: 'contain',
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  zIndex: 1
+});
 
 const CloudPrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) => {
   const [isDeleting, setIsDeleting] = useState(false);
-  const isMounted = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
+  const [printerInfo, setPrinterInfo] = useState({
+    id: printer.id || printer.cloudId,
+    name: printer.name,
+    status: printer.status || 'offline',
+    model: printer.model,
+    cloudId: printer.cloudId,
+    accessCode: printer.accessCode,
+    temperatures: {
+      hotend: 0,
+      bed: 0,
+      chamber: 0
+    },
+    progress: 0
+  });
+  const [streamUrl, setStreamUrl] = useState(null);
+  const videoRef = useRef(null);
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -69,126 +105,158 @@ const CloudPrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle 
     });
   }, [printer]);
 
+  // Polling für Live-Updates
+  useEffect(() => {
+    const fetchPrinterStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/cloud/printer/${printer.cloudId}/status`);
+        if (response.ok) {
+          const data = await response.json();
+          setPrinterInfo(prev => ({
+            ...prev,
+            status: data.online ? 'online' : 'offline',
+            temperatures: data.temperatures,
+            progress: data.progress
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching printer status:', error);
+      }
+    };
+
+    // Aktualisiere alle 5 Sekunden
+    const interval = setInterval(fetchPrinterStatus, 5000);
+    fetchPrinterStatus(); // Initial fetch
+
+    return () => clearInterval(interval);
+  }, [printer.cloudId]);
+
+  // Stream URL abrufen und aktualisieren
+  useEffect(() => {
+    const fetchStreamUrl = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/cloud/printer/${printer.cloudId}/stream`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.url && videoRef.current) {
+            setStreamUrl(data.url);
+            // Starte Stream mit HLS.js
+            if (Hls.isSupported()) {
+              const hls = new Hls();
+              hls.loadSource(data.url);
+              hls.attachMedia(videoRef.current);
+            }
+            // Fallback für native HLS Support
+            else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+              videoRef.current.src = data.url;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching stream URL:', error);
+      }
+    };
+
+    // Aktualisiere Stream URL alle 5 Minuten
+    fetchStreamUrl();
+    const interval = setInterval(fetchStreamUrl, 5 * 60 * 1000);
+    
+    return () => {
+      clearInterval(interval);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.src = '';
+      }
+    };
+  }, [printer.cloudId]);
+
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        background: 'rgba(0, 0, 0, 0.9)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: '15px',
-        position: 'relative',
-        width: '100%',
-        aspectRatio: '16/9',
-        overflow: 'hidden',
-        border: '1px solid rgba(0, 255, 255, 0.2)',
-        boxShadow: '0 0 20px rgba(0, 255, 255, 0.1)'
-      }}
-    >
-      <Box sx={{ position: 'relative', width: '100%', height: '100%' }}>
-        {/* Header mit Name und Buttons */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            padding: '12px',
-            background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            zIndex: 2
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography
-              variant="h6"
-              sx={{
-                color: '#fff',
-                textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
-                fontSize: '1.1rem'
-              }}
-            >
-              {printer.name}
-            </Typography>
-            <Chip
-              label={printer.online ? "Online" : "Offline"}
-              size="small"
-              sx={{
-                backgroundColor: printer.online ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)',
-                color: printer.online ? '#00ff00' : '#ff0000',
-                border: `1px solid ${printer.online ? '#00ff00' : '#ff0000'}`
-              }}
-            />
-          </Box>
+    <GlassPaper elevation={3}>
+      <StatusBadge status={printerInfo.status}>
+        {printerInfo.status.toUpperCase()}
+      </StatusBadge>
+      
+      <Box sx={{ p: 2 }}>
+        <Typography variant="h6" sx={{ color: '#00ffff', mb: 1 }}>
+          {printerInfo.name}
+        </Typography>
+        
+        <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+          Model: {printerInfo.model}
+        </Typography>
+        
+        <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+          Cloud ID: {printerInfo.id}
+        </Typography>
 
-          <Box>
-            {!isFullscreen && (
-              <IconButton
-                onClick={handleDelete}
-                sx={{
-                  color: '#ff4444',
-                  '&:hover': { color: '#ff0000' }
-                }}
-              >
-                <DeleteIcon />
-              </IconButton>
-            )}
-            <IconButton
-              onClick={() => onFullscreenToggle(printer)}
-              sx={{
-                color: '#00ffff',
-                '&:hover': { color: '#66ffff' }
-              }}
-            >
-              <FullscreenIcon />
-            </IconButton>
-          </Box>
-        </Box>
-
-        {/* Hauptbereich mit Drucker-Informationen */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            textAlign: 'center',
-            color: '#fff'
-          }}
-        >
-          <Typography variant="h5" sx={{ mb: 2 }}>
-            {printer.model}
+        {/* Temperaturanzeige */}
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+            Hotend: {printerInfo.temperatures.hotend}°C
           </Typography>
-          {printer.print_status && (
-            <Typography variant="body1">
-              Status: {printer.print_status}
-            </Typography>
-          )}
+          <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+            Bed: {printerInfo.temperatures.bed}°C
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+            Chamber: {printerInfo.temperatures.chamber}°C
+          </Typography>
         </Box>
 
-        {/* Footer mit zusätzlichen Informationen */}
-        <Box
-          sx={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: '12px',
-            background: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
-            zIndex: 2
-          }}
-        >
-          <Typography
-            variant="body2"
+        {/* Fortschrittsanzeige */}
+        {printerInfo.progress > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+              Progress: {printerInfo.progress}%
+            </Typography>
+          </Box>
+        )}
+      </Box>
+
+      {streamUrl && (
+        <VideoStream
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          controls={isFullscreen}
+        />
+      )}
+
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: '12px',
+          background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          zIndex: 2
+        }}
+      >
+        <Box>
+          {!isFullscreen && (
+            <IconButton
+              onClick={handleDelete}
+              sx={{
+                color: '#ff4444',
+                '&:hover': { color: '#ff0000' }
+              }}
+            >
+              <DeleteIcon />
+            </IconButton>
+          )}
+          <IconButton
+            onClick={() => onFullscreenToggle(printer)}
             sx={{
-              color: '#fff',
-              fontSize: '0.9rem',
-              textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
+              color: '#00ffff',
+              '&:hover': { color: '#66ffff' }
             }}
           >
-            Device ID: {printer.dev_id}
-          </Typography>
+            <FullscreenIcon />
+          </IconButton>
         </Box>
       </Box>
 
@@ -213,7 +281,7 @@ const CloudPrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle 
           </Typography>
         </Box>
       )}
-    </Paper>
+    </GlassPaper>
   );
 };
 

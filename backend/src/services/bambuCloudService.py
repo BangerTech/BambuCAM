@@ -180,18 +180,33 @@ class BambuCloudService:
             logger.error(f"Failed to get profile: {e}")
             return None
 
-    def get_stream_url(self, device_id):
-        """Hole Stream URL für einen Cloud-Drucker"""
-        if not self.token:
-            return None
-            
+    def get_stream_url(self, device_id, access_code):
+        """Holt Stream URL und Token für einen Cloud-Drucker"""
         try:
-            headers = {"Authorization": f"Bearer {self.token}"}
-            response = requests.get(
-                f"https://api.bambulab.com/devices/{device_id}/stream", 
+            if not self.token:
+                return None
+            
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "X-Device-Id": device_id,
+                "X-Device-Access-Code": access_code
+            }
+            
+            # Hole Stream Token von Bambu Cloud
+            response = self._make_request(
+                'GET',
+                f"{self.base_url}/v1/iot-service/api/user/device/{device_id}/live",
                 headers=headers
             )
-            return response.json().get("url")
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    'url': data.get('live_url'),
+                    'token': data.get('live_token'),
+                    'expires': data.get('expires_at')
+                }
+            return None
         except Exception as e:
             logger.error(f"Failed to get stream URL: {e}")
             return None
@@ -221,6 +236,30 @@ class BambuCloudService:
         except Exception as e:
             logger.error(f"Error getting cloud printers: {e}")
             return []
+
+    def get_cloud_printer_status(self, printer_id, access_code):
+        """Holt den aktuellen Status eines Cloud-Druckers"""
+        try:
+            headers = self._get_auth_headers()
+            url = f"{self.base_url}/v1/iot-service/api/user/device/{printer_id}/status"
+            
+            response = self._make_request('GET', url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    'online': data.get('online', False),
+                    'status': data.get('print_status'),
+                    'temperatures': {
+                        'hotend': data.get('temperature', {}).get('nozzle', 0),
+                        'bed': data.get('temperature', {}).get('bed', 0),
+                        'chamber': data.get('temperature', {}).get('chamber', 0)
+                    },
+                    'progress': data.get('print_progress', 0)
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Error getting cloud printer status: {e}")
+            return None
 
 def save_cloud_credentials(credentials):
     """Speichert die Cloud-Anmeldedaten"""
