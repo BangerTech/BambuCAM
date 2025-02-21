@@ -513,9 +513,20 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   // Regular grid styles
   const gridStyle = {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gridTemplateColumns: {
+      xs: '1fr',                    // Mobile: 1 Karte pro Zeile
+      sm: 'repeat(2, 1fr)',        // Tablet/Desktop: 2 Karten pro Zeile
+    },
     gap: '20px',
-    padding: '20px'
+    padding: '20px',
+    '& .MuiPaper-root': {          // Für die PrinterCard
+      width: '100%',               // Volle Breite im Grid
+      aspectRatio: '16/9',         // Festes Seitenverhältnis
+      minWidth: '280px',           // Minimale Breite
+      maxWidth: '800px',           // Maximale Breite
+      margin: '0 auto',            // Zentrieren wenn kleiner als Container
+      height: 'auto'               // Höhe durch aspectRatio bestimmt
+    }
   };
 
   // Überwache Statusänderungen für Benachrichtigungen
@@ -575,10 +586,12 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   }
 
   return (
-    <div style={{ 
-      padding: '20px',
-      paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 70px)' : '90px'
-    }}>
+    <Box 
+      sx={{ 
+        padding: '20px',
+        paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 70px)' : '90px'
+      }}
+    >
       <Header 
         onThemeToggle={onThemeToggle}
         isDarkMode={isDarkMode}
@@ -588,42 +601,47 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       />
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable droppableId="printers" direction="horizontal">
+        <Droppable droppableId="printers">
           {(provided) => (
-            <Grid container spacing={3} {...provided.droppableProps} ref={provided.innerRef}>
-              {sortedPrinters.map((printer, index) => {
-                const printerWithStatus = getPrinterWithStatus(printer);
-                return (
-                  <Draggable key={printer.id} draggableId={printer.id} index={index}>
-                    {(provided, snapshot) => (
-                      <Grid item 
-                        xs={12} sm={12} md={6} lg={4}
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                      >
-                        {printer.isCloud ? (
-                          <CloudPrinterCard
-                            printer={printerWithStatus}
-                            onDelete={handleDelete}
-                            isFullscreen={false}
-                            onFullscreenToggle={handleFullscreenToggle}
-                          />
-                        ) : (
-                          <PrinterCard
-                            printer={printerWithStatus}
-                            onDelete={handleDelete}
-                            isFullscreen={false}
-                            onFullscreenToggle={handleFullscreenToggle}
-                          />
-                        )}
-                      </Grid>
-                    )}
-                  </Draggable>
-                );
-              })}
+            <Box
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              sx={gridStyle}
+            >
+              {sortedPrinters.map((printer, index) => (
+                <Draggable
+                  key={printer.id}
+                  draggableId={printer.id}
+                  index={index}
+                  isDragDisabled={mode === 'cloud'}
+                >
+                  {(provided) => (
+                    <Box
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                    >
+                      {printer.isCloud ? (
+                        <CloudPrinterCard
+                          printer={getPrinterWithStatus(printer)}
+                          onDelete={handleDelete}
+                          isFullscreen={false}
+                          onFullscreenToggle={() => handleFullscreenToggle(printer)}
+                        />
+                      ) : (
+                        <PrinterCard
+                          printer={getPrinterWithStatus(printer)}
+                          onDelete={handleDelete}
+                          isFullscreen={false}
+                          onFullscreenToggle={() => handleFullscreenToggle(printer)}
+                        />
+                      )}
+                    </Box>
+                  )}
+                </Draggable>
+              ))}
               {provided.placeholder}
-            </Grid>
+            </Box>
           )}
         </Droppable>
       </DragDropContext>
@@ -683,7 +701,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         open={statsDialogOpen}
         onClose={() => setStatsDialogOpen(false)}
       />
-    </div>
+    </Box>
   );
 };
 
