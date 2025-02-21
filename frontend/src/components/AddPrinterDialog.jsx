@@ -1,24 +1,20 @@
 import React, { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse, Grid, Chip } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse, Grid, Chip, Tabs, Tab } from '@mui/material';
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
 import { CircularProgress } from '@mui/material';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
-const GlassDialog = styled(Dialog)(({ theme }) => ({
+const GlassDialog = styled(Dialog)({
   '& .MuiDialog-paper': {
     background: 'rgba(0, 0, 0, 0.8)',
     backdropFilter: 'blur(10px)',
     border: '1px solid rgba(0, 255, 255, 0.2)',
     borderRadius: '15px',
     boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
-    minWidth: { xs: '90vw', sm: '400px' },
-    maxWidth: { xs: '95vw', sm: '90vw', md: '600px' },
-    maxHeight: { xs: '95vh', sm: '90vh' },
-    margin: { xs: '10px', sm: 'auto' },
     color: '#00ffff'
   }
-}));
+});
 
 const NeonButton = styled(Button)({
   background: 'rgba(0, 0, 0, 0.8)',
@@ -43,15 +39,9 @@ const NeonTextField = styled(TextField)({
     }
   },
   '& .MuiInputLabel-root': {
-    color: '#00ffff',
-    '&.Mui-focused': {
-      color: '#00ffff'
-    }
-  },
-  '& .MuiInputBase-input': {
     color: '#00ffff'
   },
-  '& .MuiSelect-icon': {
+  '& .MuiInputBase-input': {
     color: '#00ffff'
   }
 });
@@ -108,6 +98,24 @@ const PRINTER_TYPES = [
   { value: 'OCTOPRINT', label: 'OctoPrint' }
 ];
 
+const SetupHeader = styled(Box)({
+  display: 'flex',
+  alignItems: 'center',
+  marginBottom: '16px',
+  '& .MuiTypography-root': {
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    color: 'rgba(0, 255, 255, 0.9)'
+  },
+  '& .MuiIconButton-root': {
+    padding: '4px',
+    marginLeft: '8px',
+    '& .MuiSvgIcon-root': {
+      fontSize: '1rem'
+    }
+  }
+});
+
 const AddPrinterDialog = ({ 
   open, 
   onClose, 
@@ -128,6 +136,7 @@ const AddPrinterDialog = ({
     mqttBroker: 'localhost',
     mqttPort: 1883
   });
+  const [activeTab, setActiveTab] = useState(0);
 
   const handleScannedPrinterSelect = (printer) => {
     setPrinterData({
@@ -192,198 +201,219 @@ const AddPrinterDialog = ({
     }
   };
 
+  const handleAdd = () => {
+    const submitData = {
+      ...printerData,
+      streamUrl: printerData.type === 'BAMBULAB' 
+        ? `rtsps://bblp:${printerData.accessCode}@${printerData.ip}:322/streaming/live/1`
+        : printerData.type === 'OCTOPRINT'
+          ? `http://${printerData.ip}/webcam/?action=stream`
+          : `http://${printerData.ip}:8080/?action=stream`
+    };
+    onAdd(submitData);
+  };
+
   return (
-    <GlassDialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ 
-        borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
-        color: '#00ffff'
-      }}>
-        Add New Printer
-      </DialogTitle>
-      <DialogContent sx={{ 
-        pt: 2,
-        overflowY: 'auto',
-        maxHeight: { xs: 'calc(100vh - 200px)', sm: 'auto' }
-      }}>
-        <Collapse in={showGuide}>
-          <Box sx={{ mb: 3, mt: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              BambuLab Printer Setup:
-            </Typography>
-            <ol style={{ paddingLeft: '20px' }}>
-              <li>Connect the printer to your network via LAN cable</li>
-              <li>Enable LAN Mode Liveview:
-                <ul>
-                  <li>Go to "Settings" (gear icon) > "General"</li>
-                  <li>Enable "LAN Mode Liveview"</li>
-                  <li>Note down the Access Code</li>
-                </ul>
-              </li>
-              <li>Find the IP address under:
-                <ul>
-                  <li>Settings > Network > IP Address</li>
-                </ul>
-              </li>
-              <li>Click "Scan Network" or enter the IP manually</li>
-            </ol>
-          </Box>
-        </Collapse>
-
-        {/* Scan Button */}
-        <ScanButton
-          onClick={() => {
-            Logger.info('Starting printer scan');
-            onScan();
-          }}
-          disabled={isScanning}
-          startIcon={isScanning && <CircularProgress size={20} color="inherit" />}
-        >
-          {isScanning ? `Scanning... (${scanTimer}s)` : 'SCAN NETWORK'}
-        </ScanButton>
-
-        {/* Found Printers Grid */}
-        {scannedPrinters.length > 0 && (
-          <Box sx={{ mt: 2, mb: 3 }}>
-            <Typography variant="subtitle1" sx={{ mb: 1, color: '#00ffff' }}>
-              Found Printers:
-            </Typography>
-            <Grid container spacing={2}>
-              {scannedPrinters.map((printer) => (
-                <Grid item xs={12} sm={6} key={printer.id}>
-                  <PrinterCard 
-                    onClick={() => handleScannedPrinterSelect(printer)}
-                    sx={{ position: 'relative', minHeight: '140px' }}
-                  >
-                    <ModeBadge 
-                      label={printer.mode.toUpperCase()} 
-                      mode={printer.mode}
-                      size="small"
-                    />
-                    <Typography variant="h6" sx={{ 
-                      color: '#00ffff',
-                      mb: 1,
-                      fontSize: '1rem',
-                      fontWeight: 500
-                    }}>
-                      {printer.name}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
-                      IP: {printer.ip}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
-                      Model: {printer.model}
-                    </Typography>
-                    {printer.serial && (
-                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
-                        S/N: {printer.serial}
-                      </Typography>
-                    )}
-                    {printer.version && (
-                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
-                        Version: {printer.version}
-                      </Typography>
-                    )}
-                  </PrinterCard>
-                </Grid>
-              ))}
-            </Grid>
-          </Box>
-        )}
-
-        {/* Manual Input Section */}
-        <Typography variant="subtitle1" sx={{ 
-          mt: 2, 
-          mb: 1,
-          color: '#00ffff',
-          borderTop: '1px solid rgba(0, 255, 255, 0.1)',
-          paddingTop: '20px'
-        }}>
-          Manual Setup:
-        </Typography>
-
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel sx={{ color: '#00ffff' }}>Printer Type</InputLabel>
-          <Select
-            value={printerData.type}
-            onChange={(e) => handleInputChange('type', e.target.value)}
-            label="Printer Type"
-            sx={{ 
+    <GlassDialog open={open} onClose={onClose}>
+      <DialogTitle>Add Printer</DialogTitle>
+      <DialogContent>
+        <Tabs
+          value={activeTab}
+          onChange={(e, newValue) => setActiveTab(newValue)}
+          sx={{
+            mb: 2,
+            '& .MuiTab-root': {
               color: '#00ffff',
-              '& .MuiSelect-icon': { color: '#00ffff' },
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: 'rgba(0, 255, 255, 0.5)'
-              },
-              '& .MuiPaper-root': {
-                backgroundColor: 'rgba(0, 0, 0, 0.9)'
+              '&.Mui-selected': {
+                color: '#00ffff'
               }
-            }}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  bgcolor: 'rgba(0, 0, 0, 0.9)',
-                  border: '1px solid rgba(0, 255, 255, 0.3)',
-                  '& .MuiMenuItem-root': {
-                    color: '#00ffff',
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 255, 255, 0.1)'
-                    },
-                    '&.Mui-selected': {
-                      backgroundColor: 'rgba(0, 255, 255, 0.2)',
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: '#00ffff'
+            }
+          }}
+        >
+          <Tab label="Manual" />
+          <Tab label="Scan Network" />
+        </Tabs>
+
+        <Collapse in={activeTab === 0}>
+          <SetupHeader>
+            <Typography variant="subtitle2">
+              BambuLab Printer Setup
+            </Typography>
+            <IconButton 
+              onClick={() => setShowGuide(!showGuide)}
+              size="small"
+              sx={{ 
+                color: showGuide ? '#00ffff' : 'rgba(0, 255, 255, 0.6)',
+                '&:hover': {
+                  color: '#00ffff'
+                }
+              }}
+            >
+              <InfoIcon fontSize="small" />
+            </IconButton>
+          </SetupHeader>
+
+          <Collapse in={showGuide}>
+            <Box sx={{ mb: 3, mt: 2 }}>
+              <ol style={{ paddingLeft: '20px' }}>
+                <li>Connect the printer to your network via LAN cable</li>
+                <li>Enable LAN Mode Liveview:
+                  <ul>
+                    <li>Go to "Settings" (gear icon) > "General"</li>
+                    <li>Enable "LAN Mode Liveview"</li>
+                    <li>Note down the Access Code</li>
+                  </ul>
+                </li>
+                <li>Find the IP address under:
+                  <ul>
+                    <li>Settings > Network > IP Address</li>
+                  </ul>
+                </li>
+                <li>Click "Scan Network" or enter the IP manually</li>
+              </ol>
+            </Box>
+          </Collapse>
+
+          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: '#00ffff' }}>
+            Manual Setup:
+          </Typography>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Printer Type</InputLabel>
+            <Select
+              value={printerData.type}
+              onChange={(e) => handleInputChange('type', e.target.value)}
+              label="Printer Type"
+              sx={{ 
+                color: '#00ffff',
+                '& .MuiSelect-icon': { color: '#00ffff' },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: 'rgba(0, 255, 255, 0.5)'
+                },
+                '& .MuiPaper-root': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.9)'
+                }
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: 'rgba(0, 0, 0, 0.9)',
+                    border: '1px solid rgba(0, 255, 255, 0.3)',
+                    '& .MuiMenuItem-root': {
+                      color: '#00ffff',
                       '&:hover': {
-                        backgroundColor: 'rgba(0, 255, 255, 0.3)'
+                        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+                      },
+                      '&.Mui-selected': {
+                        backgroundColor: 'rgba(0, 255, 255, 0.2)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 255, 255, 0.3)'
+                        }
                       }
                     }
                   }
                 }
-              }
-            }}
+              }}
+            >
+              {PRINTER_TYPES.map((type) => (
+                <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <NeonTextField
+            label="Printer Name"
+            value={printerData.name}
+            onChange={(e) => handleInputChange('name', e.target.value)}
+            fullWidth
+          />
+
+          <NeonTextField
+            label="IP Address"
+            value={printerData.ip}
+            onChange={(e) => handleInputChange('ip', e.target.value)}
+            fullWidth
+          />
+
+          {renderTypeSpecificFields()}
+        </Collapse>
+
+        <Collapse in={activeTab === 1}>
+          <ScanButton
+            onClick={onScan}
+            disabled={isScanning}
+            startIcon={isScanning && <CircularProgress size={20} color="inherit" />}
           >
-            {PRINTER_TYPES.map((type) => (
-              <MenuItem key={type.value} value={type.value}>{type.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            {isScanning ? `Scanning... (${scanTimer}s)` : 'SCAN NETWORK'}
+          </ScanButton>
 
-        <NeonTextField
-          autoFocus
-          margin="dense"
-          label="Printer Name"
-          fullWidth
-          value={printerData.name}
-          onChange={(e) => handleInputChange('name', e.target.value)}
-        />
+          {scannedPrinters.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1, color: '#00ffff' }}>
+                Found Printers:
+              </Typography>
+              <Grid container spacing={2}>
+                {scannedPrinters.map((printer) => (
+                  <Grid item xs={12} sm={6} key={printer.id}>
+                    <PrinterCard 
+                      onClick={() => handleScannedPrinterSelect(printer)}
+                      sx={{ position: 'relative', minHeight: '140px' }}
+                    >
+                      <ModeBadge 
+                        label={printer.mode.toUpperCase()} 
+                        mode={printer.mode}
+                        size="small"
+                      />
+                      <Typography variant="h6" sx={{ 
+                        color: '#00ffff',
+                        mb: 1,
+                        fontSize: '1rem',
+                        fontWeight: 500
+                      }}>
+                        {printer.name}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                        IP: {printer.ip}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                        Model: {printer.model}
+                      </Typography>
+                      {printer.serial && (
+                        <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                          S/N: {printer.serial}
+                        </Typography>
+                      )}
+                      {printer.version && (
+                        <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                          Version: {printer.version}
+                        </Typography>
+                      )}
+                    </PrinterCard>
+                  </Grid>
+                ))}
+              </Grid>
 
-        <NeonTextField
-          margin="dense"
-          label="IP Address"
-          fullWidth
-          value={printerData.ip}
-          onChange={(e) => handleInputChange('ip', e.target.value)}
-        />
-
-        {renderTypeSpecificFields()}
+              <Collapse in={printerData.ip !== ''}>
+                <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(0, 255, 255, 0.1)' }}>
+                  <NeonTextField
+                    label="Access Code"
+                    value={printerData.accessCode}
+                    onChange={(e) => handleInputChange('accessCode', e.target.value)}
+                    fullWidth
+                  />
+                </Box>
+              </Collapse>
+            </Box>
+          )}
+        </Collapse>
       </DialogContent>
-
-      <DialogActions sx={{
-        borderTop: '1px solid rgba(0, 255, 255, 0.1)',
-        padding: 2
-      }}>
-        <NeonButton onClick={onClose}>
-          Cancel
-        </NeonButton>
-        <NeonButton onClick={() => {
-          const submitData = {
-            ...printerData,
-            streamUrl: printerData.type === 'BAMBULAB' 
-              ? `rtsps://bblp:${printerData.accessCode}@${printerData.ip}:322/streaming/live/1`
-              : printerData.type === 'OCTOPRINT'
-                ? `http://${printerData.ip}/webcam/?action=stream`
-                : `http://${printerData.ip}:8080/?action=stream`
-          };
-          onAdd(submitData);
-        }}
-          disabled={isAdding || !printerData.name || !printerData.ip || (printerData.type === 'BAMBULAB' && !printerData.accessCode)}
-        >
+      
+      <DialogActions>
+        <NeonButton onClick={onClose}>Cancel</NeonButton>
+        <NeonButton onClick={handleAdd} disabled={isAdding}>
           {isAdding ? <CircularProgress size={24} /> : 'Add'}
         </NeonButton>
       </DialogActions>
