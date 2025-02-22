@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse, Grid, Chip, Tabs, Tab } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Select, MenuItem, FormControl, InputLabel, Box, Typography, List, ListItem, ListItemText, IconButton, Collapse, Grid, Chip, Tabs, Tab, useTheme, useMediaQuery, Paper } from '@mui/material';
 import styled from '@emotion/styled';
 import InfoIcon from '@mui/icons-material/Info';
 import { CircularProgress } from '@mui/material';
@@ -116,21 +116,18 @@ const SetupHeader = styled(Box)({
   }
 });
 
-const PrinterTypeCard = styled(Box)(({ selected }) => ({
-  background: 'rgba(0, 0, 0, 0.6)',
-  borderRadius: '10px',
-  padding: '20px',
-  border: `1px solid ${selected ? '#00ffff' : 'rgba(0, 255, 255, 0.3)'}`,
-  transition: 'all 0.3s ease',
-  cursor: 'pointer',
+const PrinterTypeCard = styled(Paper)(({ selected }) => ({
+  position: 'relative',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: '10px',
-  width: '160px',
-  height: '160px',
-  position: 'relative',
+  padding: '20px',
+  background: 'rgba(0, 0, 0, 0.6)',
+  border: selected ? '2px solid #00ffff' : '1px solid rgba(0, 255, 255, 0.3)',
+  borderRadius: '10px',
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
   '&:hover': {
     border: '1px solid rgba(0, 255, 255, 0.8)',
     boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
@@ -215,6 +212,8 @@ const AddPrinterDialog = ({
     status: ''
   });
   const [activeTab, setActiveTab] = useState(0);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const handleScannedPrinterSelect = (printer) => {
     setPrinterData({
@@ -331,11 +330,15 @@ const AddPrinterDialog = ({
 
         <Collapse in={activeTab === 0}>
           <Box sx={{ 
-            display: 'flex', 
-            gap: 2, 
-            mb: 3, 
-            mt: 2,
-            justifyContent: 'center'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: isMobile ? 1 : 2,
+            my: 3,
+            width: '100%',
+            '& > *': {
+              height: isMobile ? '120px' : '200px',
+              minWidth: isMobile ? '90px' : '150px',
+            }
           }}>
             {PRINTER_TYPES.map((type) => (
               <PrinterTypeCard
@@ -346,19 +349,37 @@ const AddPrinterDialog = ({
                   setPrinterData(prev => ({ ...prev, type: type.value }));
                 }}
               >
-                <PrinterIcon src="/3d-printer.png" alt={type.label} />
-                <Typography 
-                  variant="body2" 
-                  align="center"
-                  sx={{ 
-                    width: '100%',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {type.label}
-                </Typography>
+                <Box sx={{ 
+                  p: isMobile ? 1 : 2,
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: isMobile ? 1 : 2,
+                  '& img': {
+                    width: isMobile ? '40px' : '64px',
+                    height: 'auto'
+                  },
+                  '& .MuiTypography-root': {
+                    fontSize: isMobile ? '0.75rem' : '0.875rem',
+                    whiteSpace: isMobile ? 'normal' : 'nowrap',
+                    textAlign: 'center',
+                    lineHeight: isMobile ? '1.2' : 'inherit'
+                  }
+                }}>
+                  <PrinterIcon src="/3d-printer.png" alt={type.label} />
+                  <Typography 
+                    variant="body2" 
+                    align="center"
+                    sx={{ 
+                      width: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {type.label}
+                  </Typography>
+                </Box>
                 <IconButton
                   size="small"
                   onClick={(e) => {
@@ -372,7 +393,7 @@ const AddPrinterDialog = ({
                     color: showGuide === type.value ? '#00ffff' : 'rgba(0, 255, 255, 0.6)'
                   }}
                 >
-                  <InfoIcon fontSize="small" />
+                  <InfoIcon fontSize={isMobile ? 'small' : 'medium'} />
                 </IconButton>
               </PrinterTypeCard>
             ))}
@@ -475,8 +496,20 @@ const AddPrinterDialog = ({
                 {scannedPrinters.map((printer) => (
                   <Grid item xs={12} sm={6} key={printer.id}>
                     <PrinterCard 
+                      key={printer.ip} 
                       onClick={() => handleScannedPrinterSelect(printer)}
-                      sx={{ position: 'relative', minHeight: '140px' }}
+                      sx={{
+                        border: printerData.ip === printer.ip ? '2px solid #00ffff' : '1px solid rgba(0, 255, 255, 0.3)',
+                        boxShadow: printerData.ip === printer.ip ? '0 0 15px rgba(0, 255, 255, 0.3)' : 'none',
+                        transform: printerData.ip === printer.ip ? 'translateY(-2px)' : 'none',
+                        '&:hover': {
+                          border: printerData.ip === printer.ip 
+                            ? '2px solid #00ffff' 
+                            : '1px solid rgba(0, 255, 255, 0.8)',
+                          boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+                          transform: 'translateY(-2px)'
+                        }
+                      }}
                     >
                       <ModeBadge 
                         label={printer.mode.toUpperCase()} 
