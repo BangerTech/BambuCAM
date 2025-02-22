@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 class StreamService:
     def __init__(self):
-        self.active_streams = {}  # Format: {printer_id: {port: int, process: Process, ws_server: WebSocketServer}}
+        self.active_streams = {}  # Speichert alle aktiven Streams
         self.BASE_PORT = 9000
-        self.port_lock = threading.Lock()  # Thread-safe Port-Verwaltung
         self.next_port = self.BASE_PORT
+        self.used_ports = set()  # Speichert aktuell verwendete Ports
         self.CHUNK_SIZE = 65536  # 64KB Chunks
         
         # Event Loop in separatem Thread
@@ -37,14 +37,25 @@ class StreamService:
         self.loop.run_forever()
 
     def get_next_port(self):
-        """Findet den nächsten freien Port für einen Stream"""
-        used_ports = set(stream['port'] for stream in self.active_streams.values())
-        
-        # Suche den nächsten freien Port
+        """Findet den nächsten freien Port"""
         for port in range(self.BASE_PORT, self.BASE_PORT + 100):
-            if port not in used_ports:
-                return port
+            if port not in self.used_ports:
+                try:
+                    # Test ob Port wirklich frei ist
+                    import socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.bind(('0.0.0.0', port))
+                    sock.close()
+                    self.used_ports.add(port)
+                    return port
+                except:
+                    continue
         raise Exception("Keine freien Ports verfügbar")
+
+    def release_port(self, port):
+        """Gibt einen Port wieder frei"""
+        if port in self.used_ports:
+            self.used_ports.remove(port)
 
     def start_stream(self, printer_id: str, stream_url: str = None) -> dict:
         try:
@@ -69,19 +80,30 @@ class StreamService:
                     'url': stream_url
                 }
 
-            # Für andere Drucker (Bambu Lab) FFmpeg verwenden
+            # Für BambuLab FFmpeg verwenden
             self.stop_stream(printer_id)  # Cleanup alter Stream
             
-            # FFmpeg mit Retry
+            # FFmpeg mit optimierten Parametern für BambuLab
             process = self._start_ffmpeg(stream_url)
             
-            # WebSocket Server im Event Loop erstellen
-            port = self.get_next_port()
-            future = asyncio.run_coroutine_threadsafe(
-                self._create_ws_server(process, port),
-                self.loop
-            )
-            future.result()  # Warte auf Server-Start
+            # Neuen Port holen
+            try:
+                port = self.get_next_port()
+            except Exception as e:
+                process.terminate()
+                return {'success': False, 'error': str(e)}
+            
+            # WebSocket Server erstellen
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._create_ws_server(process, port),
+                    self.loop
+                )
+                future.result()  # Warte auf Server-Start
+            except Exception as e:
+                process.terminate()
+                self.release_port(port)
+                raise e
             
             # Stream-Überwachung
             monitor_future = asyncio.run_coroutine_threadsafe(
@@ -92,19 +114,13 @@ class StreamService:
             self.active_streams[printer_id] = {
                 'process': process,
                 'port': port,
-                'url': stream_url,
                 'monitor_task': monitor_future
             }
             
-            return {
-                'success': True,
-                'direct': False,
-                'port': port,
-                'url': f'ws://localhost:{port}'
-            }
+            return {'success': True, 'port': port}
 
         except Exception as e:
-            logger.error(f"Error starting stream: {e}")
+            logger.error(f"Stream start failed: {e}")
             return {'success': False, 'error': str(e)}
 
     def _start_ffmpeg(self, url: str):
@@ -112,36 +128,19 @@ class StreamService:
         try:
             logger.info(f"Starting FFmpeg stream from URL: {url}")
             
-            # Unterschiedliche Parameter für MJPEG und RTSP
-            if 'action=stream' in url:  # MJPEG Stream (OctoPrint/Creality)
-                logger.info("Detected MJPEG stream, using MJPEG parameters")
-                cmd = [
-                    'ffmpeg',
-                    '-f', 'mjpeg',
-                    '-reconnect', '1',
-                    '-reconnect_streamed', '1',
-                    '-reconnect_delay_max', '5',
-                    '-i', url,
-                    '-c:v', 'copy',
-                    '-f', 'mp4',
-                    '-movflags', 'frag_keyframe+empty_moov',
-                    'pipe:1'
-                ]
-            else:  # RTSP Stream (Bambu Lab)
-                logger.info("Detected RTSP stream, using RTSP parameters")
-                cmd = [
-                    'ffmpeg',
-                    '-fflags', 'nobuffer',
-                    '-flags', 'low_delay',
-                    '-rtsp_transport', 'tcp',
-                    '-i', url,
-                    '-c:v', 'copy',
-                    '-f', 'mp4',
-                    '-movflags', 'frag_keyframe+empty_moov',
-                    'pipe:1'
-                ]
-            
-            logger.debug(f"FFmpeg command: {' '.join(cmd)}")
+            # Optimierte Parameter für flüssigeres Video
+            cmd = [
+                'ffmpeg',
+                '-fflags', 'nobuffer+fastseek',  # Schnelleres Buffering
+                '-flags', 'low_delay',
+                '-rtsp_transport', 'tcp',
+                '-i', url,
+                '-c:v', 'copy',
+                '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+                '-f', 'mp4',
+                '-frag_duration', '250000',  # Kürzere Fragmente für weniger Latenz
+                'pipe:1'
+            ]
             
             process = subprocess.Popen(
                 cmd,
@@ -150,14 +149,12 @@ class StreamService:
                 bufsize=10**8
             )
             
-            # Warte kurz und prüfe ob FFmpeg gestartet ist
-            time.sleep(1)
+            # Warte kurz und prüfe FFmpeg-Start
+            time.sleep(0.5)
             if process.poll() is not None:
                 error = process.stderr.read().decode()
-                logger.error(f"FFmpeg failed to start: {error}")
                 raise Exception(f"FFmpeg failed to start: {error}")
-                
-            logger.info("FFmpeg process started successfully")
+            
             return process
             
         except Exception as e:
@@ -266,6 +263,9 @@ class StreamService:
                     process.wait(timeout=5)
                 except:
                     process.kill()
+                # Port freigeben
+                if 'port' in stream:
+                    self.release_port(stream['port'])
                 del self.active_streams[printer_id]
             except Exception as e:
                 logger.error(f"Stop stream error: {e}")

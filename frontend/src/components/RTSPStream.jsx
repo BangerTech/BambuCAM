@@ -42,18 +42,18 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   // 1. Cleanup Funktion
   const cleanup = useCallback(() => {
     Logger.logStream('Cleanup', 'Cleaning up stream resources');
+    isReconnecting.current = true;
+    
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    if (bufferResetTimeout.current) {
-      clearTimeout(bufferResetTimeout.current);
-      bufferResetTimeout.current = null;
-    }
+    
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    
     if (sourceBufferRef.current && mediaSourceRef.current) {
       try {
         if (mediaSourceRef.current.readyState === 'open') {
@@ -64,15 +64,12 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         console.debug('Cleanup error:', e);
       }
     }
+    
     if (videoRef.current) {
-      // Prüfe ob es ein Video oder Image Element ist
-      if (videoRef.current instanceof HTMLVideoElement) {
-        videoRef.current.src = '';
-        videoRef.current.load();
-      } else if (videoRef.current instanceof HTMLImageElement) {
-        videoRef.current.src = '';
-      }
+      videoRef.current.src = '';
+      videoRef.current.load();
     }
+    
     bufferQueue.current = [];
     isProcessing.current = false;
     sourceBufferRef.current = null;
@@ -81,9 +78,130 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     videoErrorCount.current = 0;
     bufferErrorCount.current = 0;
     reconnectDelay.current = 1000;
+    isReconnecting.current = false;
   }, []);
 
-  // 2. Reconnect Funktion
+  // 2. Stream Setup Funktion
+  const initStream = useCallback(async () => {
+    if (setupInProgress.current) {
+      console.debug('Setup already in progress, aborting');
+      return;
+    }
+
+    try {
+      setupInProgress.current = true;
+      cleanup();
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_URL}/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to start stream');
+      }
+
+      if (data.direct) {
+        setupMjpegStream(data.url);
+        return;
+      }
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      const mediaSource = new MediaSource();
+      mediaSourceRef.current = mediaSource;
+      video.src = URL.createObjectURL(mediaSource);
+
+      mediaSource.addEventListener('sourceopen', () => {
+        try {
+          const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
+          sourceBufferRef.current = sourceBuffer;
+          
+          // Optimierte Buffer-Verwaltung
+          sourceBuffer.addEventListener('updateend', () => {
+            try {
+              const buffered = sourceBuffer.buffered;
+              if (buffered.length > 0) {
+                const currentTime = video.currentTime;
+                const bufferEnd = buffered.end(0);
+                
+                // Kleinerer Buffer für geringere Latenz
+                if (bufferEnd - currentTime > 4) {
+                  sourceBuffer.remove(0, currentTime - 1);
+                }
+              }
+            } catch (e) {
+              console.debug('Buffer cleanup skipped:', e.message);
+            }
+          });
+
+          const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
+          const ws = new WebSocket(wsUrl);
+          wsRef.current = ws;
+
+          ws.onopen = () => {
+            Logger.logStream('WebSocket', 'Connected');
+            setLoading(false);
+            reconnectAttempts.current = 0;
+          };
+
+          ws.onmessage = async (event) => {
+            lastDataReceived.current = Date.now();
+            try {
+              const data = await event.data.arrayBuffer();
+              if (sourceBuffer && !sourceBuffer.updating) {
+                sourceBuffer.appendBuffer(data);
+                
+                // Automatisches Abspielen sobald genug gepuffert
+                if (!video.playing && sourceBuffer.buffered.length > 0) {
+                  const buffered = sourceBuffer.buffered.end(0) - sourceBuffer.buffered.start(0);
+                  if (buffered > 0.5) {
+                    video.play().catch(console.debug);
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error processing video data:', error);
+              reconnect();
+            }
+          };
+
+          // Original Error Handler
+          ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            reconnect();
+          };
+
+          ws.onclose = () => {
+            console.log('WebSocket closed');
+            if (!isReconnecting.current && mountedRef.current) {
+              reconnect();
+            }
+          };
+
+          // Video Event Listener
+          video.addEventListener('error', (e) => {
+            console.error('Video error:', e);
+          });
+
+        } catch (error) {
+          console.error('Error in sourceopen:', error);
+          setError('Failed to initialize stream');
+          setLoading(false);
+        }
+      });
+
+    } catch (error) {
+      console.error('Stream setup failed:', error);
+      setError('Stream initialization failed');
+      setLoading(false);
+    } finally {
+      setupInProgress.current = false;
+    }
+  }, [cleanup, printer.id, printer.streamUrl]);
+
+  // 3. Reconnect Funktion
   const reconnect = useCallback(() => {
     if (!mountedRef.current || isReconnecting.current) {
       Logger.logStream('Reconnect', 'Aborted: already reconnecting or unmounted');
@@ -109,9 +227,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         initStream();
       }
     }, delay);
-  }, [cleanup]);
+  }, [cleanup, initStream, maxReconnectAttempts]);
 
-  // 3. Error Handler Funktionen
+  // 4. Error Handler Funktionen
   const handleVideoError = useCallback((error) => {
     console.debug('Video error:', error);
     videoErrorCount.current++;
@@ -136,154 +254,6 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     }
   }, []);
 
-  // 4. Setup Stream Funktion
-  const initStream = useCallback(async () => {
-    if (setupInProgress.current) {
-      console.debug('Setup already in progress, aborting');
-      return;
-    }
-
-    try {
-      setupInProgress.current = true;
-      cleanup();
-      setLoading(true);
-      setError(null);
-
-      // Stream vom Backend anfordern
-      const response = await fetch(`/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to start stream');
-      }
-
-      // Wenn es ein direkter Stream ist (OctoPrint/Creality)
-      if (data.direct) {
-        const container = videoRef.current?.parentElement;
-        if (!container) return;
-
-        const img = document.createElement('img');
-        img.src = data.url;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'contain';
-        
-        img.onerror = () => {
-          setError('Failed to load video stream');
-          setLoading(false);
-        };
-        
-        img.onload = () => {
-          setLoading(false);
-        };
-
-        container.replaceChild(img, videoRef.current);
-        videoRef.current = img;
-        return;
-      }
-
-      // MediaSource Setup
-      const mediaSource = new MediaSource();
-      mediaSourceRef.current = mediaSource;
-
-      await new Promise((resolve, reject) => {
-        mediaSource.addEventListener('sourceopen', () => {
-          try {
-            const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
-            sourceBufferRef.current = sourceBuffer;
-
-            // Buffer Management
-            sourceBuffer.addEventListener('updateend', () => {
-              try {
-                if (sourceBuffer.buffered.length > 0) {
-                  const currentTime = videoRef.current.currentTime;
-                  const bufferEnd = sourceBuffer.buffered.end(0);
-                  
-                  if (bufferEnd - currentTime > 5) {
-                    sourceBuffer.remove(0, currentTime - 1);
-                  }
-                }
-              } catch (e) {
-                console.debug('Buffer management error:', e);
-              }
-            });
-
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        });
-      });
-
-      videoRef.current.src = URL.createObjectURL(mediaSource);
-
-      // WebSocket Setup
-      const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        Logger.logStream('WebSocket', 'Connected');
-        setLoading(false);
-        reconnectAttempts.current = 0;
-        lastDataReceived.current = Date.now();
-        errorCount.current = 0;
-      };
-
-      ws.onmessage = async (event) => {
-        lastDataReceived.current = Date.now();
-        try {
-          const data = await event.data.arrayBuffer();
-          
-          if (!sourceBufferRef.current || mediaSourceRef.current?.readyState !== 'open') {
-            console.debug('SourceBuffer or MediaSource not ready');
-            return;
-          }
-
-          if (!sourceBufferRef.current.updating) {
-            try {
-              sourceBufferRef.current.appendBuffer(data);
-            } catch (e) {
-              if (e.name === 'QuotaExceededError') {
-                const buffered = sourceBufferRef.current.buffered;
-                if (buffered.length > 0) {
-                  sourceBufferRef.current.remove(0, buffered.end(0) - 2);
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.debug('Stream error:', error);
-          reconnect();
-        }
-      };
-
-      ws.onerror = () => {
-        console.debug('WebSocket error');
-        if (!isReconnecting.current) {
-          reconnect();
-        }
-      };
-
-      ws.onclose = () => {
-        console.debug('WebSocket closed');
-        if (!isReconnecting.current) {
-          reconnect();
-        }
-      };
-
-    } catch (error) {
-      console.error('Stream setup failed:', error);
-      setError('Stream-Initialisierung fehlgeschlagen');
-      setLoading(false);
-      if (!isReconnecting.current && handleErrorRef.current) {
-        handleErrorRef.current();
-      }
-    } finally {
-      setupInProgress.current = false;
-    }
-  }, [cleanup, handleVideoError, handleBufferError]);
-
   // 5. Setze die handleErrorRef auf die reconnect Funktion
   useEffect(() => {
     handleErrorRef.current = reconnect;
@@ -291,44 +261,37 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   // 6. Initialer Stream-Start und Cleanup
   useEffect(() => {
-    if (!printer) return;
-
+    Logger.info('Initializing stream for printer:', printer);
+    
+    // Wenn es nur ein Fullscreen-Toggle ist, nicht neu initialisieren
+    if (videoRef.current && document.fullscreenElement === videoRef.current) {
+        console.log('Skipping stream setup - just fullscreen toggle');
+        return;
+    }
+    
     // Für MJPEG Streams (OctoPrint und Creality)
     if (printer.type === 'OCTOPRINT' || printer.type === 'CREALITY') {
-      const container = videoRef.current?.parentElement;
-      if (!container) return;
-
-      const img = document.createElement('img');
-      // Nutze die konfigurierte streamUrl für OctoPrint
-      img.src = printer.type === 'OCTOPRINT' ? printer.streamUrl : `http://${printer.ip}:8080/?action=stream`;
-      img.style.width = '100%';
-      img.style.height = '100%';
-      img.style.objectFit = 'contain';
-      
-      img.onerror = () => {
-        setError('Failed to load video stream');
-        setLoading(false);
-      };
-      
-      img.onload = () => {
-        setLoading(false);
-      };
-
-      container.replaceChild(img, videoRef.current);
-      videoRef.current = img;
-
-      // Cleanup Funktion
-      return () => {
-        if (videoRef.current instanceof HTMLImageElement) {
-          videoRef.current.src = '';
-        }
-      };
+        setupMjpegStream(printer.streamUrl);
+        return;
+    }
+    
+    // Für BambuLab
+    if (printer.type === 'BAMBULAB') {
+        console.log('Setting up Bambu Lab RTSP stream');
+        initStream();
     }
 
-    // Für Bambu Lab den WebSocket Stream
-    initStream();
-    return cleanup;
-  }, [printer]);
+    return () => {
+        // Cleanup nur wenn wirklich notwendig
+        if (!document.fullscreenElement) {
+            console.log('Full stream cleanup');
+            mountedRef.current = false;
+            cleanup();
+        } else {
+            console.log('Skipping cleanup - in fullscreen mode');
+        }
+    };
+}, [printer.id, printer.type]);
 
   const processNextBuffer = useCallback(() => {
     if (!sourceBufferRef.current || !bufferQueue.current.length || isProcessing.current) {
@@ -550,251 +513,13 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     };
   }, [fullscreen]);
 
-  // Behalte nur diesen einen useEffect für Stream-Setup
-  useEffect(() => {
-    Logger.info('Initializing stream for printer:', printer);
-    
-    // Wenn es nur ein Fullscreen-Toggle ist, nicht neu initialisieren
-    if (videoRef.current && document.fullscreenElement === videoRef.current) {
-      console.log('Skipping stream setup - just fullscreen toggle');
-      return;
-    }
-    
-    if (printer.type === 'BAMBULAB') {
-      console.log('Setting up Bambu Lab RTSP stream');
-      setupBambuStream();
-    } else if (printer.type === 'CREALITY') {
-      console.log('Setting up Creality MJPEG stream');
-      setupCrealityStream();
-    }
-
-    return () => {
-      // Cleanup nur wenn wirklich notwendig
-      if (!document.fullscreenElement) {
-        console.log('Full stream cleanup');
-        mountedRef.current = false;
-        cleanup();
-      } else {
-        console.log('Skipping cleanup - in fullscreen mode');
-      }
-    };
-  }, [printer.id]);
-
-  // Prüfe ob Video-Element verfügbar ist
-  const isVideoReady = () => {
-    return videoRef.current && !videoRef.current.error;
-  };
-
-  const appendNextBuffer = () => {
-    if (pendingBuffersRef.current.length > 0 && sourceBufferRef.current && !sourceBufferRef.current.updating) {
-      try {
-        sourceBufferRef.current.appendBuffer(pendingBuffersRef.current.shift());
-      } catch (e) {
-        console.error('Error appending buffer:', e);
-      }
-    }
-  };
-
-  // Buffer Management mit Sicherheitsprüfungen
-  const manageBuffer = () => {
-    if (!isVideoReady() || !sourceBufferRef.current) return;
-
-    const buffered = sourceBufferRef.current.buffered;
-    if (buffered.length > 0) {
-      try {
-        const currentTime = videoRef.current.currentTime;
-        const bufferEnd = buffered.end(0);
-        
-        if (bufferEnd - currentTime > 10) {
-          sourceBufferRef.current.remove(0, currentTime - 5);
-        }
-      } catch (e) {
-        console.warn('Buffer management failed:', e);
-      }
-    }
-    appendNextBuffer();
-  };
-
-  // Automatischer Neustart bei Stream-Ende
-  const handleStreamEnd = () => {
-    console.log('Stream ended, attempting restart...');
-    cleanup();
-    setTimeout(() => {
-      if (mountedRef.current) {
-        setupBambuStream();
-      }
-    }, 1000);
-  };
-
-  const setupBambuStream = useCallback(async () => {
-    try {
-      console.log('Setting up Bambu Lab RTSP stream');
-      cleanup();
-      setLoading(true);
-      setError(null);
-
-      // Stream vom Backend anfordern
-      const response = await fetch(`/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to start stream');
-      }
-
-      // MediaSource Setup
-      const video = videoRef.current;
-      if (!video) return;
-
-      // WebSocket Verbindung
-      const wsUrl = `ws://${window.location.hostname}:${data.port}/stream/${printer.id}`;
-      console.log('Connecting to WebSocket:', wsUrl);
-      
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      // Blob Setup für Video
-    const mediaSource = new MediaSource();
-      video.src = URL.createObjectURL(mediaSource);
-    
-    mediaSource.addEventListener('sourceopen', () => {
-        const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
-        let isFirstChunk = true;
-        let errorCount = 0;
-        const MAX_ERRORS = 5;
-        
-        ws.onmessage = async (event) => {
-          try {
-            lastDataReceived.current = Date.now();
-            const data = await event.data.arrayBuffer();
-            
-            if (sourceBuffer.updating) {
-              return;
-            }
-
-            // Prüfe ob Video-Element Fehler hat
-            if (videoRef.current.error) {
-              errorCount++;
-              console.debug(`Video error detected (${errorCount}/${MAX_ERRORS}):`, videoRef.current.error.message);
-              
-              if (errorCount >= MAX_ERRORS) {
-                console.warn('Too many video errors, reconnecting...');
-                reconnect();
-                return;
-              }
-
-              // Versuche Video-Element zurückzusetzen
-              try {
-                await sourceBuffer.abort();
-                sourceBuffer.timestampOffset = 0;
-                videoRef.current.currentTime = 0;
-              } catch (e) {
-                console.debug('Reset failed:', e);
-              }
-            }
-            
-            try {
-              sourceBuffer.appendBuffer(data);
-              if (isFirstChunk) {
-                isFirstChunk = false;
-                videoRef.current.play().catch(console.debug);
-              }
-              errorCount = 0; // Reset Error-Counter bei erfolgreicher Verarbeitung
-            } catch (e) {
-              if (e.name === 'QuotaExceededError') {
-                // Buffer voll - ältere Daten entfernen
-                const buffered = sourceBuffer.buffered;
-                if (buffered.length > 0) {
-                  const currentTime = videoRef.current.currentTime;
-                  sourceBuffer.remove(0, currentTime - 1); // Behalte 1 Sekunde Puffer
-                }
-              } else {
-                console.debug('Buffer warning:', e.message);
-                errorCount++;
-              }
-            }
-          } catch (error) {
-            console.error('Fatal stream error:', error);
-            reconnect();
-          }
-        };
-
-        // Buffer Management
-        sourceBuffer.addEventListener('updateend', () => {
-          try {
-            const buffered = sourceBuffer.buffered;
-            if (buffered.length > 0) {
-              const currentTime = videoRef.current.currentTime;
-              const bufferEnd = buffered.end(0);
-              
-              // Entferne alte Daten wenn Buffer zu groß wird
-              if (bufferEnd - currentTime > 10) {
-                sourceBuffer.remove(0, currentTime - 2);
-              }
-            }
-          } catch (e) {
-            console.debug('Buffer cleanup skipped:', e.message);
-          }
-        });
-
-        ws.onopen = () => {
-          console.log('WebSocket connected');
-          setLoading(false);
-          reconnectAttempts.current = 0;
-        };
-
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          setError('Stream-Verbindung unterbrochen');
-          reconnect();
-        };
-
-        ws.onclose = () => {
-          console.log('WebSocket closed');
-          reconnect();
-        };
-      });
-
-      // Verbesserte Video Event Handler
-      video.addEventListener('loadstart', () => Logger.logStream('Video', 'Initial laden'));
-      video.addEventListener('playing', () => {
-        Logger.logStream('Video', 'Stream läuft');
-        setLoading(false);
-      });
-      video.addEventListener('waiting', () => {
-        console.debug('Video: Puffern...');
-        // Nur kurzes Puffern erlauben
-        setTimeout(() => {
-          if (videoRef.current && videoRef.current.readyState <= 2) {
-            console.debug('Puffer-Timeout - Neustart');
-            reconnect();
-          }
-        }, 5000);
-      });
-      video.addEventListener('error', (e) => {
-        const error = e.target.error;
-        console.debug('Video warning:', error.message);
-        // Nur bei schweren Fehlern reconnecten
-        if (error.code === MediaError.MEDIA_ERR_DECODE) {
-          reconnect();
-        }
-      });
-
-    } catch (error) {
-      console.error('Fehler beim Stream-Setup:', error);
-      setError('Stream-Initialisierung fehlgeschlagen');
-      setLoading(false);
-      reconnect();
-    }
-  }, [printer.id, printer.streamUrl, cleanup]);
-
-  const setupCrealityStream = () => {
+  const setupMjpegStream = (url) => {
     if (videoRef.current) {
       // Erstelle ein img Element für MJPEG
       const img = document.createElement('img');
-      const streamUrl = `http://${printer.ip}:8080/?action=stream`;
-      console.log('Using stream URL:', streamUrl);
+      console.log('Using stream URL:', url);
       
-      img.src = streamUrl;
+      img.src = url;
       img.style.width = '100%';
       img.style.height = '100%';
       img.style.objectFit = 'contain';
