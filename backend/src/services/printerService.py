@@ -75,7 +75,7 @@ class PrinterService:
         self.printer_data = {}
         self.polling_threads = {}
         self.file_locks = {}
-        self.go2rtc_config_path = os.path.join(DATA_DIR, 'go2rtc', 'go2rtc.yaml')
+        self.go2rtc_config_path = '/app/data/go2rtc/go2rtc.yaml'
         self.mqtt_service = mqtt_service
         self.octoprint_service = octoprint_service
 
@@ -386,81 +386,111 @@ class PrinterService:
             raise
 
     def add_printer(self, data: dict) -> dict:
-        """Fügt einen neuen Drucker hinzu"""
         try:
             logger.info(f"Adding printer with data: {data}")
             printer_id = str(uuid.uuid4())
-            printer = {
+            
+            # Füge zusätzliche Felder hinzu
+            printer_data = {
                 'id': printer_id,
-                'name': data['name'],
-                'ip': data['ip'],
-                'type': data['type'],
+                **data,
                 'status': 'offline',
-                'temperatures': {
-                    'hotend': 0,
-                    'bed': 0,
-                    'chamber': 0
-                },
+                'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
                 'progress': 0,
-                'port': 8554,
-                'accessCode': data['accessCode'],
-                'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
+                'port': getNextPort()
             }
             
-            # Get MQTT info and store serial number
+            # Update go2rtc config für BAMBULAB Drucker
             if data['type'] == 'BAMBULAB':
-                logger.info(f"Setting up BambuLab printer {printer_id}")
-                try:
-                    mqtt_info = self.mqtt_service.get_printer_mqtt_info(data['ip'])
-                    if mqtt_info and mqtt_info.get('sn'):
-                        printer['serial'] = mqtt_info['sn']
-                        logger.info(f"Got serial number: {mqtt_info['sn']}")
-                except Exception as e:
-                    logger.error(f"Error getting MQTT info: {e}")
+                logger.info("Updating go2rtc config for Bambulab printer")
+                self._update_go2rtc_config(printer_data)
             
-            # Speichere Drucker zuerst
-            logger.info(f"Saving printer configuration to file")
-            self.save_printer(printer)
+            # Speichere Drucker
+            self._save_printer(printer_id, printer_data)
             
-            # Dann aktualisiere go2rtc config
+            # Setup MQTT für Bambulab
             if data['type'] == 'BAMBULAB':
-                logger.info(f"Updating go2rtc config for printer {printer_id}")
-                self._update_go2rtc_config(printer)
+                self.mqtt_service.connect_printer(printer_id, data['ip'])
             
-            logger.info(f"Successfully added printer {printer_id}")
-            return printer
+            return printer_data
+            
         except Exception as e:
-            logger.error(f"Error adding printer: {e}", exc_info=True)
+            logger.error(f"Error adding printer: {e}")
             raise
 
     def _update_go2rtc_config(self, printer_data):
         try:
-            config_path = '/config/go2rtc.yaml'  # Pfad im Container
+            config_path = self.go2rtc_config_path
+            logger.info(f"Updating go2rtc config at {config_path}")
             
-            # Lade bestehende Konfiguration
+            # Standardkonfiguration
+            default_config = {
+                'streams': {},
+                'api': {
+                    'listen': '0.0.0.0:1984',
+                    'base_path': '',
+                    'origin': '*'
+                },
+                'webrtc': {
+                    'listen': '0.0.0.0:8555',
+                    'candidates': [f"{self._get_host_ip()}:8555"]
+                }
+            }
+            
+            # Lade bestehende Konfiguration oder verwende Standardkonfiguration
             if os.path.exists(config_path):
+                logger.info("Loading existing config")
                 with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f) or {}
+                    config = yaml.safe_load(f) or default_config
+                    logger.info(f"Loaded config: {config}")
             else:
-                config = {}
-
+                logger.info("Using default config")
+                config = default_config
+                
             # Stelle sicher, dass die Grundstruktur existiert
             if 'streams' not in config:
                 config['streams'] = {}
                 
             # Füge Stream-URL hinzu
             stream_url = printer_data['streamUrl']
-            config['streams'][printer_data['id']] = stream_url
+            logger.info(f"Adding stream {printer_data['id']}: {stream_url}")
+            # Konfiguriere den Stream mit FFmpeg
+            config['streams'][printer_data['id']] = {
+                'input': stream_url,
+                'ffmpeg': [
+                    '-fflags', 'nobuffer',
+                    '-flags', 'low_delay',
+                    '-rtsp_transport', 'tcp',
+                    '-stimeout', '5000000'
+                ]
+            }
             
             # Speichere Konfiguration
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            logger.info(f"Final config to write: {config}")
             with open(config_path, 'w') as f:
                 yaml.safe_dump(config, f)
                 
             # Restart go2rtc container
-            subprocess.run(['docker', 'restart', 'go2rtc'], check=True)
+            logger.info("Restarting go2rtc container")
+            result = subprocess.run(['docker', 'restart', 'go2rtc'], capture_output=True, text=True, check=True)
+            logger.info(f"go2rtc restart output: {result.stdout}")
+            if result.stderr:
+                logger.warning(f"go2rtc restart stderr: {result.stderr}")
+            logger.info("go2rtc container restarted")
             
         except Exception as e:
-            logger.error(f"Error updating go2rtc config: {e}")
+            logger.error(f"Error updating go2rtc config: {e}", exc_info=True)
+
+    def _get_host_ip(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "0.0.0.0"
 
     def _remove_from_go2rtc_config(self, printer_id):
         """Entfernt einen Stream aus der go2rtc Konfiguration"""

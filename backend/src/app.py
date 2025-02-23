@@ -44,25 +44,29 @@ STREAMS_DIR = DATA_DIR / 'streams'
 os.makedirs(PRINTERS_DIR, exist_ok=True)
 os.makedirs(STREAMS_DIR, exist_ok=True)
 
-# Stelle sicher, dass die go2rtc Konfiguration existiert
+# Stelle sicher, dass das go2rtc Verzeichnis existiert
 GO2RTC_DIR = DATA_DIR / 'go2rtc'
 GO2RTC_CONFIG = GO2RTC_DIR / 'go2rtc.yaml'
+os.makedirs(GO2RTC_DIR, exist_ok=True)
+
+# Erstelle initiale go2rtc Konfiguration wenn sie nicht existiert
 if not os.path.exists(GO2RTC_CONFIG):
     logger.info("Creating initial go2rtc configuration")
-    os.makedirs(GO2RTC_DIR, exist_ok=True)
     initial_config = {
         'streams': {},
         'api': {
-            'listen': ':1984',
-            'base_path': '/api'
+            'listen': '0.0.0.0:1984',
+            'base_path': '',  # Leerer base_path für die Web-UI
+            'origin': '*'
         },
         'webrtc': {
-            'listen': ':8555'
+            'listen': '0.0.0.0:8555',
+            'candidates': ['0.0.0.0:8555']
         }
     }
     with open(GO2RTC_CONFIG, 'w') as f:
-        yaml.dump(initial_config, f)
-    logger.info(f"Created go2rtc config at {GO2RTC_CONFIG}")
+        yaml.safe_dump(initial_config, f)
+    logger.info(f"Created initial go2rtc config at {GO2RTC_CONFIG}")
 
 # CORS mit erweiterten Optionen konfigurieren
 CORS(app, resources={
@@ -135,6 +139,15 @@ def start_stream(printer_id):
             
     except Exception as e:
         logger.error(f"Error starting stream: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/debug/go2rtc/config')
+def debug_go2rtc_config():
+    try:
+        with open('/app/data/go2rtc/go2rtc.yaml', 'r') as f:
+            config = yaml.safe_load(f)
+        return jsonify(config)
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

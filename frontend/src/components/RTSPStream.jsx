@@ -10,6 +10,7 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   const mediaSourceRef = useRef(null);
   const sourceBufferRef = useRef(null);
   const wsRef = useRef(null);
+  const pcRef = useRef(null);  // WebRTC peer connection
   const [error, setError] = useState(null);
   const bufferQueue = useRef([]);
   const isProcessing = useRef(false);
@@ -79,6 +80,10 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     bufferErrorCount.current = 0;
     reconnectDelay.current = 1000;
     isReconnecting.current = false;
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
   }, []);
 
   // 2. Stream Setup Funktion
@@ -642,34 +647,75 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   const setupWebSocket = useCallback(async () => {
     try {
-      // Hole Stream-URL mit Port vom Backend
-      const response = await fetch(`${API_URL}/api/stream/${printer.id}/start`);
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to start stream');
-      }
-
-      // Nutze den zugewiesenen Port für die WebSocket-Verbindung
-      const streamUrl = `/go2rtc/?src=${printer.id}`;  // go2rtc verwendet standardmäßig index.html
+      const streamUrl = `ws://${window.location.hostname}/go2rtc/ws?src=${printer.id}`;
       
       const ws = new WebSocket(streamUrl);
       wsRef.current = ws;
-      // ...
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        ws.send(JSON.stringify({
+          type: 'webrtc',
+          sdp: {
+            type: 'request'
+          }
+        }));
+      };
+
+      ws.onmessage = async (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'webrtc') {
+          const pc = new RTCPeerConnection();
+          pcRef.current = pc;
+          
+          pc.ontrack = (e) => {
+            if (videoRef.current) {
+              videoRef.current.srcObject = e.streams[0];
+            }
+          };
+          
+          await pc.setRemoteDescription(msg.sdp);
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          
+          ws.send(JSON.stringify({
+            type: 'webrtc',
+            sdp: pc.localDescription
+          }));
+          
+          setLoading(false);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setError('Failed to connect to video stream');
+        setLoading(false);
+      };
+
     } catch (error) {
-      // ...
+      console.error('Error connecting to WebSocket:', error);
+      setError('Failed to connect to video stream');
+      setLoading(false);
     }
   }, [printer.id]);
 
   const getStreamUrl = useCallback(() => {
     if (!printer) return null;
     if (printer.type === 'BAMBULAB') {
-      return `http://${window.location.hostname}/go2rtc/?src=${printer.id}`;
+      return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}/go2rtc/ws?src=${printer.id}`;
     } else if (printer.type === 'OCTOPRINT' || printer.type === 'CREALITY') {
       return printer.streamUrl;
     }
     return null;
   }, [printer]);
+
+  useEffect(() => {
+    if (printer?.type === 'BAMBULAB') {
+      setupWebSocket();
+      return cleanup;
+    }
+  }, [printer, setupWebSocket, cleanup]);
 
   return (
     <Box sx={{
@@ -679,19 +725,14 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       zIndex: 1
     }}>
       {printer?.type === 'BAMBULAB' ? (
-        <iframe
-          src={getStreamUrl()}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
           style={{
             width: '100%',
             height: '100%',
-            border: 'none',
             backgroundColor: '#000'
-          }}
-          allowFullScreen
-          onLoad={() => setLoading(false)}
-          onError={() => {
-            setError('Failed to load stream');
-            setLoading(false);
           }}
         />
       ) : (

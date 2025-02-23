@@ -1,28 +1,29 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# System-Abhängigkeiten
+# Installiere FFmpeg und andere Abhängigkeiten
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
     ffmpeg \
     gcc \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Python-Abhängigkeiten
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Setze Arbeitsverzeichnis
+WORKDIR /app
 
-# Anwendungscode kopieren
+# Kopiere requirements.txt
+COPY requirements.txt .
+
+# Installiere Python-Abhängigkeiten
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --upgrade pip
+
+# Kopiere den Rest der Anwendung
 COPY . .
 
-# Berechtigungen für Daten- und Log-Verzeichnisse
+# Erstelle notwendige Verzeichnisse und setze Berechtigungen
 RUN mkdir -p /app/data/printers /app/data/streams /app/logs \
     && chmod -R 777 /app/data /app/logs \
     && mkdir -p /app/data/go2rtc \
-    && cp /app/src/config/go2rtc.yaml /app/data/go2rtc/go2rtc.yaml \
     && chmod -R 777 /app/data/go2rtc
 
 ENV FLASK_APP=src.app

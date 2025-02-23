@@ -49,11 +49,16 @@ services:
 
   go2rtc:
     image: alexxit/go2rtc
-    container_name: go2rtc
-    network_mode: host
-    volumes:
-      - ./backend/src/config/go2rtc.yaml:/config/go2rtc.yaml:ro
     restart: unless-stopped
+    network_mode: host  # Wichtig für WebRTC
+    volumes:
+      - ./backend/data/go2rtc:/config:rw
+    environment:
+      - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+    ports:
+      - "8554:8554"  # RTSP
+      - "8555:8555/udp"  # WebRTC
+      - "1984:1984"  # API/Web
 
 volumes:
   bambucam_data:
