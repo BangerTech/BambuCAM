@@ -100,9 +100,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       setError(null);
 
       // Prüfe zuerst die API-Verbindung
-      const response = await fetch('/go2rtc/api/');
-      if (!response.ok) {
-        throw new Error(`API nicht erreichbar: ${response.status}`);
+      const apiResponse = await fetch('/go2rtc/api/');
+      if (!apiResponse.ok) {
+        throw new Error(`API nicht erreichbar: ${apiResponse.status}`);
       }
 
       const response = await fetch(`${API_URL}/api/stream/${printer.id}?url=${encodeURIComponent(printer.streamUrl)}`);
