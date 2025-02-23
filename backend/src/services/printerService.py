@@ -454,31 +454,41 @@ class PrinterService:
             # Füge Stream-URL hinzu
             stream_url = printer_data['streamUrl']
             logger.info(f"Adding stream {printer_data['id']}: {stream_url}")
-            # Konfiguriere den Stream mit FFmpeg
-            config['streams'][printer_data['id']] = {
-                'input': stream_url,
-                'ffmpeg': [
-                    '-fflags', 'nobuffer',
-                    '-flags', 'low_delay',
-                    '-rtsp_transport', 'tcp',
-                    '-stimeout', '5000000'
-                ]
-            }
+            
+            # Konfiguriere den Stream basierend auf dem Printer-Typ
+            if printer_data.get('type') == 'BAMBULAB':
+                config['streams'][printer_data['id']] = {
+                    'input': stream_url,
+                    'ffmpeg': [
+                        '-fflags', 'nobuffer',
+                        '-flags', 'low_delay',
+                        '-rtsp_transport', 'tcp',
+                        '-stimeout', '5000000'
+                    ]
+                }
+            else:
+                config['streams'][printer_data['id']] = {
+                    'input': stream_url
+                }
             
             # Speichere Konfiguration
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             logger.info(f"Final config to write: {config}")
+            
+            # Schreibe die Konfiguration
             with open(config_path, 'w') as f:
                 yaml.safe_dump(config, f)
-                
-            # Restart go2rtc container
-            logger.info("Restarting go2rtc container")
-            result = subprocess.run(['docker', 'restart', 'go2rtc'], capture_output=True, text=True, check=True)
-            logger.info(f"go2rtc restart output: {result.stdout}")
-            if result.stderr:
-                logger.warning(f"go2rtc restart stderr: {result.stderr}")
-            logger.info("go2rtc container restarted")
-            
+                logger.info("Config successfully written")
+
+            # Warte kurz und prüfe, ob die Konfiguration geschrieben wurde
+            time.sleep(1)
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    written_config = yaml.safe_load(f)
+                    logger.info(f"Verification - Read config: {written_config}")
+            else:
+                logger.error("Config file does not exist after writing!")
+
         except Exception as e:
             logger.error(f"Error updating go2rtc config: {e}", exc_info=True)
 

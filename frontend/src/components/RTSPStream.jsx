@@ -653,9 +653,21 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   const setupWebSocket = useCallback(async () => {
     try {
-      const streamUrl = `ws://${window.location.hostname}/go2rtc/ws?src=${printer.id}`;
+      if (!printer || !printer.id) {
+        throw new Error('No printer data available');
+      }
+
+      const streamUrl = getStreamUrl();
+      if (!streamUrl) {
+        throw new Error('Could not determine stream URL');
+      }
+
+      console.log('Connecting to WebSocket:', streamUrl);
       
-      const ws = new WebSocket(streamUrl);
+      // Warte kurz, damit go2rtc die Konfiguration laden kann
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const ws = new WebSocket(`ws://${window.location.hostname}/go2rtc/api/ws?src=${printer.id}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
