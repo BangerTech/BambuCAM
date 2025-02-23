@@ -131,14 +131,14 @@ class StreamService:
             # Optimierte Parameter für flüssigeres Video
             cmd = [
                 'ffmpeg',
-                '-fflags', 'nobuffer+fastseek',  # Schnelleres Buffering
-                '-flags', 'low_delay',
-                '-rtsp_transport', 'tcp',
+                '-fflags', '+genpts+igndts',  # Verbesserte Zeitstempel-Behandlung
+                '-rtsp_transport', 'tcp',      # Zuverlässigerer Transport
                 '-i', url,
-                '-c:v', 'copy',
-                '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+                '-c:v', 'copy',               # Direktes Kopieren ohne Transcoding
+                '-max_muxing_queue_size', '1024',  # Größerer Queue-Buffer
+                '-movflags', 'frag_keyframe+empty_moov+faststart',  # Schnellerer Start
                 '-f', 'mp4',
-                '-frag_duration', '250000',  # Kürzere Fragmente für weniger Latenz
+                '-fragment_size', '500',      # Kleinere Fragmente
                 'pipe:1'
             ]
             
@@ -199,44 +199,33 @@ class StreamService:
                 await asyncio.sleep(5)
 
     async def handle_websocket(self, websocket, path, process):
-        """Handhabt WebSocket-Verbindung mit optimiertem Buffering"""
         try:
-            logger.info(f"New WebSocket connection on {path}")
-            last_data = time.time()
+            chunk_size = 16384  # Optimierte Chunk-Größe
+            read_buffer = bytearray(chunk_size)
             
             while True:
                 if process.poll() is not None:
-                    logger.warning("FFmpeg process died")
                     break
                 
                 try:
-                    data = await self.loop.run_in_executor(
-                        None, 
-                        process.stdout.read1, 
-                        self.CHUNK_SIZE
+                    # Effizienteres Lesen mit voralloziertem Buffer
+                    n = await self.loop.run_in_executor(
+                        None,
+                        process.stdout.readinto,
+                        read_buffer
                     )
                     
-                    if not data:
-                        if time.time() - last_data > 5:
-                            logger.warning("No data for 5 seconds")
-                            break
-                        await asyncio.sleep(0.1)
+                    if n == 0:
+                        await asyncio.sleep(0.01)
                         continue
                     
-                    last_data = time.time()
-                    await websocket.send(data)
+                    await websocket.send(bytes(read_buffer[:n]))
                     
-                except websockets.exceptions.ConnectionClosed:
-                    logger.info("WebSocket connection closed by client")
-                    break
                 except Exception as e:
-                    logger.error(f"Send error: {e}")
+                    logger.error(f"Stream error: {e}")
                     break
-                    
-        except Exception as e:
-            logger.error(f"WebSocket error: {e}")
+                
         finally:
-            logger.info("Closing WebSocket connection")
             await websocket.close()
 
     async def _create_ws_server(self, process, port):

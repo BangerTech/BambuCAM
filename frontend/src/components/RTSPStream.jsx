@@ -126,9 +126,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
                 const currentTime = video.currentTime;
                 const bufferEnd = buffered.end(0);
                 
-                // Kleinerer Buffer für geringere Latenz
-                if (bufferEnd - currentTime > 4) {
-                  sourceBuffer.remove(0, currentTime - 1);
+                // Kleinerer Buffer für geringere Latenz (von go2rtc inspiriert)
+                if (bufferEnd - currentTime > 2) {  // Reduziert von 4 auf 2 Sekunden
+                  sourceBuffer.remove(0, currentTime - 0.5);
                 }
               }
             } catch (e) {

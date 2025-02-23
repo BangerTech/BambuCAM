@@ -4,9 +4,13 @@ PRINTER_CONFIGS = {
         'stream_url_template': 'rtsps://bblp:{access_code}@{ip}:322/streaming/live/1',
         'ffmpeg_options': [
             '-rtsp_transport', 'tcp',
-            '-fflags', 'nobuffer',
-            '-flags', 'low_delay',
-            '-max_delay', '100000'
+            '-fflags', '+genpts+igndts',
+            '-max_muxing_queue_size', '1024',
+            '-tune', 'zerolatency',
+            '-preset', 'ultrafast',
+            '-reconnect', '1',
+            '-reconnect_at_eof', '1',
+            '-reconnect_streamed', '1'
         ]
     },
     'CREALITY': {
