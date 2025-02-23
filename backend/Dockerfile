@@ -18,13 +18,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Anwendungscode kopieren
 COPY . .
 
-# Kopiere initiale go2rtc Konfiguration
-COPY src/config/go2rtc.yaml /app/data/go2rtc/go2rtc.yaml
-
 # Berechtigungen für Daten- und Log-Verzeichnisse
 RUN mkdir -p /app/data/printers /app/data/streams /app/logs \
     && chmod -R 777 /app/data /app/logs \
-    && mkdir -p /app/data/go2rtc && chmod -R 777 /app/data/go2rtc
+    && mkdir -p /app/data/go2rtc \
+    && cp /app/src/config/go2rtc.yaml /app/data/go2rtc/go2rtc.yaml \
+    && chmod -R 777 /app/data/go2rtc
 
 ENV FLASK_APP=src.app
 ENV PYTHONPATH=/app

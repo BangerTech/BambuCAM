@@ -431,8 +431,22 @@ class PrinterService:
             # Debug: Prüfe Verzeichnisberechtigungen
             dir_path = os.path.dirname(config_path)
             logger.info(f"Directory permissions: {oct(os.stat(dir_path).st_mode)[-3:]}")
-            if os.path.exists(config_path):
-                logger.info(f"File permissions: {oct(os.stat(config_path).st_mode)[-3:]}")
+            
+            # Stelle sicher, dass die Basis-Konfiguration existiert
+            if not os.path.exists(config_path):
+                logger.info("Creating base config")
+                base_config = {
+                    'streams': {},
+                    'api': {
+                        'listen': ':1984',
+                        'base_path': '/api'
+                    },
+                    'webrtc': {
+                        'listen': ':8555'
+                    }
+                }
+                with open(config_path, 'w') as f:
+                    yaml.dump(base_config, f)
             
             # Lade bestehende Konfiguration
             if os.path.exists(config_path):
