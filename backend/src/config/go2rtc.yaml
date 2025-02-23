@@ -1,0 +1,9 @@
+streams:
+  # Wird dynamisch durch unsere App gefüllt
+
+api:
+  listen: ":1984"
+  base_path: "/api"
+  
+webrtc:
+  listen: ":8555" 

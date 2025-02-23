@@ -423,22 +423,27 @@ class PrinterService:
     def _update_go2rtc_config(self, printer_data):
         """Aktualisiert die go2rtc Konfiguration"""
         try:
+            logger.info(f"Updating go2rtc config at {self.go2rtc_config_path}")
             config_path = self.go2rtc_config_path
             
             # Lade bestehende Konfiguration
             if os.path.exists(config_path):
+                logger.info("Loading existing config")
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
             else:
+                logger.info("Creating new config")
                 config = {'streams': {}}
                 
             # Füge Stream-URL hinzu
             stream_url = f"rtsps://bblp:{printer_data['accessCode']}@{printer_data['ip']}:322/streaming/live/1"
+            logger.info(f"Adding stream {printer_data['id']}: {stream_url}")
             config['streams'][printer_data['id']] = stream_url
             
             # Speichere Konfiguration
             with open(config_path, 'w') as f:
                 yaml.dump(config, f)
+            logger.info("Config updated successfully")
                 
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren der go2rtc Konfiguration: {e}")
