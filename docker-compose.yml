@@ -52,7 +52,7 @@ services:
     container_name: go2rtc
     network_mode: host
     volumes:
-      - ./backend/data/go2rtc:/config
+      - ./backend/src/config/go2rtc.yaml:/config/go2rtc.yaml:ro
     restart: unless-stopped
 
 volumes:

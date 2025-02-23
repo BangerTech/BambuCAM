@@ -651,9 +651,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       }
 
       // Nutze den zugewiesenen Port für die WebSocket-Verbindung
-      const wsUrl = `ws://${window.location.hostname}:${data.port}`;
+      const streamUrl = `/go2rtc/?src=${printer.id}`;  // go2rtc verwendet standardmäßig index.html
       
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(streamUrl);
       wsRef.current = ws;
       // ...
     } catch (error) {
@@ -663,11 +663,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   const getStreamUrl = useCallback(() => {
     if (!printer) return null;
-    // Neuer Code für go2rtc WebRTC Stream
     if (printer.type === 'BAMBULAB') {
-      return `http://${window.location.hostname}/go2rtc/stream.html?src=${printer.id}`;
+      return `http://${window.location.hostname}/go2rtc/?src=${printer.id}`;
     } else if (printer.type === 'OCTOPRINT' || printer.type === 'CREALITY') {
-      // Für MJPEG Streams direkte URL verwenden
       return printer.streamUrl;
     }
     return null;

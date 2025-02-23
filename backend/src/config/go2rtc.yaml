@@ -2,8 +2,11 @@ streams:
   # Wird dynamisch durch unsere App gefüllt
 
 api:
-  listen: ":1984"
-  base_path: "/api"
+  listen: "0.0.0.0:1984"
+  base_path: ""  # Leerer base_path für die Web-UI
+  origin: "*"  # Erlaube CORS
   
 webrtc:
-  listen: ":8555" 
+  listen: "0.0.0.0:8555"
+  candidates:
+    - 0.0.0.0:8555  # Erlaube WebRTC von allen IPs 
