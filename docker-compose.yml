@@ -52,7 +52,7 @@ services:
     container_name: go2rtc
     network_mode: host
     volumes:
-      - bambucam_data:/config
+      - ./backend/data/go2rtc:/config
     restart: unless-stopped
 
 volumes:

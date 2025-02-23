@@ -662,14 +662,15 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
   }, [printer.id]);
 
   const getStreamUrl = useCallback(() => {
+    if (!printer) return null;
+    // Neuer Code für go2rtc WebRTC Stream
     if (printer.type === 'BAMBULAB') {
-      // Nutze go2rtc WebRTC Stream
-      return `http://${window.location.hostname}:8555/stream.html?src=${printer.id}`;
-    } else if (printer.type === 'CREALITY') {
-      return `http://${printer.ip}:8080/?action=stream`;
-    } else {
+      return `http://${window.location.hostname}/go2rtc/stream.html?src=${printer.id}`;
+    } else if (printer.type === 'OCTOPRINT' || printer.type === 'CREALITY') {
+      // Für MJPEG Streams direkte URL verwenden
       return printer.streamUrl;
     }
+    return null;
   }, [printer]);
 
   return (
@@ -679,27 +680,16 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       height: '100%',
       zIndex: 1
     }}>
-      {printer.type === 'BAMBULAB' ? (
-        // Einbetten des go2rtc Stream-Players
+      {printer?.type === 'BAMBULAB' ? (
         <iframe
           src={getStreamUrl()}
           style={{
             width: '100%',
             height: '100%',
             border: 'none',
-            objectFit: fullscreen ? 'contain' : 'cover'
+            backgroundColor: '#000'
           }}
-        />
-      ) : printer.type === 'OCTOPRINT' ? (
-        // OctoPrint: Auch direktes img-Element
-        <img 
-          src={printer.streamUrl}
-          alt="Printer Stream" 
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: fullscreen ? 'contain' : 'cover'
-          }}
+          allowFullScreen
           onLoad={() => setLoading(false)}
           onError={() => {
             setError('Failed to load stream');
@@ -707,10 +697,9 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
           }}
         />
       ) : (
-        // Creality: Direkt das img-Element mit der Stream-URL
         <img 
-          src={`http://${printer.ip}:8080/?action=stream`}
-          alt="Printer Stream" 
+          src={getStreamUrl()}
+          alt="Printer Stream"
           style={{
             width: '100%',
             height: '100%',

@@ -74,7 +74,7 @@ class PrinterService:
         self.printer_data = {}
         self.polling_threads = {}
         self.file_locks = {}
-        self.go2rtc_config_path = '/app/data/go2rtc.yaml'
+        self.go2rtc_config_path = '/app/data/go2rtc/go2rtc.yaml'
 
     def get_file_lock(self, printer_id):
         """Holt oder erstellt einen Lock für einen Drucker"""
