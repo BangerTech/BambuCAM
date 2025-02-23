@@ -74,7 +74,9 @@ class PrinterService:
         self.printer_data = {}
         self.polling_threads = {}
         self.file_locks = {}
-        self.go2rtc_config_path = '/app/data/go2rtc/go2rtc.yaml'
+        self.go2rtc_config_path = os.path.join(DATA_DIR, 'go2rtc', 'go2rtc.yaml')
+        self.mqtt_service = mqtt_service
+        self.octoprint_service = octoprint_service
 
     def get_file_lock(self, printer_id):
         """Holt oder erstellt einen Lock für einen Drucker"""
@@ -426,14 +428,30 @@ class PrinterService:
             logger.info(f"Updating go2rtc config at {self.go2rtc_config_path}")
             config_path = self.go2rtc_config_path
             
+            # Debug: Prüfe Verzeichnisberechtigungen
+            dir_path = os.path.dirname(config_path)
+            logger.info(f"Directory permissions: {oct(os.stat(dir_path).st_mode)[-3:]}")
+            if os.path.exists(config_path):
+                logger.info(f"File permissions: {oct(os.stat(config_path).st_mode)[-3:]}")
+            
             # Lade bestehende Konfiguration
             if os.path.exists(config_path):
                 logger.info("Loading existing config")
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f)
+                    logger.info(f"Existing config: {config}")
             else:
                 logger.info("Creating new config")
-                config = {'streams': {}}
+                config = {
+                    'streams': {},
+                    'api': {
+                        'listen': ':1984',
+                        'base_path': '/api'
+                    },
+                    'webrtc': {
+                        'listen': ':8555'
+                    }
+                }
                 
             # Füge Stream-URL hinzu
             stream_url = f"rtsps://bblp:{printer_data['accessCode']}@{printer_data['ip']}:322/streaming/live/1"

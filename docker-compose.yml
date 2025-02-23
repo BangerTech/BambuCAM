@@ -26,6 +26,7 @@ services:
       - ./backend:/app
       - ./backend/data:/app/data
       - bambucam_logs:/app/logs
+      - ./backend/data/go2rtc:/app/data/go2rtc
     ports:
       - "4000:4000"
       - "9000:9000"  # WebSocket Port für Streams
