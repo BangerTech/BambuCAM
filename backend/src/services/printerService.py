@@ -387,6 +387,7 @@ class PrinterService:
     def add_printer(self, data: dict) -> dict:
         """Fügt einen neuen Drucker hinzu"""
         try:
+            logger.info(f"Adding new printer with data: {data}")
             printer_id = str(uuid.uuid4())
             printer = {
                 'id': printer_id,
@@ -407,19 +408,24 @@ class PrinterService:
             
             # Get MQTT info and store serial number
             if data['type'] == 'BAMBULAB':
+                logger.info(f"Setting up BambuLab printer {printer_id}")
                 try:
                     mqtt_info = self.mqtt_service.get_printer_mqtt_info(data['ip'])
                     if mqtt_info and mqtt_info.get('sn'):
                         printer['serial'] = mqtt_info['sn']
+                        logger.info(f"Got serial number: {mqtt_info['sn']}")
                 except Exception as e:
                     logger.error(f"Error getting MQTT info: {e}")
             
+            logger.info(f"Updating go2rtc config for printer {printer_id}")
             self._update_go2rtc_config(printer)
             
+            logger.info(f"Saving printer configuration to file")
             self.save_printer(printer)
+            logger.info(f"Successfully added printer {printer_id}")
             return printer
         except Exception as e:
-            logger.error(f"Error adding printer: {e}")
+            logger.error(f"Error adding printer: {e}", exc_info=True)
             raise
 
     def _update_go2rtc_config(self, printer_data):
@@ -431,22 +437,13 @@ class PrinterService:
             # Debug: Prüfe Verzeichnisberechtigungen
             dir_path = os.path.dirname(config_path)
             logger.info(f"Directory permissions: {oct(os.stat(dir_path).st_mode)[-3:]}")
+            if os.path.exists(config_path):
+                logger.info(f"Config file permissions: {oct(os.stat(config_path).st_mode)[-3:]}")
             
-            # Stelle sicher, dass die Basis-Konfiguration existiert
-            if not os.path.exists(config_path):
-                logger.info("Creating base config")
-                base_config = {
-                    'streams': {},
-                    'api': {
-                        'listen': ':1984',
-                        'base_path': '/api'
-                    },
-                    'webrtc': {
-                        'listen': ':8555'
-                    }
-                }
-                with open(config_path, 'w') as f:
-                    yaml.dump(base_config, f)
+            # Prüfe ob Verzeichnis existiert
+            if not os.path.exists(dir_path):
+                logger.info(f"Creating directory: {dir_path}")
+                os.makedirs(dir_path, exist_ok=True)
             
             # Lade bestehende Konfiguration
             if os.path.exists(config_path):
@@ -473,12 +470,14 @@ class PrinterService:
             config['streams'][printer_data['id']] = stream_url
             
             # Speichere Konfiguration
+            logger.info(f"Writing updated config to {config_path}")
             with open(config_path, 'w') as f:
                 yaml.dump(config, f)
+            logger.info(f"Config file contents after update: {config}")
             logger.info("Config updated successfully")
                 
         except Exception as e:
-            logger.error(f"Fehler beim Aktualisieren der go2rtc Konfiguration: {e}")
+            logger.error(f"Error updating go2rtc config: {e}", exc_info=True)
 
     def _remove_from_go2rtc_config(self, printer_id):
         """Entfernt einen Stream aus der go2rtc Konfiguration"""
