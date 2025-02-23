@@ -18,6 +18,7 @@ import logging  # Standard Python logging
 from src.routes import register_blueprints
 import os
 from pathlib import Path
+import yaml
 
 # Logging-Konfiguration
 logging.basicConfig(
@@ -39,6 +40,30 @@ DATA_DIR = BASE_DIR / 'data'
 PRINTERS_DIR = DATA_DIR / 'printers'
 STREAMS_DIR = DATA_DIR / 'streams'
 
+# Stelle sicher, dass die Verzeichnisse existieren
+os.makedirs(PRINTERS_DIR, exist_ok=True)
+os.makedirs(STREAMS_DIR, exist_ok=True)
+
+# Stelle sicher, dass die go2rtc Konfiguration existiert
+GO2RTC_DIR = DATA_DIR / 'go2rtc'
+GO2RTC_CONFIG = GO2RTC_DIR / 'go2rtc.yaml'
+if not os.path.exists(GO2RTC_CONFIG):
+    logger.info("Creating initial go2rtc configuration")
+    os.makedirs(GO2RTC_DIR, exist_ok=True)
+    initial_config = {
+        'streams': {},
+        'api': {
+            'listen': ':1984',
+            'base_path': '/api'
+        },
+        'webrtc': {
+            'listen': ':8555'
+        }
+    }
+    with open(GO2RTC_CONFIG, 'w') as f:
+        yaml.dump(initial_config, f)
+    logger.info(f"Created go2rtc config at {GO2RTC_CONFIG}")
+
 # CORS mit erweiterten Optionen konfigurieren
 CORS(app, resources={
     r"/api/*": {
@@ -48,10 +73,6 @@ CORS(app, resources={
     },
     r"/stream/*": {"origins": "*"}
 })
-
-# Stelle sicher, dass die Verzeichnisse existieren
-os.makedirs(PRINTERS_DIR, exist_ok=True)
-os.makedirs(STREAMS_DIR, exist_ok=True)
 
 # Blueprints nur EINMAL registrieren
 register_blueprints(app)
