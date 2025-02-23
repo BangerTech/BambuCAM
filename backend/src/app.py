@@ -67,8 +67,8 @@ if not os.path.exists(GO2RTC_CONFIG):
     initial_config = {
         'streams': {},
         'api': {
+            'base_path': '/api',  # Wichtig für die API-Erreichbarkeit
             'listen': '0.0.0.0:1984',
-            'base_path': '',  # Korrekt für Web-UI
             'origin': '*'
         },
         'webrtc': {

@@ -428,7 +428,7 @@ class PrinterService:
                 'streams': {},
                 'api': {
                     'listen': '0.0.0.0:1984',
-                    'base_path': '',
+                    'base_path': '/api',
                     'origin': '*'
                 },
                 'webrtc': {
