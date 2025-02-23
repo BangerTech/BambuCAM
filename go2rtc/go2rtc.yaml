@@ -1,0 +1,10 @@
+streams:
+  # Wird dynamisch durch unsere App gefüllt
+  # Format: printer_id: rtsp://...
+
+api:
+  listen: ":1984"  # API Port
+  base_path: "/api"
+  
+webrtc:
+  listen: ":8555" 

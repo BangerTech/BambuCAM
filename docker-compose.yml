@@ -47,6 +47,14 @@ services:
       - backend
       - frontend
 
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: go2rtc
+    network_mode: host
+    volumes:
+      - bambucam_data:/config
+    restart: unless-stopped
+
 volumes:
   bambucam_data:
   bambucam_logs: 

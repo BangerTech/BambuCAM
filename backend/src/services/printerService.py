@@ -18,6 +18,7 @@ import queue
 from .networkScanner import scanNetwork
 from .mqttService import mqtt_service
 from .octoprintService import octoprint_service
+import yaml
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -71,8 +72,9 @@ class PrinterService:
     def __init__(self):
         self.mqtt_clients = {}
         self.printer_data = {}
-        self.polling_threads = {}  # Neu hinzugefügt
+        self.polling_threads = {}
         self.file_locks = {}
+        self.go2rtc_config_path = '/app/data/go2rtc.yaml'
 
     def get_file_lock(self, printer_id):
         """Holt oder erstellt einen Lock für einen Drucker"""
@@ -410,11 +412,49 @@ class PrinterService:
                 except Exception as e:
                     logger.error(f"Error getting MQTT info: {e}")
             
+            self._update_go2rtc_config(printer)
+            
             self.save_printer(printer)
             return printer
         except Exception as e:
             logger.error(f"Error adding printer: {e}")
             raise
+
+    def _update_go2rtc_config(self, printer_data):
+        """Aktualisiert die go2rtc Konfiguration"""
+        try:
+            config_path = self.go2rtc_config_path
+            
+            # Lade bestehende Konfiguration
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+            else:
+                config = {'streams': {}}
+                
+            # Füge Stream-URL hinzu
+            stream_url = f"rtsps://bblp:{printer_data['accessCode']}@{printer_data['ip']}:322/streaming/live/1"
+            config['streams'][printer_data['id']] = stream_url
+            
+            # Speichere Konfiguration
+            with open(config_path, 'w') as f:
+                yaml.dump(config, f)
+                
+        except Exception as e:
+            logger.error(f"Fehler beim Aktualisieren der go2rtc Konfiguration: {e}")
+
+    def _remove_from_go2rtc_config(self, printer_id):
+        """Entfernt einen Stream aus der go2rtc Konfiguration"""
+        try:
+            if os.path.exists(self.go2rtc_config_path):
+                with open(self.go2rtc_config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                if 'streams' in config and printer_id in config['streams']:
+                    del config['streams'][printer_id]
+                    with open(self.go2rtc_config_path, 'w') as f:
+                        yaml.dump(config, f)
+        except Exception as e:
+            logger.error(f"Error removing stream from go2rtc config: {e}")
 
 # Globale Instanz des PrinterService
 printer_service = PrinterService()
@@ -577,6 +617,9 @@ def removePrinter(printer_id):
         # Cleanup MQTT wenn es ein Bambulab Drucker ist
         if printer['type'] == 'BAMBULAB':
             mqtt_service.disconnect_printer(printer_id)
+            # Entferne Stream aus go2rtc config
+            printer_service._remove_from_go2rtc_config(printer_id)
+            
         elif printer['type'] == 'CREALITY':
             # ... existierender Creality Cleanup Code ...
             printer_service.cleanup(printer_id)

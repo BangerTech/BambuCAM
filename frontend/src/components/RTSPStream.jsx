@@ -661,6 +661,17 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     }
   }, [printer.id]);
 
+  const getStreamUrl = useCallback(() => {
+    if (printer.type === 'BAMBULAB') {
+      // Nutze go2rtc WebRTC Stream
+      return `http://${window.location.hostname}:8555/stream.html?src=${printer.id}`;
+    } else if (printer.type === 'CREALITY') {
+      return `http://${printer.ip}:8080/?action=stream`;
+    } else {
+      return printer.streamUrl;
+    }
+  }, [printer]);
+
   return (
     <Box sx={{
       position: 'relative',
@@ -668,20 +679,15 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
       height: '100%',
       zIndex: 1
     }}>
-      {printer.type === 'CREALITY' ? (
-        // Creality: Direkt das img-Element mit der Stream-URL
-        <img 
-          src={`http://${printer.ip}:8080/?action=stream`}
-          alt="Printer Stream" 
+      {printer.type === 'BAMBULAB' ? (
+        // Einbetten des go2rtc Stream-Players
+        <iframe
+          src={getStreamUrl()}
           style={{
             width: '100%',
             height: '100%',
+            border: 'none',
             objectFit: fullscreen ? 'contain' : 'cover'
-          }}
-          onLoad={() => setLoading(false)}
-          onError={() => {
-            setError('Failed to load stream');
-            setLoading(false);
           }}
         />
       ) : printer.type === 'OCTOPRINT' ? (
@@ -701,17 +707,19 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
           }}
         />
       ) : (
-        // Bambu Lab: WebSocket Video-Stream
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
+        // Creality: Direkt das img-Element mit der Stream-URL
+        <img 
+          src={`http://${printer.ip}:8080/?action=stream`}
+          alt="Printer Stream" 
           style={{
             width: '100%',
             height: '100%',
-            objectFit: fullscreen ? 'contain' : 'cover',
-            backgroundColor: 'black'
+            objectFit: fullscreen ? 'contain' : 'cover'
+          }}
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            setError('Failed to load stream');
+            setLoading(false);
           }}
         />
       )}

@@ -20,7 +20,11 @@ COPY . .
 
 # Berechtigungen für Daten- und Log-Verzeichnisse
 RUN mkdir -p /app/data/printers /app/data/streams /app/logs \
-    && chmod -R 777 /app/data /app/logs
+    && chmod -R 777 /app/data /app/logs \
+    # go2rtc Konfiguration
+    && mkdir -p /config \
+    && echo 'streams:\n\napi:\n  listen: ":1984"\n  base_path: "/api"\n\nwebrtc:\n  listen: ":8555"' > /config/go2rtc.yaml \
+    && chmod -R 777 /config
 
 ENV FLASK_APP=src.app
 ENV PYTHONPATH=/app
