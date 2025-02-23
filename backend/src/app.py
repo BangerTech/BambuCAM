@@ -19,6 +19,18 @@ from src.routes import register_blueprints
 import os
 from pathlib import Path
 import yaml
+import socket
+
+def get_host_ip():
+    """Ermittelt die Host-IP"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return '0.0.0.0'
 
 # Logging-Konfiguration
 logging.basicConfig(
@@ -56,12 +68,12 @@ if not os.path.exists(GO2RTC_CONFIG):
         'streams': {},
         'api': {
             'listen': '0.0.0.0:1984',
-            'base_path': '',  # Leerer base_path für die Web-UI
+            'base_path': '',  # Korrekt für Web-UI
             'origin': '*'
         },
         'webrtc': {
             'listen': '0.0.0.0:8555',
-            'candidates': ['0.0.0.0:8555']
+            'candidates': [f"{get_host_ip()}:8555"]
         }
     }
     with open(GO2RTC_CONFIG, 'w') as f:
