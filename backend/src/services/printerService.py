@@ -75,7 +75,7 @@ class PrinterService:
         self.printer_data = {}
         self.polling_threads = {}
         self.file_locks = {}
-        self.go2rtc_config_path = '/config/go2rtc.yaml'
+        self.go2rtc_config_path = '/app/data/go2rtc/go2rtc.yaml'
         self.mqtt_service = mqtt_service
         self.octoprint_service = octoprint_service
         logger.info(f"Initialized PrinterService with go2rtc config path: {self.go2rtc_config_path}")
@@ -441,42 +441,38 @@ class PrinterService:
 
     def _update_go2rtc_config(self, printer_data):
         try:
-            # Existierende Konfiguration lesen oder neue erstellen
-            if os.path.exists(self.go2rtc_config_path):
-                with open(self.go2rtc_config_path, 'r') as f:
-                    config = yaml.safe_load(f) or {}
-            else:
-                config = {
-                    'api': {
-                        'listen': ':1984',
-                        'base_path': 'go2rtc',
-                        'origin': '*'
-                    },
-                    'webrtc': {
-                        'listen': ':8555/tcp',
-                        'ice_servers': [
-                            {'urls': ['stun:stun.l.google.com:19302']}
-                        ],
-                        'candidates': [f"{self._get_host_ip()}:8555"]
-                    },
-                    'log': {
-                        'level': 'debug',
-                        'format': 'color'
-                    },
-                    'streams': {}
+            config = {
+                'api': {
+                    'listen': ':1984',
+                    'base_path': 'go2rtc',  # ohne führenden Slash
+                    'origin': '*'
+                },
+                'webrtc': {
+                    'listen': ':8555/tcp',
+                    'ice_servers': [
+                        {'urls': ['stun:stun.l.google.com:19302']}
+                    ],
+                    'candidates': [f"{self._get_host_ip()}:8555"]
+                },
+                'log': {
+                    'level': 'trace',  # Mehr Debug-Infos
+                    'format': 'color'
+                },
+                'streams': {
+                    printer_data['id']: {
+                        'input': printer_data['streamUrl']
+                    }
                 }
-
-            # Stream für neuen Drucker hinzufügen
-            if 'streams' not in config:
-                config['streams'] = {}
-            
-            config['streams'][printer_data['id']] = {
-                'input': printer_data['streamUrl']
             }
 
+            # Debug-Ausgabe
+            logger.info(f"Writing config to {self.go2rtc_config_path}:")
+            logger.info(yaml.dump(config))
+
             # Konfiguration speichern
+            os.makedirs(os.path.dirname(self.go2rtc_config_path), exist_ok=True)
             with open(self.go2rtc_config_path, 'w') as f:
-                yaml.safe_dump(config, f)
+                yaml.dump(config, f, default_flow_style=False)
 
             # go2rtc neu starten
             subprocess.run(['docker', 'restart', 'go2rtc'], check=True)
