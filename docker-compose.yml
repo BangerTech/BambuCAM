@@ -53,14 +53,9 @@ services:
       - go2rtc_config:/config
     environment:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
-      - GO2RTC_API_LISTEN=:1984
-      - GO2RTC_API_BASE_PATH=/go2rtc/
       - GO2RTC_LOG_LEVEL=trace
       - GO2RTC_CONFIG=/config/go2rtc.yaml
-    command: sh -c "
-      mkdir -p /config &&
-      echo 'Starting go2rtc...' &&
-      /usr/local/bin/go2rtc -config /config/go2rtc.yaml"
+    command: go2rtc
 
 volumes:
   bambucam_logs:

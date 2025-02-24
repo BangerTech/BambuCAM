@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Logger } from '../utils/logger';
 
 const RTSPStream = ({ printer }) => {
@@ -6,6 +6,7 @@ const RTSPStream = ({ printer }) => {
   const pcRef = useRef(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const wsRef = useRef(null);
 
   useEffect(() => {
     // Nur für BambuLab Drucker
@@ -126,6 +127,32 @@ const RTSPStream = ({ printer }) => {
           videoRef.current.srcObject = null;
         }
       };
+    }
+  }, [printer]);
+
+  const setupWebSocket = useCallback(async () => {
+    try {
+      if (!printer || !printer.id) return;
+      
+      const wsUrl = `ws://${window.location.hostname}/go2rtc/api/ws`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        // Sende Stream-ID
+        ws.send(JSON.stringify({
+          type: 'webrtc',
+          src: printer.id
+        }));
+      };
+
+    } catch (err) {
+      Logger.error('STREAM', 'WebSocket', `Failed to connect to WebSocket: ${err.message}`, err);
+      setError('Failed to connect to WebSocket');
+      setLoading(false);
     }
   }, [printer]);
 

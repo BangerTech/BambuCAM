@@ -440,56 +440,34 @@ class PrinterService:
             raise
 
     def _update_go2rtc_config(self, printer_data):
+        """Aktualisiert die go2rtc Konfiguration mit der Stream-URL des Druckers"""
         try:
-            logger.info("=== Starting go2rtc config update ===")
+            config_path = Path('/app/data/go2rtc/go2rtc.yaml')
             
-            config = {
-                'api': {
-                    'listen': ':1984',
-                    'base_path': 'go2rtc',
-                    'origin': '*'
-                },
-                'webrtc': {
-                    'listen': ':8555/tcp',
-                    'ice_servers': [
-                        {'urls': ['stun:stun.l.google.com:19302']}
-                    ],
-                    'candidates': [f"{self._get_host_ip()}:8555"]
-                },
-                'log': {
-                    'level': 'trace',
-                    'format': 'color'
-                },
-                'streams': {
-                    printer_data['id']: {
-                        'input': printer_data['streamUrl']
-                    }
-                }
-            }
-
-            logger.info(f"Writing config to {self.go2rtc_config_path}")
-            logger.info(f"Config content:\n{yaml.dump(config)}")
-
-            # Konfiguration speichern
-            os.makedirs(os.path.dirname(self.go2rtc_config_path), exist_ok=True)
-            with open(self.go2rtc_config_path, 'w') as f:
-                yaml.dump(config, f, default_flow_style=False)
-
-            # Prüfe ob die Datei geschrieben wurde
-            if os.path.exists(self.go2rtc_config_path):
-                with open(self.go2rtc_config_path, 'r') as f:
-                    logger.info(f"Verification - Config file content:\n{f.read()}")
+            # Lade bestehende Konfiguration
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
             else:
-                logger.error("Config file was not created!")
+                config = {}
 
-            # go2rtc neu starten
-            logger.info("Restarting go2rtc...")
-            subprocess.run(['docker', 'restart', 'go2rtc'], check=True)
-            logger.info("Successfully restarted go2rtc")
+            # Stelle sicher, dass streams existiert
+            if 'streams' not in config:
+                config['streams'] = {}
 
+            # Füge Stream-URL hinzu
+            if printer_data.get('type') == 'BAMBULAB':
+                stream_url = f"rtsps://bblp:{printer_data['accessCode']}@{printer_data['ip']}:322/streaming/live/1"
+                config['streams'][printer_data['id']] = stream_url
+                
+                # Speichere Konfiguration
+                with open(config_path, 'w') as f:
+                    yaml.safe_dump(config, f)
+                    
+                logger.info(f"Updated go2rtc config with stream for printer {printer_data['id']}")
+                
         except Exception as e:
-            logger.error(f"Error updating go2rtc config: {e}", exc_info=True)
-            raise
+            logger.error(f"Error updating go2rtc config: {e}")
 
     def _get_host_ip(self):
         try:

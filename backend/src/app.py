@@ -67,19 +67,11 @@ if not os.path.exists(GO2RTC_CONFIG):
     initial_config = {
         'api': {
             'listen': ':1984',
-            'base_path': '/go2rtc/',  # Add leading slash
             'origin': '*'
         },
         'webrtc': {
-            'listen': ':8555',  # Remove /tcp suffix
-            'ice_servers': [
-                {'urls': ['stun:stun.l.google.com:19302']}
-            ],
+            'listen': ':8555',
             'candidates': [f"{get_host_ip()}:8555"]
-        },
-        'log': {
-            'level': 'debug',
-            'format': 'color'
         },
         'streams': {}
     }
