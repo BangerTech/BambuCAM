@@ -441,10 +441,12 @@ class PrinterService:
 
     def _update_go2rtc_config(self, printer_data):
         try:
+            logger.info("=== Starting go2rtc config update ===")
+            
             config = {
                 'api': {
                     'listen': ':1984',
-                    'base_path': 'go2rtc',  # ohne führenden Slash
+                    'base_path': 'go2rtc',
                     'origin': '*'
                 },
                 'webrtc': {
@@ -455,7 +457,7 @@ class PrinterService:
                     'candidates': [f"{self._get_host_ip()}:8555"]
                 },
                 'log': {
-                    'level': 'trace',  # Mehr Debug-Infos
+                    'level': 'trace',
                     'format': 'color'
                 },
                 'streams': {
@@ -465,18 +467,25 @@ class PrinterService:
                 }
             }
 
-            # Debug-Ausgabe
-            logger.info(f"Writing config to {self.go2rtc_config_path}:")
-            logger.info(yaml.dump(config))
+            logger.info(f"Writing config to {self.go2rtc_config_path}")
+            logger.info(f"Config content:\n{yaml.dump(config)}")
 
             # Konfiguration speichern
             os.makedirs(os.path.dirname(self.go2rtc_config_path), exist_ok=True)
             with open(self.go2rtc_config_path, 'w') as f:
                 yaml.dump(config, f, default_flow_style=False)
 
+            # Prüfe ob die Datei geschrieben wurde
+            if os.path.exists(self.go2rtc_config_path):
+                with open(self.go2rtc_config_path, 'r') as f:
+                    logger.info(f"Verification - Config file content:\n{f.read()}")
+            else:
+                logger.error("Config file was not created!")
+
             # go2rtc neu starten
+            logger.info("Restarting go2rtc...")
             subprocess.run(['docker', 'restart', 'go2rtc'], check=True)
-            logger.info("Successfully updated go2rtc config and restarted service")
+            logger.info("Successfully restarted go2rtc")
 
         except Exception as e:
             logger.error(f"Error updating go2rtc config: {e}", exc_info=True)

@@ -53,15 +53,15 @@ const RTSPStream = ({ printer }) => {
 
           // Erster Request mit Stream-URL
           Logger.debug('STREAM', 'API', 'Requesting WebRTC offer from go2rtc');
-          const response = await fetch(`/go2rtc/api/webrtc`, {
+          const response = await fetch(`/go2rtc/api/webrtc/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json'
             },
             body: JSON.stringify({
-              src: printer.streamUrl,  // Hier die Stream-URL verwenden
-              sdp: ''  // Leerer SDP für ersten Request
+              src: printer.streamUrl,
+              sdp: ''
             })
           });
 
