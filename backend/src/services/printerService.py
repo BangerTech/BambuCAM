@@ -75,7 +75,7 @@ class PrinterService:
         self.printer_data = {}
         self.polling_threads = {}
         self.file_locks = {}
-        self.go2rtc_config_path = '/app/data/go2rtc/go2rtc.yaml'
+        self.go2rtc_config_path = '/config/go2rtc.yaml'
         self.mqtt_service = mqtt_service
         self.octoprint_service = octoprint_service
         logger.info(f"Initialized PrinterService with go2rtc config path: {self.go2rtc_config_path}")
