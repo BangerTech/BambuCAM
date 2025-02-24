@@ -24,7 +24,7 @@ services:
       - ./backend:/app
       - ./backend/data:/app/data
       - bambucam_logs:/app/logs
-      - go2rtc_config:/app/data/go2rtc
+      - ./backend/data/go2rtc:/app/data/go2rtc:rw
     environment:
       - FLASK_APP=src/app.py
       - FLASK_ENV=development
@@ -50,16 +50,14 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ${PWD}/backend/data/go2rtc:/config:rw
+      - ./backend/data/go2rtc:/config:rw
     environment:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
       - GO2RTC_LOG_LEVEL=trace
       - GO2RTC_CONFIG=/config/go2rtc.yaml
-      - GO2RTC_API_LISTEN=:1984
-      - GO2RTC_API_BASE_PATH=/go2rtc
+      - GO2RTC_API=listen=:1984,base_path=go2rtc
     command: go2rtc
 
 volumes:
   bambucam_logs:
-  bambucam_data:
-  go2rtc_config: 
+  bambucam_data: 
