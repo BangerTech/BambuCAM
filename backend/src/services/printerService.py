@@ -75,7 +75,7 @@ class PrinterService:
         self.printer_data = {}
         self.polling_threads = {}
         self.file_locks = {}
-        self.go2rtc_config_path = '/app/data/go2rtc/go2rtc.yaml'
+        self.go2rtc_config_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / 'data' / 'go2rtc' / 'go2rtc.yaml'
         self.mqtt_service = mqtt_service
         self.octoprint_service = octoprint_service
         logger.info(f"Initialized PrinterService with go2rtc config path: {self.go2rtc_config_path}")
@@ -408,17 +408,6 @@ class PrinterService:
                 logger.info(f"Generated stream URL: {printer_data['streamUrl']}")
                 
                 # go2rtc Config aktualisieren
-                logger.info("=== Starting go2rtc configuration update ===")
-                logger.info(f"Config path: {self.go2rtc_config_path}")
-                logger.info(f"Current directory: {os.getcwd()}")
-                
-                # Hier ist der Fehler - wir versuchen /config zu lesen, aber der Pfad ist falsch
-                try:
-                    logger.info(f"Directory contents of /app/data/go2rtc: {os.listdir('/app/data/go2rtc')}")
-                except Exception as e:
-                    logger.error(f"Error reading directory: {e}")
-                
-                # go2rtc Config aktualisieren
                 try:
                     self._update_go2rtc_config(printer_data)
                     logger.info("Successfully updated go2rtc config")
@@ -426,11 +415,9 @@ class PrinterService:
                     logger.error(f"Failed to update go2rtc config: {e}", exc_info=True)
                 
                 # MQTT Verbindung aufbauen
-                logger.info("Setting up MQTT connection...")
                 self.mqtt_service.connect_printer(printer_id, data['ip'])
             
             # Drucker speichern
-            logger.info(f"Saving printer data to: {PRINTERS_DIR}/{printer_id}.json")
             self._save_printer(printer_id, printer_data)
             
             return printer_data
@@ -442,32 +429,46 @@ class PrinterService:
     def _update_go2rtc_config(self, printer_data):
         """Aktualisiert die go2rtc Konfiguration mit der Stream-URL des Druckers"""
         try:
-            config_path = Path('/app/data/go2rtc/go2rtc.yaml')
+            config_path = self.go2rtc_config_path
+            logger.info(f"Updating go2rtc config at {config_path}")
             
-            # Lade bestehende Konfiguration
+            # Lade bestehende Konfiguration oder erstelle neue
             if config_path.exists():
-                with open(config_path) as f:
-                    config = yaml.safe_load(f) or {}
+                try:
+                    with open(config_path) as f:
+                        config = yaml.safe_load(f) or {}
+                except Exception as e:
+                    logger.warning(f"Could not load existing config: {e}")
+                    config = {}
             else:
+                logger.warning("Config file does not exist, using default config")
                 config = {}
 
-            # Stelle sicher, dass streams existiert
+            # Stelle sicher, dass die Grundstruktur existiert
+            if 'api' not in config:
+                config['api'] = {
+                    'listen': ':1984',
+                    'origin': '*'
+                }
             if 'streams' not in config:
                 config['streams'] = {}
 
             # Füge Stream-URL hinzu
             if printer_data.get('type') == 'BAMBULAB':
-                stream_url = f"rtsps://bblp:{printer_data['accessCode']}@{printer_data['ip']}:322/streaming/live/1"
-                config['streams'][printer_data['id']] = stream_url
+                config['streams'][printer_data['id']] = printer_data['streamUrl']
                 
                 # Speichere Konfiguration
                 with open(config_path, 'w') as f:
-                    yaml.safe_dump(config, f)
+                    yaml.safe_dump(config, f, default_flow_style=False)
                     
-                logger.info(f"Updated go2rtc config with stream for printer {printer_data['id']}")
+                logger.info(f"Updated go2rtc config for printer {printer_data['id']}")
+                logger.info(f"Current config:\n{yaml.dump(config, default_flow_style=False)}")
+                
+                return True
                 
         except Exception as e:
-            logger.error(f"Error updating go2rtc config: {e}")
+            logger.error(f"Error updating go2rtc config: {e}", exc_info=True)
+            return False
 
     def _get_host_ip(self):
         try:

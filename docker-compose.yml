@@ -50,7 +50,7 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - go2rtc_config:/config
+      - ${PWD}/backend/data/go2rtc:/config:rw
     environment:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
       - GO2RTC_LOG_LEVEL=trace
