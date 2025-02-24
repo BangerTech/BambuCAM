@@ -499,7 +499,7 @@ class PrinterService:
 
                     # Füge Stream über die API hinzu
                     try:
-                        response = requests.post(
+                        response = requests.put(
                             f"{self.go2rtc_api_url}/api/streams",
                             params={
                                 "src": printer_data['streamUrl'],
@@ -508,15 +508,6 @@ class PrinterService:
                         )
                         if response.status_code == 200:
                             logger.info(f"Successfully added stream via API")
-                            # Lade die Konfiguration neu
-                            try:
-                                reload_response = requests.post(f"{self.go2rtc_api_url}/api/reload")
-                                if reload_response.status_code == 200:
-                                    logger.info("Successfully reloaded go2rtc config")
-                                else:
-                                    logger.warning(f"Failed to reload config: {reload_response.status_code} - {reload_response.text}")
-                            except Exception as e:
-                                logger.warning(f"Could not reload config: {e}")
                         else:
                             logger.warning(f"Failed to add stream via API: {response.status_code} - {response.text}")
                     except Exception as e:
@@ -559,15 +550,6 @@ class PrinterService:
                         )
                         if response.status_code == 200:
                             logger.info(f"Successfully removed stream via API")
-                            # Lade die Konfiguration neu
-                            try:
-                                reload_response = requests.post(f"{self.go2rtc_api_url}/api/reload")
-                                if reload_response.status_code == 200:
-                                    logger.info("Successfully reloaded go2rtc config")
-                                else:
-                                    logger.warning(f"Failed to reload config: {reload_response.status_code} - {reload_response.text}")
-                            except Exception as e:
-                                logger.warning(f"Could not reload config: {e}")
                         else:
                             logger.warning(f"Failed to remove stream via API: {response.status_code} - {response.text}")
                     except Exception as e:
