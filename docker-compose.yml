@@ -15,21 +15,16 @@ services:
       - REACT_APP_DEV=true
     network_mode: "host"
     command: npm start
-    ports:
-      - "3000:3000"
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     volumes:
-      - ./backend:/app:ro
+      - ./backend:/app
       - ./backend/data:/app/data
       - bambucam_logs:/app/logs
-      - ./backend/data/go2rtc:/config:rw
-    ports:
-      - "4000:4000"
-      - "9000:9000"  # WebSocket Port für Streams
+      - go2rtc_config:/app/data/go2rtc
     environment:
       - FLASK_APP=src/app.py
       - FLASK_ENV=development
@@ -47,6 +42,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - go2rtc
 
   go2rtc:
     image: alexxit/go2rtc
@@ -54,24 +50,19 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./backend/data/go2rtc:/config:rw
+      - go2rtc_config:/config
     environment:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
       - GO2RTC_API_LISTEN=:1984
-      - GO2RTC_API_BASE_PATH=go2rtc
+      - GO2RTC_API_BASE_PATH=/go2rtc/
       - GO2RTC_LOG_LEVEL=trace
       - GO2RTC_CONFIG=/config/go2rtc.yaml
-    entrypoint: []
     command: sh -c "
-      echo 'Current config:' &&
-      cat /config/go2rtc.yaml &&
+      mkdir -p /config &&
       echo 'Starting go2rtc...' &&
       /usr/local/bin/go2rtc -config /config/go2rtc.yaml"
-    ports:
-      - "8554:8554"  # RTSP
-      - "8555:8555/udp"  # WebRTC
-      - "1984:1984"  # API/Web
 
 volumes:
+  bambucam_logs:
   bambucam_data:
-  bambucam_logs: 
+  go2rtc_config: 
