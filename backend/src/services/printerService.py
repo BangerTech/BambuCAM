@@ -387,30 +387,29 @@ class PrinterService:
 
     def add_printer(self, data: dict) -> dict:
         try:
-            logger.info(f"Adding printer with data: {data}")
             printer_id = str(uuid.uuid4())
             
-            # Füge zusätzliche Felder hinzu
             printer_data = {
                 'id': printer_id,
                 **data,
                 'status': 'offline',
                 'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
-                'progress': 0,
-                'port': getNextPort()
+                'progress': 0
             }
             
-            # Update go2rtc config für BAMBULAB Drucker
+            # Nur für BAMBULAB Drucker
             if data['type'] == 'BAMBULAB':
-                logger.info("Updating go2rtc config for Bambulab printer")
+                # Stream URL erstellen
+                printer_data['streamUrl'] = f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
+                
+                # go2rtc Config aktualisieren
                 self._update_go2rtc_config(printer_data)
-            
-            # Speichere Drucker
-            self._save_printer(printer_id, printer_data)
-            
-            # Setup MQTT für Bambulab
-            if data['type'] == 'BAMBULAB':
+                
+                # MQTT Verbindung aufbauen
                 self.mqtt_service.connect_printer(printer_id, data['ip'])
+                
+            # Drucker speichern
+            self._save_printer(printer_id, printer_data)
             
             return printer_data
             
@@ -420,77 +419,46 @@ class PrinterService:
 
     def _update_go2rtc_config(self, printer_data):
         try:
-            config_path = self.go2rtc_config_path
-            logger.info(f"Updating go2rtc config at {config_path}")
+            config_path = '/app/data/go2rtc/go2rtc.yaml'
             
             # Standardkonfiguration
             default_config = {
                 'streams': {},
-                'api': {
-                    'listen': '0.0.0.0:1984',
-                    'base_path': '/api',
-                    'origin': '*'
-                },
+                'api': {'listen': '0.0.0.0:1984'},
                 'webrtc': {
                     'listen': '0.0.0.0:8555',
                     'candidates': [f"{self._get_host_ip()}:8555"]
                 }
             }
             
-            # Lade bestehende Konfiguration oder verwende Standardkonfiguration
+            # Lade oder erstelle Config
             if os.path.exists(config_path):
-                logger.info("Loading existing config")
                 with open(config_path, 'r') as f:
                     config = yaml.safe_load(f) or default_config
-                    logger.info(f"Loaded config: {config}")
             else:
-                logger.info("Using default config")
                 config = default_config
                 
-            # Stelle sicher, dass die Grundstruktur existiert
-            if 'streams' not in config:
-                config['streams'] = {}
-                
-            # Füge Stream-URL hinzu
-            stream_url = printer_data['streamUrl']
-            logger.info(f"Adding stream {printer_data['id']}: {stream_url}")
+            # Stream konfigurieren
+            config['streams'][printer_data['id']] = {
+                'input': printer_data['streamUrl'],
+                'ffmpeg': [
+                    '-fflags', 'nobuffer',
+                    '-flags', 'low_delay',
+                    '-rtsp_transport', 'tcp',
+                    '-stimeout', '5000000'
+                ]
+            }
             
-            # Konfiguriere den Stream basierend auf dem Printer-Typ
-            if printer_data.get('type') == 'BAMBULAB':
-                config['streams'][printer_data['id']] = {
-                    'input': stream_url,
-                    'ffmpeg': [
-                        '-fflags', 'nobuffer',
-                        '-flags', 'low_delay',
-                        '-rtsp_transport', 'tcp',
-                        '-stimeout', '5000000'
-                    ]
-                }
-            else:
-                config['streams'][printer_data['id']] = {
-                    'input': stream_url
-                }
-            
-            # Speichere Konfiguration
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            logger.info(f"Final config to write: {config}")
-            
-            # Schreibe die Konfiguration
+            # Config speichern
             with open(config_path, 'w') as f:
                 yaml.safe_dump(config, f)
-                logger.info("Config successfully written")
-
-            # Warte kurz und prüfe, ob die Konfiguration geschrieben wurde
-            time.sleep(1)
-            if os.path.exists(config_path):
-                with open(config_path, 'r') as f:
-                    written_config = yaml.safe_load(f)
-                    logger.info(f"Verification - Read config: {written_config}")
-            else:
-                logger.error("Config file does not exist after writing!")
-
+                
+            # go2rtc neustarten
+            subprocess.run(['docker', 'restart', 'go2rtc'])
+            
         except Exception as e:
-            logger.error(f"Error updating go2rtc config: {e}", exc_info=True)
+            logger.error(f"Error updating go2rtc config: {e}")
+            raise
 
     def _get_host_ip(self):
         try:
@@ -514,6 +482,26 @@ class PrinterService:
                         yaml.dump(config, f)
         except Exception as e:
             logger.error(f"Error removing stream from go2rtc config: {e}")
+
+    def remove_printer(self, printer_id):
+        try:
+            printer = self.get_printer(printer_id)
+            if not printer:
+                return False
+            
+            if printer['type'] == 'BAMBULAB':
+                # Stream aus go2rtc Config entfernen
+                self._remove_from_go2rtc_config(printer_id)
+                # MQTT Verbindung trennen
+                self.mqtt_service.disconnect_printer(printer_id)
+            
+            # Drucker-Datei löschen
+            os.remove(f"{PRINTERS_DIR}/{printer_id}.json")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error removing printer: {e}")
+            return False
 
 # Globale Instanz des PrinterService
 printer_service = PrinterService()

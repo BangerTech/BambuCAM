@@ -42,33 +42,21 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
 
   // 1. Cleanup Funktion
   const cleanup = useCallback(() => {
-    Logger.logStream('Cleanup', 'Cleaning up stream resources');
-    isReconnecting.current = true;
+    Logger.debug('STREAM', 'Cleanup', 'Cleaning up stream resources');
     
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+    
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
     }
     
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
-    }
-    
-    if (sourceBufferRef.current && mediaSourceRef.current) {
-      try {
-        if (mediaSourceRef.current.readyState === 'open') {
-          sourceBufferRef.current.abort();
-          mediaSourceRef.current.removeSourceBuffer(sourceBufferRef.current);
-        }
-      } catch (e) {
-        console.debug('Cleanup error:', e);
-      }
-    }
-    
-    if (videoRef.current) {
-      videoRef.current.src = '';
-      videoRef.current.load();
     }
     
     bufferQueue.current = [];
@@ -80,10 +68,8 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     bufferErrorCount.current = 0;
     reconnectDelay.current = 1000;
     isReconnecting.current = false;
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
+    setLoading(false);
+    setError(null);
   }, []);
 
   // 2. Stream Setup Funktion
@@ -657,51 +643,66 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         throw new Error('No printer data available');
       }
 
-      const streamUrl = getStreamUrl();
-      if (!streamUrl) {
-        throw new Error('Could not determine stream URL');
-      }
-
       console.log('Connecting to WebSocket:', streamUrl);
       
       // Warte kurz, damit go2rtc die Konfiguration laden kann
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const ws = new WebSocket(`ws://${window.location.hostname}/go2rtc/api/ws?src=${printer.id}`);
+      const ws = new WebSocket(`ws://${window.location.hostname}/go2rtc/api/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => {
         console.log('WebSocket connected');
         ws.send(JSON.stringify({
           type: 'webrtc',
-          sdp: {
-            type: 'request'
-          }
+          src: printer.id
         }));
       };
 
       ws.onmessage = async (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'webrtc') {
-          const pc = new RTCPeerConnection();
-          pcRef.current = pc;
-          
-          pc.ontrack = (e) => {
-            if (videoRef.current) {
-              videoRef.current.srcObject = e.streams[0];
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'webrtc') {
+            const pc = new RTCPeerConnection({
+              iceServers: [],
+              sdpSemantics: 'unified-plan'
+            });
+            pcRef.current = pc;
+            
+            pc.ontrack = (e) => {
+              if (videoRef.current) {
+                console.log('Received track:', e.track.kind);
+                videoRef.current.srcObject = e.streams[0];
+                videoRef.current.play().catch(console.error);
+              }
+            };
+            
+            pc.onicecandidate = ({candidate}) => {
+              if (candidate) {
+                ws.send(JSON.stringify({
+                  type: 'webrtc',
+                  ice: candidate
+                }));
+              }
+            };
+
+            if (msg.sdp) {
+              await pc.setRemoteDescription(msg.sdp);
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              
+              ws.send(JSON.stringify({
+                type: 'webrtc',
+                sdp: pc.localDescription
+              }));
             }
-          };
-          
-          await pc.setRemoteDescription(msg.sdp);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          
-          ws.send(JSON.stringify({
-            type: 'webrtc',
-            sdp: pc.localDescription
-          }));
-          
-          setLoading(false);
+            
+            if (msg.ice) {
+              await pc.addIceCandidate(msg.ice);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
         }
       };
 
@@ -709,6 +710,14 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
         console.error('WebSocket error:', error);
         setError('Failed to connect to video stream');
         setLoading(false);
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket closed');
+        if (mountedRef.current) {
+          cleanup();
+          reconnect();
+        }
       };
 
     } catch (error) {
@@ -735,61 +744,38 @@ const RTSPStream = ({ printer, fullscreen, onFullscreenExit }) => {
     }
   }, [printer, setupWebSocket, cleanup]);
 
-  return (
-    <Box sx={{
-      position: 'relative',
-      width: '100%',
-      height: '100%',
-      zIndex: 1
-    }}>
-      {printer?.type === 'BAMBULAB' ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          style={{
-            width: '100%',
-            height: '100%',
-            backgroundColor: '#000'
-          }}
-        />
-      ) : (
-        <img 
-          src={getStreamUrl()}
-          alt="Printer Stream"
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: fullscreen ? 'contain' : 'cover'
-          }}
-          onLoad={() => setLoading(false)}
-          onError={() => {
-            setError('Failed to load stream');
-            setLoading(false);
-          }}
-        />
-      )}
+  // Nur für BAMBULAB WebRTC Setup
+  useEffect(() => {
+    if (printer?.type === 'BAMBULAB') {
+      const ws = new WebSocket(`ws://${window.location.hostname}/go2rtc/ws?src=${printer.id}`);
       
-      {(loading || error) && (
-        <Box sx={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: 'white',
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          padding: '10px',
-          borderRadius: '5px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1
-        }}>
-          {loading && <CircularProgress size={24} />}
-          {error && <Typography>{error}</Typography>}
-        </Box>
-      )}
-    </Box>
+      ws.onmessage = async (e) => {
+        const msg = JSON.parse(e.data);
+        // WebRTC Handling...
+      };
+      
+      return () => ws.close();
+    }
+  }, [printer]);
+
+  // Für MJPEG Streams (Creality/OctoPrint)
+  if (printer?.type !== 'BAMBULAB') {
+    return (
+      <img 
+        src={printer.streamUrl}
+        alt="Printer Stream"
+        style={{width: '100%', height: '100%'}}
+      />
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      style={{width: '100%', height: '100%'}}
+    />
   );
 };
 
