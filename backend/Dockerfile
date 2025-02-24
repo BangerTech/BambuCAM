@@ -22,10 +22,12 @@ COPY . .
 
 # Erstelle notwendige Verzeichnisse und setze Berechtigungen
 RUN mkdir -p /app/data/printers /app/data/streams /app/logs /app/data/go2rtc \
-    && chown -R 1000:1000 /app/data /app/logs \
-    && chmod -R 755 /app/data /app/logs
+    && chmod -R 777 /app/data /app/logs
 
 ENV FLASK_APP=src.app
 ENV PYTHONPATH=/app
 
-CMD ["flask", "run", "--host=0.0.0.0", "--port=4000"] 
+# Mache entrypoint.sh ausführbar
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"] 
