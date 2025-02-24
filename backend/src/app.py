@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 import yaml
 import socket
+from src.config import Config
 
 def get_host_ip():
     """Ermittelt die Host-IP"""
@@ -57,12 +58,10 @@ os.makedirs(PRINTERS_DIR, exist_ok=True)
 os.makedirs(STREAMS_DIR, exist_ok=True)
 
 # Stelle sicher, dass das go2rtc Verzeichnis existiert
-GO2RTC_DIR = DATA_DIR / 'go2rtc'
-GO2RTC_CONFIG = GO2RTC_DIR / 'go2rtc.yaml'
-os.makedirs(GO2RTC_DIR, exist_ok=True)
+Config.init_directories()  # Erstellt alle benötigten Verzeichnisse
 
 # Erstelle initiale go2rtc Konfiguration wenn sie nicht existiert
-if not os.path.exists(GO2RTC_CONFIG):
+if not os.path.exists(Config.GO2RTC_CONFIG):
     logger.info("Creating initial go2rtc configuration")
     initial_config = {
         'api': {
@@ -76,9 +75,9 @@ if not os.path.exists(GO2RTC_CONFIG):
         },
         'streams': {}
     }
-    with open(GO2RTC_CONFIG, 'w') as f:
+    with open(Config.GO2RTC_CONFIG, 'w') as f:
         yaml.safe_dump(initial_config, f)
-    logger.info(f"Created initial go2rtc config at {GO2RTC_CONFIG}")
+    logger.info(f"Created initial go2rtc config at {Config.GO2RTC_CONFIG}")
 
 # CORS mit erweiterten Optionen konfigurieren
 CORS(app, resources={
@@ -156,7 +155,7 @@ def start_stream(printer_id):
 @app.route('/api/debug/go2rtc/config')
 def debug_go2rtc_config():
     try:
-        with open(GO2RTC_CONFIG, 'r') as f:
+        with open(Config.GO2RTC_CONFIG, 'r') as f:
             content = f.read()
             logger.info(f"Current go2rtc config:\n{content}")
             config = yaml.safe_load(content)

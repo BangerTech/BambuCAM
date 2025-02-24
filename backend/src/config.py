@@ -31,6 +31,8 @@ class Config:
     NOTIFICATIONS_DIR = DATA_DIR / 'notifications'
     BAMBU_CLOUD_DIR = DATA_DIR / 'bambu-cloud'
     LOGS_DIR = BASE_DIR / 'logs'
+    GO2RTC_DIR = DATA_DIR / 'go2rtc'
+    GO2RTC_CONFIG = GO2RTC_DIR / 'go2rtc.yaml'
 
     # Ensure all required directories exist
     REQUIRED_DIRS = [
@@ -38,7 +40,8 @@ class Config:
         PRINTERS_DIR,
         NOTIFICATIONS_DIR,
         BAMBU_CLOUD_DIR,
-        LOGS_DIR
+        LOGS_DIR,
+        GO2RTC_DIR
     ]
     
     @classmethod
