@@ -50,14 +50,21 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./backend/data/go2rtc:/config:rw
+      - type: bind
+        source: ./backend/data/go2rtc
+        target: /config
+        bind:
+          create_host_path: true
     environment:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
       - GO2RTC_LOG_LEVEL=trace
       - GO2RTC_CONFIG=/config/go2rtc.yaml
       - GO2RTC_API=listen=:1984,base_path=go2rtc
-    command: >
-      sh -c "chmod 666 /config/go2rtc.yaml || true && go2rtc"
+    command: sh -c "
+      touch /config/go2rtc.yaml &&
+      chmod 777 /config/go2rtc.yaml &&
+      (go2rtc & echo $! > /config/go2rtc.pid && wait)
+      "
 
 volumes:
   bambucam_logs:

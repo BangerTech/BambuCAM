@@ -21,6 +21,7 @@ from .octoprintService import octoprint_service
 import yaml
 import subprocess
 from src.config import Config
+import signal
 
 # Logger konfigurieren
 logger = logging.getLogger(__name__)
@@ -79,6 +80,8 @@ class PrinterService:
         self.go2rtc_config_path = Config.GO2RTC_CONFIG
         self.mqtt_service = mqtt_service
         self.octoprint_service = octoprint_service
+        self.host_ip = self._get_host_ip()
+        self.go2rtc_api_url = f"http://{self.host_ip}:1984"
         logger.info(f"Initialized PrinterService with go2rtc config path: {self.go2rtc_config_path}")
 
     def get_file_lock(self, printer_id):
@@ -387,6 +390,19 @@ class PrinterService:
             logger.error(f"Error setting up Creality polling: {e}")
             raise
 
+    def _save_printer(self, printer_id: str, printer_data: dict):
+        """Speichert einen Drucker in einer JSON-Datei"""
+        try:
+            file_path = os.path.join(PRINTERS_DIR, f"{printer_id}.json")
+            logger.info(f"Saving printer to file: {file_path}")
+            
+            with open(file_path, 'w') as f:
+                json.dump(printer_data, f, indent=2)
+                
+        except Exception as e:
+            logger.error(f"Error saving printer: {e}")
+            raise
+
     def add_printer(self, data: dict) -> dict:
         try:
             printer_id = str(uuid.uuid4())
@@ -397,10 +413,10 @@ class PrinterService:
                 **data,
                 'status': 'offline',
                 'temperatures': {'hotend': 0, 'bed': 0, 'chamber': 0},
-                'progress': 0
+                'progress': 0,
+                'port': getNextPort()
             }
             
-            # Nur für BAMBULAB Drucker
             if data['type'] == 'BAMBULAB':
                 logger.info(f"Setting up BambuLab printer {printer_data['name']} ({printer_data['ip']})")
                 
@@ -410,25 +426,25 @@ class PrinterService:
                 
                 # go2rtc Config aktualisieren
                 try:
-                    logger.info("Checking go2rtc config path...")
-                    logger.info(f"Config path: {self.go2rtc_config_path}")
-                    logger.info(f"Config exists: {os.path.exists(self.go2rtc_config_path)}")
-                    logger.info(f"Config directory exists: {os.path.exists(os.path.dirname(self.go2rtc_config_path))}")
-                    logger.info(f"Config directory contents: {os.listdir(os.path.dirname(self.go2rtc_config_path))}")
-                    
                     logger.info("Updating go2rtc config...")
                     if not self._update_go2rtc_config(printer_data):
                         logger.error("Failed to update go2rtc config")
                     else:
-                        # Starte go2rtc neu um die neue Konfiguration zu laden
-                        logger.info("Restarting go2rtc to apply new config")
-                        subprocess.run(['docker', 'restart', 'go2rtc'])
-                    logger.info("Successfully updated go2rtc config")
+                        logger.info("Successfully updated go2rtc config")
                 except Exception as e:
                     logger.error(f"Failed to update go2rtc config: {e}", exc_info=True)
                 
                 # MQTT Verbindung aufbauen
-                self.mqtt_service.connect_printer(printer_id, data['ip'])
+                self.mqtt_service.connect_printer(printer_id, data['ip'], data['accessCode'])
+
+            elif printer_data['type'] == 'CREALITY':
+                printer_data.update({
+                    'accessCode': '',  # Creality braucht keinen Access Code
+                    'streamUrl': f"http://{data['ip']}:8080/?action=stream"  # Standard MJPEG Stream URL
+                })
+                
+                # Starte Polling für Creality
+                self.connect_printer(printer_data['id'], 'CREALITY', printer_data['ip'])
             
             # Drucker speichern
             self._save_printer(printer_id, printer_data)
@@ -445,39 +461,31 @@ class PrinterService:
             config_path = self.go2rtc_config_path
             logger.info(f"Updating go2rtc config at {config_path}")
             
-            # Stelle sicher, dass die Datei beschreibbar ist
-            if config_path.exists():
-                os.chmod(config_path, 0o666)
+            # Stelle sicher, dass das Verzeichnis existiert
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
             
-            # Lade bestehende Konfiguration
+            # Initialisiere Default-Config
+            config = {
+                'api': {'listen': ':1984', 'base_path': 'go2rtc', 'origin': '*'},
+                'webrtc': {'listen': ':8555', 'candidates': [f"{self.host_ip}:8555"]},
+                'streams': {}
+            }
+            
+            # Lade bestehende Konfiguration wenn sie existiert
             if config_path.exists():
                 try:
-                    with open(config_path) as f:
-                        logger.info("Reading existing config...")
-                        config = yaml.safe_load(f) or {}
-                        logger.info(f"Current config: {config}")
+                    with open(config_path, 'r') as f:
+                        loaded_config = yaml.safe_load(f)
+                        if loaded_config:  # Nur wenn die Datei nicht leer ist
+                            config = loaded_config
                 except Exception as e:
-                    logger.warning(f"Could not load existing config: {e}")
-                    config = {}
-            else:
-                logger.warning(f"Config file does not exist at {config_path}, creating default config")
-                config = {
-                    'api': {
-                        'listen': ':1984',
-                        'base_path': 'go2rtc',
-                        'origin': '*'
-                    },
-                    'webrtc': {
-                        'listen': ':8555',
-                        'candidates': [f"{self._get_host_ip()}:8555"]
-                    },
-                    'streams': {}
-                }
-
+                    logger.error(f"Failed to load existing config: {e}")
+                    return False
+            
             # Stelle sicher, dass streams existiert
             if 'streams' not in config:
                 config['streams'] = {}
-
+            
             # Füge Stream-URL hinzu
             if printer_data.get('type') == 'BAMBULAB':
                 logger.info(f"Adding stream for printer {printer_data['id']}")
@@ -485,10 +493,51 @@ class PrinterService:
                 
                 # Speichere Konfiguration
                 try:
-                    with open(config_path, 'w') as f:
+                    # Schreibe zuerst in eine temporäre Datei
+                    temp_path = f"{config_path}.tmp"
+                    with open(temp_path, 'w') as f:
                         yaml.safe_dump(config, f, default_flow_style=False)
+                    
+                    # Dann verschiebe die temporäre Datei
+                    os.replace(temp_path, config_path)
+                    
                     logger.info(f"Updated go2rtc config with stream for printer {printer_data['id']}")
                     logger.info(f"New config:\n{yaml.dump(config, default_flow_style=False)}")
+
+                    # Aktualisiere go2rtc über die API
+                    try:
+                        response = requests.post(
+                            f'{self.go2rtc_api_url}/api/stream',
+                            params={
+                                'src': printer_data['streamUrl'],
+                                'dst': printer_data['id']
+                            }
+                        )
+                        if response.status_code == 200:
+                            logger.info("Successfully updated go2rtc via API")
+                        else:
+                            logger.warning(f"Failed to update go2rtc via API: {response.status_code}")
+                            logger.warning(f"Response: {response.text}")
+                        # Versuche alternative URL
+                        try:
+                            alt_response = requests.post(
+                                'http://go2rtc:1984/api/stream',
+                                params={
+                                    'src': printer_data['streamUrl'],
+                                    'dst': printer_data['id']
+                                }
+                            )
+                            if alt_response.status_code == 200:
+                                logger.info("Successfully updated go2rtc via alternative API URL")
+                            else:
+                                logger.warning(f"Failed with alternative URL: {alt_response.status_code}")
+                        except Exception as e:
+                            logger.warning(f"Alternative URL failed: {e}")
+
+                        return True
+                    except Exception as e:
+                        logger.warning(f"Could not update go2rtc via API: {e}")
+
                     return True
                 except Exception as e:
                     logger.error(f"Failed to write config: {e}", exc_info=True)
@@ -520,8 +569,29 @@ class PrinterService:
                     with open(self.go2rtc_config_path, 'w') as f:
                         yaml.dump(config, f)
                     logger.info("Successfully removed stream from config")
-                    # Starte go2rtc neu
-                    subprocess.run(['docker', 'restart', 'go2rtc'])
+                    # Entferne Stream über API
+                    try:
+                        response = requests.delete(
+                            f'{self.go2rtc_api_url}/api/stream/{printer_id}'
+                        )
+                        if response.status_code == 200:
+                            logger.info("Successfully removed stream via API")
+                        else:
+                            logger.warning(f"Failed to remove stream via API: {response.status_code}")
+                            logger.warning(f"Response: {response.text}")
+                        # Versuche alternative URL
+                        try:
+                            alt_response = requests.delete(
+                                f'http://go2rtc:1984/api/stream/{printer_id}'
+                            )
+                            if alt_response.status_code == 200:
+                                logger.info("Successfully removed stream via alternative API URL")
+                            else:
+                                logger.warning(f"Failed with alternative URL: {alt_response.status_code}")
+                        except Exception as e:
+                            logger.warning(f"Alternative URL failed: {e}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove stream via API: {e}")
         except Exception as e:
             logger.error(f"Error removing stream from go2rtc config: {e}")
 
@@ -583,77 +653,7 @@ async def test_stream_url(url, printer_type='BAMBULAB'):
 
 def addPrinter(data):
     """Fügt einen neuen Drucker hinzu"""
-    try:
-        logger.info(f"Adding printer with data: {data}")
-        
-        printer = {
-            'id': str(uuid.uuid4()),
-            'name': data['name'],
-            'ip': data['ip'],
-            'type': data.get('type', 'BAMBULAB'),
-            'status': 'offline',
-            'temperatures': {
-                'hotend': 0,
-                'bed': 0,
-                'chamber': 0
-            },
-            'progress': 0,
-            'port': getNextPort()
-        }
-
-        # Spezifische Konfiguration je nach Druckertyp
-        if printer['type'] == 'OCTOPRINT':
-            printer.update({
-                'streamUrl': f"http://{data['ip']}/webcam/?action=stream",
-                'mqtt': {
-                    'broker': data['mqttBroker'],
-                    'port': data['mqttPort']
-                },
-                'octoprint': {
-                    'temperatures': {
-                        'tool0': {'actual': 0, 'target': 0},
-                        'bed': {'actual': 0, 'target': 0}
-                    },
-                    'currentFile': None
-                }
-            })
-            # Initialisiere OctoPrint Service
-            octoprint_service.add_printer(printer)
-            logger.info(f"OctoPrint service initialized for printer {printer['id']}")
-
-        elif printer['type'] == 'BAMBULAB':
-            printer.update({
-                'accessCode': data.get('accessCode', ''),
-                'streamUrl': f"rtsps://bblp:{data['accessCode']}@{data['ip']}:322/streaming/live/1"
-            })
-            
-            # MQTT Verbindung für Bambulab Drucker
-            mqtt_service.connect_printer(
-                printer_id=printer['id'],
-                ip=printer['ip'],
-                access_code=printer['accessCode']
-            )
-            
-        elif printer['type'] == 'CREALITY':
-            printer.update({
-                'accessCode': '',  # Creality braucht keinen Access Code
-                'streamUrl': f"http://{data['ip']}:8080/?action=stream"  # Standard MJPEG Stream URL
-            })
-            
-            # Starte Polling für Creality direkt über die PrinterService-Instanz
-            printer_service.connect_printer(printer['id'], 'CREALITY', printer['ip'])
-        
-        printer_file = os.path.join(PRINTERS_DIR, f"{printer['id']}.json")
-        logger.info(f"Saving printer to file: {printer_file}")
-        
-        with open(printer_file, 'w') as f:
-            json.dump(printer, f, indent=2)
-            
-        return printer
-        
-    except Exception as e:
-        logger.error(f"Error adding printer: {e}", exc_info=True)
-        raise
+    return printer_service.add_printer(data)
 
 def getPrinters():
     """Lädt alle Drucker aus den einzelnen JSON-Dateien"""
