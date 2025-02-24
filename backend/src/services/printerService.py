@@ -441,29 +441,46 @@ class PrinterService:
 
     def _update_go2rtc_config(self, printer_data):
         try:
-            config = {
-                'api': {
-                    'listen': ':1984',
-                    'base_path': 'go2rtc',  # Ohne führenden Slash
-                    'origin': '*'
-                },
-                'webrtc': {
-                    'listen': ':8555',
-                    'candidates': [f"{self._get_host_ip()}:8555"]
-                },
-                'streams': {
-                    printer_data['id']: {
-                        'input': printer_data['streamUrl']
-                    }
-                },
-                'log': {
-                    'level': 'debug'
+            # Existierende Konfiguration lesen oder neue erstellen
+            if os.path.exists(self.go2rtc_config_path):
+                with open(self.go2rtc_config_path, 'r') as f:
+                    config = yaml.safe_load(f) or {}
+            else:
+                config = {
+                    'api': {
+                        'listen': ':1984',
+                        'base_path': 'go2rtc',
+                        'origin': '*'
+                    },
+                    'webrtc': {
+                        'listen': ':8555/tcp',
+                        'ice_servers': [
+                            {'urls': ['stun:stun.l.google.com:19302']}
+                        ],
+                        'candidates': [f"{self._get_host_ip()}:8555"]
+                    },
+                    'log': {
+                        'level': 'debug',
+                        'format': 'color'
+                    },
+                    'streams': {}
                 }
-            }
+
+            # Stream für neuen Drucker hinzufügen
+            if 'streams' not in config:
+                config['streams'] = {}
             
+            config['streams'][printer_data['id']] = {
+                'input': printer_data['streamUrl']
+            }
+
             # Konfiguration speichern
             with open(self.go2rtc_config_path, 'w') as f:
-                yaml.dump(config, f, default_flow_style=False)
+                yaml.safe_dump(config, f)
+
+            # go2rtc neu starten
+            subprocess.run(['docker', 'restart', 'go2rtc'], check=True)
+            logger.info("Successfully updated go2rtc config and restarted service")
 
         except Exception as e:
             logger.error(f"Error updating go2rtc config: {e}", exc_info=True)

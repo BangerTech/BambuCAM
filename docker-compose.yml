@@ -59,7 +59,14 @@ services:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
       - GO2RTC_API_LISTEN=:1984
       - GO2RTC_API_BASE_PATH=go2rtc
-      - GO2RTC_LOG_LEVEL=trace
+      - GO2RTC_LOG_LEVEL=debug
+      - GO2RTC_WEBRTC_LISTEN=:8555/tcp
+      - HOST_IP=${HOST_IP:-0.0.0.0}  # für die candidates
+    command: >
+      sh -c "echo 'Using config:' && 
+             cat /config/go2rtc.yaml && 
+             echo 'Starting go2rtc...' && 
+             /app/go2rtc -c /config/go2rtc.yaml"
     ports:
       - "8554:8554"  # RTSP
       - "8555:8555/udp"  # WebRTC

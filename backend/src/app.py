@@ -65,19 +65,23 @@ os.makedirs(GO2RTC_DIR, exist_ok=True)
 if not os.path.exists(GO2RTC_CONFIG):
     logger.info("Creating initial go2rtc configuration")
     initial_config = {
-        'streams': {},
         'api': {
             'listen': ':1984',
-            'base_path': 'go2rtc',  # Ohne führenden Slash
-            'origin': '*',
+            'base_path': 'go2rtc',  # ohne führenden Slash
+            'origin': '*'
         },
         'webrtc': {
-            'listen': ':8555',
+            'listen': ':8555/tcp',  # wichtig: /tcp
+            'ice_servers': [
+                {'urls': ['stun:stun.l.google.com:19302']}
+            ],
             'candidates': [f"{get_host_ip()}:8555"]
         },
         'log': {
-            'level': 'debug'
-        }
+            'level': 'debug',
+            'format': 'color'
+        },
+        'streams': {}
     }
     with open(GO2RTC_CONFIG, 'w') as f:
         yaml.safe_dump(initial_config, f)
@@ -160,9 +164,12 @@ def start_stream(printer_id):
 def debug_go2rtc_config():
     try:
         with open(GO2RTC_CONFIG, 'r') as f:
-            config = yaml.safe_load(f)
+            content = f.read()
+            logger.info(f"Current go2rtc config:\n{content}")
+            config = yaml.safe_load(content)
         return jsonify(config)
     except Exception as e:
+        logger.error(f"Error reading go2rtc config: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
