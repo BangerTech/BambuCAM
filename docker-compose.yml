@@ -59,11 +59,12 @@ services:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
       - GO2RTC_LOG_LEVEL=trace
       - GO2RTC_CONFIG=/config/go2rtc.yaml
-      - GO2RTC_API=listen=:1984,base_path=go2rtc
+      - GO2RTC_API=listen=:1984
+      - GO2RTC_API_BASE=/go2rtc
     command: sh -c "
       touch /config/go2rtc.yaml &&
       chmod 777 /config/go2rtc.yaml &&
-      (go2rtc & echo $! > /config/go2rtc.pid && wait)
+      go2rtc
       "
 
 volumes:

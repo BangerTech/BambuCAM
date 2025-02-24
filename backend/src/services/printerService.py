@@ -81,6 +81,7 @@ class PrinterService:
         self.mqtt_service = mqtt_service
         self.octoprint_service = octoprint_service
         self.host_ip = self._get_host_ip()
+        # API-URL ohne base_path, da die API direkt auf Port 1984 läuft
         self.go2rtc_api_url = f"http://{self.host_ip}:1984"
         logger.info(f"Initialized PrinterService with go2rtc config path: {self.go2rtc_config_path}")
 
@@ -465,11 +466,7 @@ class PrinterService:
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             
             # Initialisiere Default-Config
-            config = {
-                'api': {'listen': ':1984', 'base_path': 'go2rtc', 'origin': '*'},
-                'webrtc': {'listen': ':8555', 'candidates': [f"{self.host_ip}:8555"]},
-                'streams': {}
-            }
+            config = {'streams': {}}
             
             # Lade bestehende Konfiguration wenn sie existiert
             if config_path.exists():
@@ -477,14 +474,10 @@ class PrinterService:
                     with open(config_path, 'r') as f:
                         loaded_config = yaml.safe_load(f)
                         if loaded_config:  # Nur wenn die Datei nicht leer ist
-                            config = loaded_config
+                            config['streams'] = loaded_config.get('streams', {})
                 except Exception as e:
                     logger.error(f"Failed to load existing config: {e}")
                     return False
-            
-            # Stelle sicher, dass streams existiert
-            if 'streams' not in config:
-                config['streams'] = {}
             
             # Füge Stream-URL hinzu
             if printer_data.get('type') == 'BAMBULAB':
@@ -504,39 +497,30 @@ class PrinterService:
                     logger.info(f"Updated go2rtc config with stream for printer {printer_data['id']}")
                     logger.info(f"New config:\n{yaml.dump(config, default_flow_style=False)}")
 
-                    # Aktualisiere go2rtc über die API
+                    # Füge Stream über die API hinzu
                     try:
                         response = requests.post(
-                            f'{self.go2rtc_api_url}/api/stream',
+                            f"{self.go2rtc_api_url}/api/streams",
                             params={
-                                'src': printer_data['streamUrl'],
-                                'dst': printer_data['id']
+                                "src": printer_data['streamUrl'],
+                                "dst": printer_data['id']
                             }
                         )
                         if response.status_code == 200:
-                            logger.info("Successfully updated go2rtc via API")
+                            logger.info(f"Successfully added stream via API")
+                            # Lade die Konfiguration neu
+                            try:
+                                reload_response = requests.post(f"{self.go2rtc_api_url}/api/reload")
+                                if reload_response.status_code == 200:
+                                    logger.info("Successfully reloaded go2rtc config")
+                                else:
+                                    logger.warning(f"Failed to reload config: {reload_response.status_code} - {reload_response.text}")
+                            except Exception as e:
+                                logger.warning(f"Could not reload config: {e}")
                         else:
-                            logger.warning(f"Failed to update go2rtc via API: {response.status_code}")
-                            logger.warning(f"Response: {response.text}")
-                        # Versuche alternative URL
-                        try:
-                            alt_response = requests.post(
-                                'http://go2rtc:1984/api/stream',
-                                params={
-                                    'src': printer_data['streamUrl'],
-                                    'dst': printer_data['id']
-                                }
-                            )
-                            if alt_response.status_code == 200:
-                                logger.info("Successfully updated go2rtc via alternative API URL")
-                            else:
-                                logger.warning(f"Failed with alternative URL: {alt_response.status_code}")
-                        except Exception as e:
-                            logger.warning(f"Alternative URL failed: {e}")
-
-                        return True
+                            logger.warning(f"Failed to add stream via API: {response.status_code} - {response.text}")
                     except Exception as e:
-                        logger.warning(f"Could not update go2rtc via API: {e}")
+                        logger.warning(f"Could not add stream via API: {e}")
 
                     return True
                 except Exception as e:
@@ -558,7 +542,6 @@ class PrinterService:
             return "0.0.0.0"
 
     def _remove_from_go2rtc_config(self, printer_id):
-        """Entfernt einen Stream aus der go2rtc Konfiguration"""
         try:
             if os.path.exists(self.go2rtc_config_path):
                 logger.info(f"Removing stream {printer_id} from go2rtc config")
@@ -569,27 +552,24 @@ class PrinterService:
                     with open(self.go2rtc_config_path, 'w') as f:
                         yaml.dump(config, f)
                     logger.info("Successfully removed stream from config")
-                    # Entferne Stream über API
+                    # Entferne Stream über die API
                     try:
                         response = requests.delete(
-                            f'{self.go2rtc_api_url}/api/stream/{printer_id}'
+                            f"{self.go2rtc_api_url}/api/streams/{printer_id}"
                         )
                         if response.status_code == 200:
-                            logger.info("Successfully removed stream via API")
+                            logger.info(f"Successfully removed stream via API")
+                            # Lade die Konfiguration neu
+                            try:
+                                reload_response = requests.post(f"{self.go2rtc_api_url}/api/reload")
+                                if reload_response.status_code == 200:
+                                    logger.info("Successfully reloaded go2rtc config")
+                                else:
+                                    logger.warning(f"Failed to reload config: {reload_response.status_code} - {reload_response.text}")
+                            except Exception as e:
+                                logger.warning(f"Could not reload config: {e}")
                         else:
-                            logger.warning(f"Failed to remove stream via API: {response.status_code}")
-                            logger.warning(f"Response: {response.text}")
-                        # Versuche alternative URL
-                        try:
-                            alt_response = requests.delete(
-                                f'http://go2rtc:1984/api/stream/{printer_id}'
-                            )
-                            if alt_response.status_code == 200:
-                                logger.info("Successfully removed stream via alternative API URL")
-                            else:
-                                logger.warning(f"Failed with alternative URL: {alt_response.status_code}")
-                        except Exception as e:
-                            logger.warning(f"Alternative URL failed: {e}")
+                            logger.warning(f"Failed to remove stream via API: {response.status_code} - {response.text}")
                     except Exception as e:
                         logger.warning(f"Could not remove stream via API: {e}")
         except Exception as e:
