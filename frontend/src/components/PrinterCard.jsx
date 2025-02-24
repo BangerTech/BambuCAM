@@ -24,6 +24,7 @@ const getStatusColor = (status) => {
 const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const isMounted = useRef(true);  // Referenz um zu prüfen ob die Komponente mounted ist
+  const videoRef = useRef(null);
 
   // Cleanup beim Unmounting
   useEffect(() => {
@@ -72,6 +73,27 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
     });
   }, [printer]);
 
+  useEffect(() => {
+    if (printer.type === 'BAMBULAB' && videoRef.current) {
+      // Verwende die Printer-ID als Stream-ID, wie in der Konfiguration registriert
+      const videoUrl = `/go2rtc/stream.html?src=${printer.id}`;
+      videoRef.current.innerHTML = '';
+      const iframe = document.createElement('iframe');
+      iframe.src = videoUrl;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = 'none';
+      videoRef.current.appendChild(iframe);
+      
+      // Cleanup beim Unmounting
+      return () => {
+        if (videoRef.current) {
+          videoRef.current.innerHTML = '';
+        }
+      };
+    }
+  }, [printer.type, printer.streamUrl]);
+
   return (
     <Paper
       elevation={3}
@@ -94,15 +116,19 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
         width: '100%',
         height: '100%',
       }}>
-        <RTSPStream 
-          printer={printer} 
-          fullscreen={isFullscreen}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover'
-          }}
-        />
+        {printer.type === 'BAMBULAB' ? (
+          <div ref={videoRef} style={{ width: '100%', height: '100%' }} />
+        ) : (
+          <RTSPStream 
+            printer={printer} 
+            fullscreen={isFullscreen}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover'
+            }}
+          />
+        )}
         
         {/* Header mit Name und Buttons */}
         <Box
