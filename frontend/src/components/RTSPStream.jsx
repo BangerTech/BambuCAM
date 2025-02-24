@@ -12,7 +12,7 @@ const RTSPStream = ({ printer }) => {
       if (!videoElement) return;
 
       // MSE Stream URL
-      const streamUrl = `/go2rtc/api/mse?src=${printer.id}`;
+      const streamUrl = `/go2rtc/mse?src=${printer.id}`;
       Logger.info('STREAM', 'Init', `Starting MSE stream from ${streamUrl}`);
 
       videoElement.src = streamUrl;
