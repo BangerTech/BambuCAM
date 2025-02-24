@@ -27,7 +27,4 @@ RUN mkdir -p /app/data/printers /app/data/streams /app/logs /app/data/go2rtc \
 ENV FLASK_APP=src.app
 ENV PYTHONPATH=/app
 
-# Mache entrypoint.sh ausführbar
-RUN chmod +x /app/entrypoint.sh
-
-ENTRYPOINT ["/app/entrypoint.sh"] 
+CMD ["flask", "run", "--host=0.0.0.0", "--port=4000"] 

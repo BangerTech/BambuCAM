@@ -56,7 +56,8 @@ services:
       - GO2RTC_LOG_LEVEL=trace
       - GO2RTC_CONFIG=/config/go2rtc.yaml
       - GO2RTC_API=listen=:1984,base_path=go2rtc
-    command: go2rtc
+    command: >
+      sh -c "chmod 666 /config/go2rtc.yaml || true && go2rtc"
 
 volumes:
   bambucam_logs:

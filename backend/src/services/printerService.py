@@ -445,6 +445,10 @@ class PrinterService:
             config_path = self.go2rtc_config_path
             logger.info(f"Updating go2rtc config at {config_path}")
             
+            # Stelle sicher, dass die Datei beschreibbar ist
+            if config_path.exists():
+                os.chmod(config_path, 0o666)
+            
             # Lade bestehende Konfiguration
             if config_path.exists():
                 try:
