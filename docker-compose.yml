@@ -26,6 +26,7 @@ services:
       - ./backend:/app
       - ./backend/data:/app/data
       - bambucam_logs:/app/logs
+      - ./backend/data/go2rtc:/config
     ports:
       - "4000:4000"
       - "9000:9000"  # WebSocket Port für Streams
@@ -53,8 +54,12 @@ services:
     network_mode: host
     volumes:
       - ./backend/data/go2rtc:/config:rw
+    user: "1000:1000"
     environment:
       - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+      - GO2RTC_API_LISTEN=:1984
+      - GO2RTC_API_BASE_PATH=go2rtc
+      - GO2RTC_LOG_LEVEL=trace
     ports:
       - "8554:8554"  # RTSP
       - "8555:8555/udp"  # WebRTC
