@@ -127,26 +127,65 @@ namespace BambuCAM.Installer.Services
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "BambuCAM"
             );
-            
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "docker",
-                    Arguments = "compose up -d",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true,
-                    WorkingDirectory = installDir
-                }
-            };
-            
-            process.Start();
-            await process.WaitForExitAsync();
 
-            if (process.ExitCode != 0)
+            // Mehrere Versuche für das Starten der Container
+            var retries = 5;  // 5 Versuche
+            var delay = 5000; // 5 Sekunden zwischen Versuchen
+
+            while (retries-- > 0)
             {
-                throw new Exception("Failed to start Docker containers. Please check if Docker Desktop is running.");
+                try
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "docker",
+                            Arguments = "compose up -d",
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,  // Auch stderr umleiten
+                            CreateNoWindow = true,
+                            WorkingDirectory = installDir
+                        }
+                    };
+
+                    var output = new System.Text.StringBuilder();
+                    var error = new System.Text.StringBuilder();
+
+                    process.OutputDataReceived += (s, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+                    process.ErrorDataReceived += (s, e) => { if (e.Data != null) error.AppendLine(e.Data); };
+                    
+                    process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+                    await process.WaitForExitAsync();
+
+                    if (process.ExitCode == 0)
+                    {
+                        return; // Erfolgreich!
+                    }
+
+                    // Wenn der letzte Versuch fehlschlägt, wirf Exception mit Details
+                    if (retries == 0)
+                    {
+                        throw new Exception($"Failed to start Docker containers. Error: {error}\nOutput: {output}");
+                    }
+
+                    // Warte bevor der nächste Versuch startet
+                    await Task.Delay(delay);
+                }
+                catch (Exception ex)
+                {
+                    // Wenn der letzte Versuch fehlschlägt, wirf die Exception
+                    if (retries == 0)
+                    {
+                        throw new Exception($"Failed to start Docker containers: {ex.Message}");
+                    }
+
+                    // Sonst warte und versuche es erneut
+                    await Task.Delay(delay);
+                }
             }
         }
 
