@@ -26,7 +26,9 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile.prod
           push: true
-          tags: bangertech/bambucam-frontend:prod
+          tags: |
+            bangertech/bambucam-frontend:latest
+            bangertech/bambucam-frontend:${{ github.ref_name }}
 
       - name: Build and push Backend
         uses: docker/build-push-action@v5
@@ -34,11 +36,12 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.prod
           push: true
-          tags: bangertech/bambucam-backend:prod
+          tags: |
+            bangertech/bambucam-backend:latest
+            bangertech/bambucam-backend:${{ github.ref_name }}
 
       - name: Create Release ZIP
         run: |
-          # Kopiere die Production-Dateien
           mkdir -p release
           cp docker-compose.prod.yml release/docker-compose.yml
           cd release

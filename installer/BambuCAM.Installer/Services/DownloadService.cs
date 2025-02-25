@@ -93,12 +93,12 @@ namespace BambuCAM.Installer.Services
 
 services:
   frontend:
-    image: bangertech/bambucam-frontend:prod
+    image: bangertech/bambucam-frontend:latest
     restart: unless-stopped
     network_mode: 'host'
 
   backend:
-    image: bangertech/bambucam-backend:prod
+    image: bangertech/bambucam-backend:latest
     restart: unless-stopped
     volumes:
       - bambucam_data:/app/data
