@@ -128,34 +128,11 @@ namespace BambuCAM.Installer.Services
                 "BambuCAM"
             );
 
-            // Prüfe ob docker-compose.yml existiert
+            // Prüfe ob die docker-compose.yml aus dem Release existiert
             var composeFile = Path.Combine(installDir, "docker-compose.yml");
             if (!File.Exists(composeFile))
             {
-                // Erstelle Standard docker-compose.yml
-                var composeContent = @"version: '3.8'
-services:
-  frontend:
-    image: bangertech/bambucam-frontend:latest
-    ports:
-      - '80:80'
-    restart: unless-stopped
-
-  api:
-    image: bangertech/bambucam-api:latest
-    ports:
-      - '4000:4000'
-    volumes:
-      - ./config:/app/config
-    restart: unless-stopped
-
-  camera:
-    image: bangertech/bambucam-camera:latest
-    ports:
-      - '1984:1984'
-    restart: unless-stopped";
-
-                await File.WriteAllTextAsync(composeFile, composeContent);
+                throw new Exception("docker-compose.yml not found. Please ensure BambuCAM was downloaded correctly.");
             }
 
             // Mehrere Versuche für das Starten der Container
@@ -174,7 +151,7 @@ services:
                             Arguments = "compose up -d",
                             UseShellExecute = false,
                             RedirectStandardOutput = true,
-                            RedirectStandardError = true,  // Auch stderr umleiten
+                            RedirectStandardError = true,
                             CreateNoWindow = true,
                             WorkingDirectory = installDir
                         }
@@ -199,21 +176,17 @@ services:
                     // Wenn der letzte Versuch fehlschlägt, wirf Exception mit Details
                     if (retries == 0)
                     {
-                        throw new Exception($"Failed to start Docker containers. Error: {error}\nOutput: {output}");
+                        throw new Exception($"Failed to start Docker containers.\nError: {error}\nOutput: {output}");
                     }
 
-                    // Warte bevor der nächste Versuch startet
                     await Task.Delay(delay);
                 }
                 catch (Exception ex)
                 {
-                    // Wenn der letzte Versuch fehlschlägt, wirf die Exception
                     if (retries == 0)
                     {
                         throw new Exception($"Failed to start Docker containers: {ex.Message}");
                     }
-
-                    // Sonst warte und versuche es erneut
                     await Task.Delay(delay);
                 }
             }
