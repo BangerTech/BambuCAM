@@ -3,6 +3,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace BambuCAM.Installer.Services
 {
@@ -12,26 +13,98 @@ namespace BambuCAM.Installer.Services
         {
             try
             {
+                // Prüfe ob Docker Desktop installiert ist
+                var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                var dockerPath = Path.Combine(programFiles, "Docker", "Docker", "Docker Desktop.exe");
+                if (!File.Exists(dockerPath))
+                {
+                    return false;
+                }
+
+                // Prüfe ob Docker läuft
                 var process = new Process
                 {
                     StartInfo = new ProcessStartInfo
                     {
                         FileName = "docker",
-                        Arguments = "--version",
+                        Arguments = "info",
                         RedirectStandardOutput = true,
+                        RedirectStandardError = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     }
                 };
                 
-                process.Start();
-                await process.WaitForExitAsync();
-                return process.ExitCode == 0;
+                try
+                {
+                    process.Start();
+                    await process.WaitForExitAsync();
+                    return process.ExitCode == 0;
+                }
+                catch
+                {
+                    return false;
+                }
             }
             catch
             {
                 return false;
             }
+        }
+
+        public async Task StartDockerDesktop()
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var dockerPath = Path.Combine(programFiles, "Docker", "Docker", "Docker Desktop.exe");
+            
+            if (File.Exists(dockerPath))
+            {
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = dockerPath,
+                        UseShellExecute = true
+                    }
+                };
+                
+                process.Start();
+                // Warte bis Docker bereit ist
+                await WaitForDockerReady();
+            }
+        }
+
+        private async Task WaitForDockerReady()
+        {
+            var retries = 60; // 2 Minuten Timeout
+            while (retries-- > 0)
+            {
+                try
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "docker",
+                            Arguments = "info",
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    
+                    process.Start();
+                    await process.WaitForExitAsync();
+                    if (process.ExitCode == 0) return;
+                }
+                catch
+                {
+                    // Ignoriere Fehler und versuche es weiter
+                }
+                await Task.Delay(2000); // Warte 2 Sekunden zwischen Versuchen
+            }
+            throw new Exception("Docker Desktop did not start properly. Please try starting it manually.");
         }
 
         public async Task InstallDocker()
@@ -60,12 +133,31 @@ namespace BambuCAM.Installer.Services
             process.Start();
             await process.WaitForExitAsync();
             
-            // Warte kurz, damit Docker Zeit hat zu starten
-            await Task.Delay(TimeSpan.FromSeconds(30));
+            // Starte Docker Desktop
+            await StartDockerDesktop();
         }
 
         public async Task StartContainers()
         {
+            // Stelle sicher, dass Docker läuft
+            if (!await IsDockerInstalled())
+            {
+                throw new Exception("Docker is not installed. Please install Docker Desktop first.");
+            }
+
+            // Starte Docker Desktop falls nicht aktiv
+            var dockerRunning = await CheckDockerRunning();
+            if (!dockerRunning)
+            {
+                await StartDockerDesktop();
+            }
+
+            // Kopiere docker-compose.yml wenn nötig
+            var installDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BambuCAM"
+            );
+            
             var process = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -75,15 +167,44 @@ namespace BambuCAM.Installer.Services
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true,
-                    WorkingDirectory = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "BambuCAM"
-                    )
+                    WorkingDirectory = installDir
                 }
             };
             
             process.Start();
             await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                throw new Exception("Failed to start Docker containers. Please check if Docker Desktop is running.");
+            }
+        }
+
+        private async Task<bool> CheckDockerRunning()
+        {
+            try
+            {
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "docker",
+                        Arguments = "info",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                
+                process.Start();
+                await process.WaitForExitAsync();
+                return process.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public async Task StopContainers()
