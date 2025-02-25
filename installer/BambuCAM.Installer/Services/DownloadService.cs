@@ -20,45 +20,73 @@ namespace BambuCAM.Installer.Services
                 "BambuCAM"
             );
             _client = new HttpClient();
+            // GitHub API Headers
+            _client.DefaultRequestHeaders.Add("User-Agent", "BambuCAM-Installer");
+            // Optional: Füge einen GitHub Token hinzu für höhere Rate Limits
+            // _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "YOUR_TOKEN");
         }
 
         public string InstallDir => _installDir;
 
         public async Task DownloadAndExtract(IProgress<InstallationStatus> progress)
         {
-            // Get latest release info
-            var releaseInfo = await GetLatestRelease();
-            
-            // Download ZIP
-            var zipPath = Path.Combine(Path.GetTempPath(), "BambuCAM.zip");
-            await DownloadFile(releaseInfo.DownloadUrl, zipPath, progress);
+            try
+            {
+                // Get latest release info
+                progress.Report(new InstallationStatus(0, "Checking latest version..."));
+                var releaseInfo = await GetLatestRelease();
+                
+                // Download ZIP
+                var zipPath = Path.Combine(Path.GetTempPath(), "BambuCAM.zip");
+                await DownloadFile(releaseInfo.DownloadUrl, zipPath, progress);
 
-            // Extract
-            Directory.CreateDirectory(_installDir);
-            ZipFile.ExtractToDirectory(zipPath, _installDir, true);
+                // Extract
+                progress.Report(new InstallationStatus(95, "Extracting files...", "This might take a minute"));
+                Directory.CreateDirectory(_installDir);
+                ZipFile.ExtractToDirectory(zipPath, _installDir, true);
 
-            // Cleanup
-            File.Delete(zipPath);
+                // Cleanup
+                File.Delete(zipPath);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                throw new Exception("GitHub API rate limit exceeded. Please try again in a few minutes.", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Download failed: {ex.Message}", ex);
+            }
         }
 
         private async Task<ReleaseInfo> GetLatestRelease()
         {
-            var response = await _client.GetFromJsonAsync<ReleaseInfo>(
-                "https://api.github.com/repos/BangerTech/BambuCAM/releases/latest"
-            );
-            return response;
+            try
+            {
+                var response = await _client.GetFromJsonAsync<ReleaseInfo>(
+                    "https://api.github.com/repos/BangerTech/BambuCAM/releases/latest"
+                );
+                return response;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Failed to get latest release info. Please check your internet connection.", ex);
+            }
         }
 
         private async Task DownloadFile(string url, string path, IProgress<InstallationStatus> progress)
         {
             using var response = await _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            
             var totalBytes = response.Content.Headers.ContentLength ?? -1L;
+            var totalMB = totalBytes / 1024.0 / 1024.0;
             
             using var fileStream = File.Create(path);
             using var downloadStream = await response.Content.ReadAsStreamAsync();
             
-            var buffer = new byte[8192];
+            var buffer = new byte[81920]; // Größerer Buffer für schnelleres Downloaden
             var bytesRead = 0L;
+            var startTime = DateTime.Now;
             
             while (true)
             {
@@ -71,9 +99,17 @@ namespace BambuCAM.Installer.Services
                 if (totalBytes != -1)
                 {
                     var percent = (int)((bytesRead * 100) / totalBytes);
+                    var downloadedMB = bytesRead / 1024.0 / 1024.0;
+                    var elapsed = DateTime.Now - startTime;
+                    var speed = downloadedMB / elapsed.TotalSeconds;
+                    var remaining = TimeSpan.FromSeconds((totalMB - downloadedMB) / speed);
+
                     progress.Report(new InstallationStatus(
                         percent, 
-                        $"Downloading BambuCAM... {percent}%"
+                        $"Downloading BambuCAM... {percent}%",
+                        $"Downloaded: {downloadedMB:F1} MB of {totalMB:F1} MB\n" +
+                        $"Speed: {speed:F1} MB/s\n" +
+                        $"Time remaining: {remaining:mm\\:ss}"
                     ));
                 }
             }

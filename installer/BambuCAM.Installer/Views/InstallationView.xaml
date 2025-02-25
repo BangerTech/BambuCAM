@@ -3,68 +3,43 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes">
     
-    <Grid Background="#1a1a1a">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="20">
-            <Image Source="/Assets/setup-icon.png" Height="80" Margin="0,0,0,20"/>
-            <TextBlock Text="Installing BambuCAM"
-                     FontSize="24"
+    <Grid Background="#1a1a1a" Margin="20">
+        <StackPanel>
+            <!-- Progress -->
+            <TextBlock Text="{Binding StatusMessage}"
                      Foreground="#00ffff"
-                     HorizontalAlignment="Center"/>
+                     FontSize="18"
+                     Margin="0,0,0,10"/>
+            
+            <ProgressBar Value="{Binding Progress}"
+                       Maximum="100"
+                       Height="10"
+                       Margin="0,0,0,10"/>
+            
+            <!-- Detailed Status -->
+            <TextBlock Text="{Binding DetailMessage}"
+                     Foreground="#80ffffff"
+                     TextWrapping="Wrap"
+                     Margin="0,0,0,20"/>
+            
+            <!-- Log Messages -->
+            <Border Background="#0a0a0a"
+                    BorderBrush="#333333"
+                    BorderThickness="1"
+                    Padding="10"
+                    MaxHeight="200">
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding LogMessages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}"
+                                         Foreground="#80ffffff"
+                                         FontFamily="Consolas"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
         </StackPanel>
-
-        <!-- Progress Section -->
-        <Grid Grid.Row="1" Margin="40,0">
-            <StackPanel VerticalAlignment="Center">
-                <!-- Progress Bar -->
-                <md:Card Margin="0,20" UniformCornerRadius="8" Background="#2a2a2a">
-                    <ProgressBar Value="{Binding Progress}"
-                               Height="8"
-                               Maximum="100"
-                               Foreground="#00ffff"
-                               Background="#3a3a3a"/>
-                </md:Card>
-
-                <!-- Status Messages -->
-                <TextBlock Text="{Binding StatusMessage}"
-                         FontSize="16"
-                         Foreground="#00ffff"
-                         HorizontalAlignment="Center"
-                         Margin="0,10"/>
-
-                <TextBlock Text="{Binding DetailMessage}"
-                         FontSize="12"
-                         Foreground="#80ffffff"
-                         HorizontalAlignment="Center"
-                         TextWrapping="Wrap"/>
-
-                <!-- Desktop Shortcut Option -->
-                <CheckBox Content="Create Desktop Shortcut"
-                         IsChecked="{Binding CreateDesktopShortcut}"
-                         Foreground="#00ffff"
-                         Margin="0,20"
-                         HorizontalAlignment="Center"/>
-            </StackPanel>
-        </Grid>
-
-        <!-- Installation Log -->
-        <md:Card Grid.Row="2" 
-                 Margin="20"
-                 UniformCornerRadius="8"
-                 Background="#2a2a2a">
-            <ScrollViewer Height="100" 
-                         Margin="10"
-                         VerticalScrollBarVisibility="Auto">
-                <TextBlock Text="{Binding InstallationLog}"
-                         Foreground="#80ffffff"
-                         TextWrapping="Wrap"/>
-            </ScrollViewer>
-        </md:Card>
     </Grid>
 </UserControl> 
