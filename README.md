@@ -113,12 +113,6 @@ The installer will automatically:
   - 1984 (go2rtc)
   - 4000 (Backend API)
 
-#### ❓ Troubleshooting
-
-If you encounter issues:
-1. Make sure Docker Desktop is running
-2. Check if ports are not in use by another application
-3. Open an issue on GitHub
 
 #### 🔧 Uninstallation
 
@@ -146,7 +140,7 @@ cd BambuCAM
 
 2. Start Docker Compose:
 ```bash
-docker-compose up -d
+docker-compose up --build
 ```
 
 3. Open in browser:
