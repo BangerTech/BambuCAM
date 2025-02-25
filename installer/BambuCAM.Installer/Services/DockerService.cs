@@ -85,5 +85,27 @@ namespace BambuCAM.Installer.Services
             process.Start();
             await process.WaitForExitAsync();
         }
+
+        public async Task StopContainers()
+        {
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "docker-compose",
+                    Arguments = "down",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "BambuCAM"
+                    )
+                }
+            };
+            
+            process.Start();
+            await process.WaitForExitAsync();
+        }
     }
 } 

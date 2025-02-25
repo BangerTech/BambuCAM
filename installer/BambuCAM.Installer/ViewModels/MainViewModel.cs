@@ -13,6 +13,12 @@ namespace BambuCAM.Installer.ViewModels
     {
         private readonly InstallationService _installationService;
         private readonly Progress<InstallationStatus> _progress;
+        private int _currentProgress;
+        private string _statusMessage;
+        private string _detailedMessage;
+        private bool _isInstalling;
+        private bool _isCompleted;
+        private string _errorMessage;
         
         public MainViewModel()
         {
@@ -54,6 +60,40 @@ namespace BambuCAM.Installer.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
         
-        // Properties...
+        public int CurrentProgress
+        {
+            get => _currentProgress;
+            set => SetProperty(ref _currentProgress, value);
+        }
+
+        public string StatusMessage
+        {
+            get => _statusMessage;
+            set => SetProperty(ref _statusMessage, value);
+        }
+
+        public string DetailedMessage
+        {
+            get => _detailedMessage;
+            set => SetProperty(ref _detailedMessage, value);
+        }
+
+        public bool IsInstalling
+        {
+            get => _isInstalling;
+            set => SetProperty(ref _isInstalling, value);
+        }
+
+        public bool IsCompleted
+        {
+            get => _isCompleted;
+            set => SetProperty(ref _isCompleted, value);
+        }
+
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => SetProperty(ref _errorMessage, value);
+        }
     }
 } 

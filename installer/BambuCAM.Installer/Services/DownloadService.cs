@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.IO.Compression;
 using BambuCAM.Installer.Models;
+using System.Net.Http.Json;
 
 namespace BambuCAM.Installer.Services
 {
@@ -20,6 +21,8 @@ namespace BambuCAM.Installer.Services
             );
             _client = new HttpClient();
         }
+
+        public string InstallDir => _installDir;
 
         public async Task DownloadAndExtract(IProgress<InstallationStatus> progress)
         {
