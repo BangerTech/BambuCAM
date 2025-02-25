@@ -9,7 +9,7 @@
   <img src="assets/logo.png" alt="BambuCAM Logo" width="400"/>
 </div>
 
-> 🎥 A modern web application for monitoring multiple BambuLab X1C 3D printers through their camera feeds
+> 🎥 A modern web application for monitoring BambuLab 3D printers with enhanced streaming capabilities and cloud support
 
 ## Screenshots
 
@@ -26,15 +26,18 @@ _Left to right: Home screen, Add printer, Monitoring view with multiple printers
 - [Support](#support)
 
 ## What is BambuCAM?
-BambuCAM is a user-friendly web application for simultaneously monitoring multiple BambuLab X1C 3D printers. The app allows you to organize and monitor all printer cameras in a clean interface.
+BambuCAM is a user-friendly web application for monitoring BambuLab 3D printers. It supports both local and cloud printers, offering enhanced video streaming through go2rtc integration and a clean, modern interface.
 
 ### Features
-- 🎥 Live camera feeds from multiple printers
+- 🎥 Enhanced live camera feeds with go2rtc integration
 - 🖱️ Drag & drop interface for camera arrangement
 - 🖥️ Fullscreen mode for each printer
 - ➕ Easy adding and removing of printers
-- 🔄 Automatic RTSP connection
-- 📱 Responsive design for mobile devices
+- 🔄 Improved stream stability and auto-reconnection
+- 🌐 Support for Bambu Cloud printers
+- 🔔 Status notifications and monitoring
+- 🚀 Optimized performance with nginx
+- 📱 Responsive design for all devices
 
 ## Installation
 
@@ -53,7 +56,7 @@ unzip BambuCAM-docker.zip
 docker compose up -d
 ```
 
-That's it! The application will be available at http://localhost:3000
+That's it! The application will be available at http://localhost
 
 ### Windows Users
 
@@ -77,7 +80,10 @@ The installer will automatically:
 - Windows 10/11
 - 4 GB RAM
 - 2 GB free disk space
-- Internet connection
+- Available Ports:
+  - 80 (Web Interface)
+  - 1984 (go2rtc)
+  - 4000 (Backend API)
 
 #### 🔄 Starting the Application
 
@@ -124,23 +130,29 @@ http://localhost:3000
 ## Printer Setup
 
 ### Requirements
-- BambuLab X1C printer on the same network
-- "LAN Only Mode" enabled on the printers
+- BambuLab printer (local network or cloud)
 - Camera enabled in printer settings
 
 ### Adding a Printer
+#### Local Printer
 1. Click "Add Printer" in the app
-2. Enter a name for the printer (e.g., "X1C Workshop")
-3. Enter the printer's IP address (e.g., "192.168.1.100")
+2. Enter a name for the printer
+3. Enter the printer's IP address
 4. Enter Access Code (found in printer settings under "Network")
 5. Click "Add"
+
+#### Cloud Printer
+1. Click "Add Printer" and select "Cloud Printer"
+2. Log in with your Bambu Lab account
+3. Select your printer from the list
+4. Click "Add"
 
 ## Technologies
 - React.js Frontend
 - Node.js Backend
 - Docker & Docker Compose
-- RTSP Stream Processing
-- WebSocket Connection
+- go2rtc Stream Processing
+- nginx Reverse Proxy
 
 ## Troubleshooting
 
@@ -167,3 +179,9 @@ For issues or questions, please create a [GitHub Issue](https://github.com/Bange
 `print-progress` `open-source`
 
 ## Configuration
+
+### Stream Settings
+The stream quality is automatically optimized. For manual adjustments, you can edit the go2rtc configuration in `backend/data/go2rtc/go2rtc.yaml`.
+
+### Network Configuration
+Make sure the required ports (80, 1984, 4000) are available and not blocked by your firewall.

@@ -21,7 +21,10 @@ docker-compose up -d
 
 echo.
 echo [32m✅ BambuCAM wurde gestartet![0m
-echo [36m🌐 Öffne http://localhost:3000 im Browser...[0m
-start http://localhost:3000
+echo [36m🌐 Öffne http://localhost in deinem Browser...[0m
+start http://localhost
 
-timeout /t 5 /nobreak > nul 
+timeout /t 5 /nobreak > nul
+
+echo BambuCam is now running!
+pause 

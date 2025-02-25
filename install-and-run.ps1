@@ -90,12 +90,21 @@ Set-Location $installDir
 docker-compose up --build -d
 
 # Öffne Browser
-Start-Process "http://localhost:3000"
+Start-Process "http://localhost"
+
+# Create required directories
+New-Item -ItemType Directory -Force -Path ".\backend\data"
+New-Item -ItemType Directory -Force -Path ".\backend\data\printers"
+New-Item -ItemType Directory -Force -Path ".\backend\data\go2rtc"
+
+if (-not (Test-Path ".\backend\data\go2rtc\go2rtc.yaml")) {
+    New-Item -ItemType File -Path ".\backend\data\go2rtc\go2rtc.yaml"
+}
 
 Write-Host @"
 
 ✅ Installation abgeschlossen!
-🌐 BambuCAM läuft auf: http://localhost:3000
+🌐 BambuCAM läuft auf: http://localhost
 🖥️ Eine Desktop-Verknüpfung wurde erstellt.
 
 Drücken Sie eine Taste zum Beenden...
