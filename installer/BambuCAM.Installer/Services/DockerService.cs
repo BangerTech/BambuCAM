@@ -128,7 +128,7 @@ namespace BambuCAM.Installer.Services
                 "BambuCAM"
             );
 
-            // Prüfe ob die docker-compose.yml aus dem Release existiert
+            // Prüfe ob docker-compose.yml existiert
             var composeFile = Path.Combine(installDir, "docker-compose.yml");
             if (!File.Exists(composeFile))
             {
@@ -173,7 +173,6 @@ namespace BambuCAM.Installer.Services
                         return; // Erfolgreich!
                     }
 
-                    // Wenn der letzte Versuch fehlschlägt, wirf Exception mit Details
                     if (retries == 0)
                     {
                         throw new Exception($"Failed to start Docker containers.\nError: {error}\nOutput: {output}");
