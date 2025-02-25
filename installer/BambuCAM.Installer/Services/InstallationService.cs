@@ -14,6 +14,7 @@ namespace BambuCAM.Installer.Services
         private readonly NetworkService _networkService;
         private readonly DownloadService _downloadService;
         private readonly ShortcutService _shortcutService;
+        private readonly string _serverIp;
 
         public InstallationService()
         {
@@ -21,6 +22,7 @@ namespace BambuCAM.Installer.Services
             _networkService = new NetworkService();
             _downloadService = new DownloadService();
             _shortcutService = new ShortcutService();
+            _serverIp = NetworkService.GetLocalIPAddress();
         }
 
         public async Task<InstallationProgress> Install(
@@ -50,7 +52,7 @@ namespace BambuCAM.Installer.Services
                 await _dockerService.StartContainers();
 
                 // Wait for services (95%)
-                progress.Report(new InstallationStatus(85, "Waiting for services..."));
+                progress.Report(new InstallationStatus(85, "Waiting for services to start...", "This may take a few minutes"));
                 await WaitForServices();
 
                 // Create shortcut if requested
@@ -58,7 +60,7 @@ namespace BambuCAM.Installer.Services
                 {
                     progress.Report(new InstallationStatus(95, "Creating desktop shortcut..."));
                     _shortcutService.CreateDesktopShortcut(
-                        Path.Combine(_downloadService.InstallDir, "BambuCAM.exe"),
+                        $"http://{_serverIp}",
                         "BambuCAM"
                     );
                 }
@@ -69,7 +71,12 @@ namespace BambuCAM.Installer.Services
             }
             catch (Exception ex)
             {
-                return InstallationProgress.Failure(ex.Message);
+                string errorMessage = ex.Message;
+                if (errorMessage.Contains("Connection refused"))
+                {
+                    errorMessage = $"Could not connect to BambuCAM services at {_serverIp}. Please check if your firewall is blocking the connection.";
+                }
+                return InstallationProgress.Failure(errorMessage);
             }
         }
 
@@ -78,9 +85,9 @@ namespace BambuCAM.Installer.Services
             using var client = new HttpClient();
             var endpoints = new[]
             {
-                "http://localhost",
-                "http://localhost:4000/api/health",
-                "http://localhost:1984/api/status"
+                $"http://{_serverIp}",
+                $"http://{_serverIp}:4000/api/health",
+                $"http://{_serverIp}:1984/api/status"
             };
 
             foreach (var endpoint in endpoints)
@@ -95,7 +102,8 @@ namespace BambuCAM.Installer.Services
                     }
                     catch
                     {
-                        if (retries == 0) throw;
+                        if (retries == 0) 
+                            throw new Exception($"Service at {endpoint} did not respond. Installation may have failed.");
                         await Task.Delay(1000);
                     }
                 }

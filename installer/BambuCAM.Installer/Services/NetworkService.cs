@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Net.Sockets;
 using System.Threading.Tasks;
+using System.Net;
 
 public class NetworkService
 {
@@ -33,5 +34,18 @@ public class NetworkService
         });
         
         await Task.WhenAll(tasks);
+    }
+
+    public static string GetLocalIPAddress()
+    {
+        var host = Dns.GetHostEntry(Dns.GetHostName());
+        foreach (var ip in host.AddressList)
+        {
+            if (ip.AddressFamily == AddressFamily.InterNetwork)
+            {
+                return ip.ToString();
+            }
+        }
+        return "localhost"; // Fallback
     }
 } 
