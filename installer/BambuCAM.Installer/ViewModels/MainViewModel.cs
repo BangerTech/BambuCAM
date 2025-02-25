@@ -9,7 +9,7 @@ using BambuCAM.Installer.ViewModels.Commands;
 
 namespace BambuCAM.Installer.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public class MainViewModel : ViewModelBase
     {
         private readonly InstallationService _installationService;
         private readonly Progress<InstallationStatus> _progress;
@@ -51,13 +51,6 @@ namespace BambuCAM.Installer.ViewModels
             {
                 IsInstalling = false;
             }
-        }
-        
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        protected virtual void OnPropertyChanged(string propertyName)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
         
         public int CurrentProgress

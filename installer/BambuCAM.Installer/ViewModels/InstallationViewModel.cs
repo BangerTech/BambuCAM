@@ -21,7 +21,7 @@ namespace BambuCAM.Installer.ViewModels
         {
             _installService = new InstallationService();
             _logMessages = new ObservableCollection<string>();
-            StartInstallation();
+            _ = StartInstallation();
         }
 
         public int Progress
