@@ -557,7 +557,6 @@ class PrinterService:
 
                 # Entferne Stream über die API
                 try:
-                    # DELETE /api/streams/{name}
                     response = requests.delete(
                         f"http://{self.host_ip}:1984/api/streams",
                         params={"name": printer_id}
@@ -569,12 +568,12 @@ class PrinterService:
                     
                     # Lade Konfiguration neu
                     reload_response = requests.post(
-                        f"http://{self.host_ip}:1984/api/reload"
+                        f"http://{self.host_ip}:1984/api/restart"
                     )
                     if reload_response.status_code == 200:
-                        logger.info("Successfully reloaded go2rtc config")
+                        logger.info("Successfully restarted go2rtc")
                     else:
-                        logger.warning(f"Failed to reload config: {reload_response.status_code} - {reload_response.text}")
+                        logger.warning(f"Failed to restart go2rtc: {response.status_code} - {response.text}")
                 except Exception as e:
                     logger.warning(f"Could not remove stream via API: {e}")
 
