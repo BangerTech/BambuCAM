@@ -10,7 +10,7 @@ services:
     image: bangertech/bambucam-backend:prod
     restart: unless-stopped
     volumes:
-      - ./backend/data:/app/data
+      - bambucam_data:/app/data
       - bambucam_logs:/app/logs
     network_mode: "host"
 
@@ -20,11 +20,12 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./backend/data/go2rtc:/config
+      - bambucam_data/go2rtc:/config
     environment:
       - GO2RTC_CONFIG=/config/go2rtc.yaml
       - GO2RTC_API=listen=:1984
       - GO2RTC_API_BASE=/go2rtc
 
 volumes:
-  bambucam_logs: 
+  bambucam_logs:
+  bambucam_data: 
