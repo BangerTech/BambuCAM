@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.IO.Compression;
 using BambuCAM.Installer.Models;
 using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace BambuCAM.Installer.Services
 {
@@ -62,14 +63,37 @@ namespace BambuCAM.Installer.Services
         {
             try
             {
-                var response = await _client.GetFromJsonAsync<ReleaseInfo>(
-                    "https://api.github.com/repos/BangerTech/BambuCAM/releases/latest"
-                );
-                return response;
+                // Versuche zuerst den neuesten Release zu bekommen
+                try
+                {
+                    var response = await _client.GetFromJsonAsync<GitHubRelease>(
+                        "https://api.github.com/repos/BangerTech/BambuCAM/releases/latest"
+                    );
+                    
+                    if (response != null)
+                    {
+                        return new ReleaseInfo 
+                        { 
+                            TagName = response.TagName,
+                            DownloadUrl = response.ZipballUrl
+                        };
+                    }
+                }
+                catch
+                {
+                    // Wenn kein Release gefunden wurde, ignoriere den Fehler und nutze main.zip
+                }
+
+                // Fallback: Wenn kein Release existiert, nutze den main branch
+                return new ReleaseInfo 
+                { 
+                    TagName = "development",
+                    DownloadUrl = "https://github.com/BangerTech/BambuCAM/archive/refs/heads/main.zip"
+                };
             }
             catch (Exception ex)
             {
-                throw new Exception("Failed to get latest release info. Please check your internet connection.", ex);
+                throw new Exception("Failed to get release info. Please check your internet connection.", ex);
             }
         }
 
@@ -120,5 +144,15 @@ namespace BambuCAM.Installer.Services
     {
         public string TagName { get; set; }
         public string DownloadUrl { get; set; }
+    }
+
+    // Neue Klasse für die GitHub API Response
+    private class GitHubRelease
+    {
+        [JsonPropertyName("tag_name")]
+        public string TagName { get; set; }
+        
+        [JsonPropertyName("zipball_url")]
+        public string ZipballUrl { get; set; }
     }
 } 
