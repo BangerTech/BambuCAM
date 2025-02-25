@@ -180,7 +180,7 @@ namespace BambuCAM.Installer.Services
             }
         }
 
-        private async Task<bool> CheckDockerRunning()
+        public async Task<bool> CheckDockerRunning()
         {
             try
             {

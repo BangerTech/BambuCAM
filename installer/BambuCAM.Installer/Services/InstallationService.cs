@@ -35,8 +35,18 @@ namespace BambuCAM.Installer.Services
                 progress.Report(new InstallationStatus(0, "Checking Docker installation..."));
                 if (!await _dockerService.IsDockerInstalled())
                 {
-                    progress.Report(new InstallationStatus(10, "Installing Docker..."));
+                    progress.Report(new InstallationStatus(10, "Installing Docker Desktop..."));
                     await _dockerService.InstallDocker();
+                }
+                else
+                {
+                    // Docker ist installiert, prüfe ob es läuft
+                    var dockerRunning = await _dockerService.CheckDockerRunning();
+                    if (!dockerRunning)
+                    {
+                        progress.Report(new InstallationStatus(10, "Starting Docker Desktop..."));
+                        await _dockerService.StartDockerDesktop();
+                    }
                 }
 
                 // Check ports (35%)
