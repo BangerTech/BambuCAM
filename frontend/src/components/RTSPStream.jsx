@@ -11,23 +11,22 @@ const RTSPStream = ({ printer }) => {
       const videoElement = videoRef.current;
       if (!videoElement) return;
 
-      // MSE Stream URL
-      const streamUrl = `/go2rtc/mse?src=${printer.id}`;
+      // Direkte Stream-URL verwenden
+      const streamUrl = `/go2rtc/stream.html?src=${encodeURIComponent(printer.streamUrl)}`;
       Logger.info('STREAM', 'Init', `Starting MSE stream from ${streamUrl}`);
 
-      videoElement.src = streamUrl;
-      videoElement.onerror = (e) => {
-        Logger.error('STREAM', 'Video', 'Failed to load video:', e);
-        setError('Failed to load video stream');
-        setLoading(false);
-      };
-      videoElement.onloadeddata = () => {
-        Logger.info('STREAM', 'Video', 'Video stream loaded');
-        setLoading(false);
-      };
+      // iframe statt video element
+      const iframe = document.createElement('iframe');
+      iframe.src = streamUrl;
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.border = 'none';
+      videoElement.parentNode.replaceChild(iframe, videoElement);
 
       return () => {
-        videoElement.src = '';
+        if (iframe.parentNode) {
+          iframe.parentNode.removeChild(iframe);
+        }
       };
     }
   }, [printer]);
@@ -49,10 +48,8 @@ const RTSPStream = ({ printer }) => {
     <>
       {error && <div>Error: {error}</div>}
       {loading && <div>Loading stream...</div>}
-      <video
+      <div
         ref={videoRef}
-        autoPlay
-        playsInline
         style={{width: '100%', height: '100%'}}
       />
     </>

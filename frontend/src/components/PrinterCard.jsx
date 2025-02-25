@@ -75,8 +75,7 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
 
   useEffect(() => {
     if (printer.type === 'BAMBULAB' && videoRef.current) {
-      // Verwende die Printer-ID als Stream-ID, wie in der Konfiguration registriert
-      const videoUrl = `/go2rtc/stream.html?src=${printer.id}`;
+      const videoUrl = `/go2rtc/stream.html?src=${encodeURIComponent(printer.streamUrl)}`;
       videoRef.current.innerHTML = '';
       const iframe = document.createElement('iframe');
       iframe.src = videoUrl;
