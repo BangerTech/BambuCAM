@@ -189,6 +189,14 @@ namespace BambuCAM.Installer.Services
                     await Task.Delay(delay);
                 }
             }
+
+            // In StartContainers():
+            if (File.Exists(composeFile))
+            {
+                // Debug: Zeige Inhalt der Datei
+                var content = await File.ReadAllTextAsync(composeFile);
+                Console.WriteLine($"docker-compose.yml content:\n{content}");
+            }
         }
 
         public async Task<bool> CheckDockerRunning()
