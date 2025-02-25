@@ -14,7 +14,6 @@ namespace BambuCAM.Installer.ViewModels
         private int _progress;
         private string _statusMessage;
         private string _detailMessage;
-        private bool _isInstalling;
         private ObservableCollection<string> _logMessages;
 
         public InstallationViewModel()
