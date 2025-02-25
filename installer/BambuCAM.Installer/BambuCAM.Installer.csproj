@@ -31,7 +31,10 @@
   <!-- Explicitly include source files -->
   <ItemGroup>
     <Compile Include="**\*.cs" />
-    <Page Include="**\*.xaml" />
+    <Page Include="**\*.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Compile Update="**\*.xaml.cs" DependentUpon="%(Filename)" />
   </ItemGroup>
 </Project> 

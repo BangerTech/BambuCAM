@@ -2,6 +2,9 @@ using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using BambuCAM.Installer.Models;
+using BambuCAM.Installer.Services;
+using BambuCAM.Installer.Views;
 
 namespace BambuCAM.Installer.ViewModels
 {

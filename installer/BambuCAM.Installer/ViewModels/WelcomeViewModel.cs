@@ -1,4 +1,7 @@
 using System.Windows.Input;
+using BambuCAM.Installer.Services;
+using BambuCAM.Installer.Views;
+using BambuCAM.Installer.ViewModels.Commands;
 
 namespace BambuCAM.Installer.ViewModels
 {
