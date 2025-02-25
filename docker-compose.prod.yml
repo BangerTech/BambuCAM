@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - bambucam_data/go2rtc:/config
+      - bambucam_go2rtc:/config
     environment:
       - GO2RTC_CONFIG=/config/go2rtc.yaml
       - GO2RTC_API=listen=:1984
@@ -28,4 +28,5 @@ services:
 
 volumes:
   bambucam_logs:
-  bambucam_data: 
+  bambucam_data:
+  bambucam_go2rtc: 

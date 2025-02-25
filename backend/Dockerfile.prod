@@ -17,6 +17,7 @@ COPY . .
 
 ENV FLASK_ENV=production
 ENV FLASK_APP=src/app.py
+ENV PYTHONPATH=/app
 
 EXPOSE 4000
 

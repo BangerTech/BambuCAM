@@ -93,15 +93,15 @@ namespace BambuCAM.Installer.Services
 
 services:
   frontend:
-    image: bangertech/bambucam-frontend:latest
+    image: bangertech/bambucam-frontend:prod
     restart: unless-stopped
     network_mode: 'host'
 
   backend:
-    image: bangertech/bambucam-backend:latest
+    image: bangertech/bambucam-backend:prod
     restart: unless-stopped
     volumes:
-      - ./backend/data:/app/data
+      - bambucam_data:/app/data
       - bambucam_logs:/app/logs
     network_mode: 'host'
 
@@ -111,14 +111,16 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./backend/data/go2rtc:/config
+      - bambucam_go2rtc:/config
     environment:
       - GO2RTC_CONFIG=/config/go2rtc.yaml
       - GO2RTC_API=listen=:1984
       - GO2RTC_API_BASE=/go2rtc
 
 volumes:
-  bambucam_logs:";
+  bambucam_logs:
+  bambucam_data:
+  bambucam_go2rtc:";
 
                 // Schreibe die Production docker-compose.yml
                 await File.WriteAllTextAsync(Path.Combine(_installDir, "docker-compose.yml"), prodComposeContent);
