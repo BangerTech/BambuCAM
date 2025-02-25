@@ -14,11 +14,8 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <DebugType>none</DebugType>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <!-- Disable default compile items -->
+    <!-- Windows-spezifische Einstellungen -->
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <!-- Windows Subsystem -->
-    <UseWindowsForms>true</UseWindowsForms>
-    <!-- Disable default XAML page items -->
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
     <!-- Wichtig für ausführbare Windows-Anwendung -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
