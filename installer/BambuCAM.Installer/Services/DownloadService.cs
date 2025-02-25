@@ -146,8 +146,8 @@ namespace BambuCAM.Installer.Services
         public string DownloadUrl { get; set; }
     }
 
-    // Neue Klasse für die GitHub API Response
-    private class GitHubRelease
+    // Klasse für die GitHub API Response (private entfernt)
+    internal class GitHubRelease
     {
         [JsonPropertyName("tag_name")]
         public string TagName { get; set; }
