@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
 
+# Wichtig: Permissions hinzufügen
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
