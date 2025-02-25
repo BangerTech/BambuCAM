@@ -16,10 +16,24 @@ public class WslPortForwardService
             }
 
             var script = $@"
+                # Verstecke PowerShell-Fenster
+                $WindowStyle = 'Hidden'
+                $Host.UI.RawUI.WindowTitle = 'BambuCAM Port Setup'
+                
+                # Kill processes using our ports
                 $ports = @(80, 4000, 1984, 8554)
                 foreach ($port in $ports) {{
-                    netsh interface portproxy delete v4tov4 listenport=$port
-                    netsh interface portproxy add v4tov4 listenport=$port listenaddress=0.0.0.0 connectport=$port connectaddress={wslIp}
+                    $process = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue | 
+                        Select-Object -ExpandProperty OwningProcess -ErrorAction SilentlyContinue
+                    if ($process) {{
+                        Stop-Process -Id $process -Force -ErrorAction SilentlyContinue
+                    }}
+                }}
+
+                # Setup port forwarding (silent)
+                foreach ($port in $ports) {{
+                    netsh interface portproxy delete v4tov4 listenport=$port | Out-Null
+                    netsh interface portproxy add v4tov4 listenport=$port listenaddress=0.0.0.0 connectport=$port connectaddress={wslIp} | Out-Null
                 }}";
 
             var scriptPath = Path.Combine(Path.GetTempPath(), "port-forward.ps1");
@@ -30,15 +44,18 @@ public class WslPortForwardService
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = "powershell",
-                    Arguments = $"-ExecutionPolicy Bypass -File {scriptPath}",
+                    Arguments = $"-WindowStyle Hidden -ExecutionPolicy Bypass -NonInteractive -File {scriptPath}",
                     UseShellExecute = true,
                     Verb = "runas",
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
                 }
             };
             process.Start();
             await process.WaitForExitAsync();
             File.Delete(scriptPath);
+
+            await Task.Delay(2000);
         }
         catch (Exception ex)
         {

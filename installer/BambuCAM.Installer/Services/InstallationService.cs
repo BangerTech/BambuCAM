@@ -153,9 +153,7 @@ namespace BambuCAM.Installer.Services
                 );
 
                 var wslConfig = @"[wsl2]
-localhostForwarding=true
-networkingMode=bridged  # Verbesserte Netzwerk-Konnektivität
-ports=80,4000,1984     # Explizit die Ports freigeben";
+localhostForwarding=true";  // Nur diese Option behalten
 
                 await File.WriteAllTextAsync(wslConfigPath, wslConfig);
 
