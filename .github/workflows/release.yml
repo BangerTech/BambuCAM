@@ -11,62 +11,7 @@ permissions:
   packages: write
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            BambuCAM Release ${{ github.ref }}
-            
-            Includes:
-            - Windows Installer (BambuCAM-Setup.exe)
-            - Docker Compose Package (BambuCAM-docker.zip)
-            
-            Docker Images:
-            ```bash
-            docker pull bangertech/bambucam-frontend:${{ github.ref_name }}
-            docker pull bangertech/bambucam-backend:${{ github.ref_name }}
-            ```
-          draft: false
-          prerelease: false
-
-  build-installer:
-    needs: create-release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-      
-      - name: Build Installer
-        run: |
-          dotnet restore installer/BambuCAM.Installer
-          dotnet publish installer/BambuCAM.Installer -c Release -r win-x64 --self-contained true
-      
-      - name: Upload Installer
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./installer/BambuCAM.Installer/bin/Release/net8.0-windows/win-x64/publish/BambuCAM Setup.exe
-          asset_name: BambuCAM-Setup.exe
-          asset_content_type: application/vnd.microsoft.portable-executable
-
-  build-docker:
-    needs: create-release
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -137,12 +82,49 @@ jobs:
           cp README.md BambuCAM-docker/
           zip -r BambuCAM-docker.zip BambuCAM-docker/
 
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
       - name: Upload Docker Package
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./BambuCAM-docker.zip
           asset_name: BambuCAM-docker.zip
-          asset_content_type: application/zip 
+          asset_content_type: application/zip
+
+  build-installer:
+    needs: build-and-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+      
+      - name: Build Installer
+        run: |
+          dotnet restore installer/BambuCAM.Installer
+          dotnet publish installer/BambuCAM.Installer -c Release -r win-x64 --self-contained true
+      
+      - name: Upload Installer
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.build-and-release.outputs.upload_url }}
+          asset_path: ./installer/BambuCAM.Installer/bin/Release/net8.0-windows/win-x64/publish/BambuCAM Setup.exe
+          asset_name: BambuCAM-Setup.exe
+          asset_content_type: application/vnd.microsoft.portable-executable 
