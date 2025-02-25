@@ -9,12 +9,37 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Docker.DotNet" Version="3.125.15" />
+    <!-- UI Pakete -->
     <PackageReference Include="MaterialDesignThemes" Version="4.9.0" />
+    <PackageReference Include="MaterialDesignColors" Version="2.1.4" />
+    
+    <!-- Docker Support -->
+    <PackageReference Include="Docker.DotNet" Version="3.125.15" />
+    
+    <!-- JSON Handling -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    
+    <!-- Windows Script Host für Shortcuts -->
+    <COMReference Include="IWshRuntimeLibrary">
+      <WrapperTool>tlbimp</WrapperTool>
+      <VersionMinor>0</VersionMinor>
+      <VersionMajor>1</VersionMajor>
+      <Guid>f935dc20-1cf0-11d0-adb9-00c04fd58a0b</Guid>
+      <Lcid>0</Lcid>
+      <Isolated>false</Isolated>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </COMReference>
   </ItemGroup>
 
   <ItemGroup>
     <Resource Include="Assets\*.*" />
+  </ItemGroup>
+
+  <!-- Ensure all namespaces are created -->
+  <ItemGroup>
+    <Compile Include="Models\**\*.cs" />
+    <Compile Include="ViewModels\**\*.cs" />
+    <Compile Include="Services\**\*.cs" />
+    <Compile Include="Views\**\*.cs" />
   </ItemGroup>
 </Project> 

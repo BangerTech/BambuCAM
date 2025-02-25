@@ -114,6 +114,11 @@ jobs:
         with:
           dotnet-version: '8.0.x'
       
+      - name: Install workloads
+        run: |
+          dotnet workload install windows
+          dotnet workload install wasm-tools
+      
       - name: Build Installer
         run: |
           dotnet restore installer/BambuCAM.Installer
