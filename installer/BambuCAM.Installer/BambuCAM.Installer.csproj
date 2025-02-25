@@ -20,6 +20,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <!-- Disable default XAML page items -->
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <!-- Wichtig für ausführbare Windows-Anwendung -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <StartupObject>BambuCAM.Installer.App</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
