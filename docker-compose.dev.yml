@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - NODE_ENV=development
+      - REACT_APP_DEV=true
+    network_mode: "host"
+    command: npm start
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+      - ./backend/data:/app/data
+      - bambucam_logs:/app/logs
+      - ./backend/data/go2rtc:/app/data/go2rtc:rw
+    environment:
+      - FLASK_APP=src/app.py
+      - FLASK_ENV=development
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=DEBUG
+    command: flask run --host=0.0.0.0 --port=4000
+    network_mode: "host"
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    network_mode: "host"
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+      - go2rtc
+
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: go2rtc
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - type: bind
+        source: ./backend/data/go2rtc
+        target: /config
+        bind:
+          create_host_path: true
+    environment:
+      - GOLANG_PROTOBUF_REGISTRATION_CONFLICT=warn
+      - GO2RTC_LOG_LEVEL=trace
+      - GO2RTC_CONFIG=/config/go2rtc.yaml
+      - GO2RTC_API=listen=:1984
+      - GO2RTC_API_BASE=/go2rtc
+    command: sh -c "
+      touch /config/go2rtc.yaml &&
+      chmod 777 /config/go2rtc.yaml &&
+      go2rtc
+      "
+
+volumes:
+  bambucam_logs:
+  bambucam_data: 
