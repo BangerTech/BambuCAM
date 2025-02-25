@@ -2,12 +2,12 @@ version: '3'
 
 services:
   frontend:
-    image: bangertech/bambucam-frontend:latest
+    image: bangertech/bambucam-frontend:prod
     restart: unless-stopped
     network_mode: "host"
 
   backend:
-    image: bangertech/bambucam-backend:latest
+    image: bangertech/bambucam-backend:prod
     restart: unless-stopped
     volumes:
       - ./backend/data:/app/data

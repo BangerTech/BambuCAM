@@ -1,0 +1,19 @@
+FROM node:18-alpine as builder
+
+WORKDIR /app
+
+# Dependencies installieren
+COPY package*.json ./
+RUN npm install
+RUN npm install hls.js --save
+
+# Anwendungscode kopieren und bauen
+COPY . .
+RUN npm run build
+
+# Production image
+FROM nginx:alpine
+COPY --from=builder /app/build /usr/share/nginx/html
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80 
