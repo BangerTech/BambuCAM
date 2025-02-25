@@ -13,38 +13,10 @@ namespace BambuCAM.Installer.Services
         {
             try
             {
-                // Prüfe ob Docker Desktop installiert ist
+                // Prüfe nur ob Docker Desktop installiert ist
                 var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
                 var dockerPath = Path.Combine(programFiles, "Docker", "Docker", "Docker Desktop.exe");
-                if (!File.Exists(dockerPath))
-                {
-                    return false;
-                }
-
-                // Prüfe ob Docker läuft
-                var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "docker",
-                        Arguments = "info",
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-                
-                try
-                {
-                    process.Start();
-                    await process.WaitForExitAsync();
-                    return process.ExitCode == 0;
-                }
-                catch
-                {
-                    return false;
-                }
+                return File.Exists(dockerPath);
             }
             catch
             {
