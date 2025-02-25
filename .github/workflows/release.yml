@@ -25,10 +25,15 @@ jobs:
         run: |
           cd installer/BambuCAM.Installer
           dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+          dir bin\Release\net8.0\win-x64\publish  # Debug: Liste Dateien auf
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')  # Nur bei Tags
         with:
-          files: installer/BambuCAM.Installer/bin/Release/net8.0/win-x64/publish/BambuCAM.Installer.exe
+          files: |
+            installer/BambuCAM.Installer/bin/Release/net8.0/win-x64/publish/BambuCAM.Installer.exe
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
