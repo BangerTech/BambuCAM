@@ -29,22 +29,19 @@ jobs:
           Write-Host "Current directory structure:"
           dir -Recurse Assets
           
-          # Build mit spezifischen Windows-Flags
+          # Build ohne Trimming
           dotnet restore
           dotnet build -c Release
           dotnet publish -c Release -r win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `
-            -p:PublishTrimmed=true `
+            -p:EnableCompressionInSingleFile=true `
             -p:PublishReadyToRun=true `
-            -p:DebugType=none `
-            /p:TrimMode=link
-          
-          # Debug: Zeige Build-Output und Dateidetails
+            -p:DebugType=none
+
+          # Debug: Zeige Build-Output
           Write-Host "Build output directory:"
           dir bin/Release/net8.0-windows/win-x64/publish
-          Write-Host "File details:"
-          Get-ItemProperty bin/Release/net8.0-windows/win-x64/publish/"BambuCAM Setup.exe"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
