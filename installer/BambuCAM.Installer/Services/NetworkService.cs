@@ -3,6 +3,8 @@ using System.Linq;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Net;
+using System.Diagnostics;
+using System.IO;
 
 public class NetworkService
 {
@@ -47,5 +49,37 @@ public class NetworkService
             }
         }
         return "localhost"; // Fallback
+    }
+
+    public async Task KillProcessOnPort(int port)
+    {
+        var script = $@"
+            $processId = (Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue).OwningProcess
+            if ($processId) {{
+                $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+                if ($process) {{
+                    Write-Host ""Killing process $($process.ProcessName) ($processId) on port {port}""
+                    Stop-Process -Id $processId -Force
+                }}
+            }}";
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), "kill-port.ps1");
+        await File.WriteAllTextAsync(scriptPath, script);
+
+        var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "powershell",
+                Arguments = $"-WindowStyle Hidden -ExecutionPolicy Bypass -NonInteractive -File {scriptPath}",
+                UseShellExecute = true,
+                Verb = "runas",
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            }
+        };
+        process.Start();
+        await process.WaitForExitAsync();
+        File.Delete(scriptPath);
     }
 } 

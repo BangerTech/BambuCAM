@@ -78,9 +78,14 @@ namespace BambuCAM.Installer.Services
                     );
                 }
 
-                // Nach dem Docker-Start
-                var portForwardService = new WslPortForwardService();
-                await portForwardService.StartPortForwarding();
+                // Nach Docker Installation, vor Container-Start
+                var dockerWslService = new DockerWslService();
+                await dockerWslService.ConfigureWsl();
+
+                // Ports freigeben
+                await _networkService.KillProcessOnPort(80);
+                await _networkService.KillProcessOnPort(4000);
+                await _networkService.KillProcessOnPort(1984);
 
                 // Complete
                 progress.Report(new InstallationStatus(100, "Installation completed successfully!"));

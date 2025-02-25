@@ -2,17 +2,17 @@ version: '3'
 
 services:
   frontend:
-    image: bangertech/bambucam-frontend:prod
+    image: bangertech/bambucam-frontend:latest
     restart: unless-stopped
     network_mode: "host"
 
   backend:
-    image: bangertech/bambucam-backend:prod
+    image: bangertech/bambucam-backend:latest
     restart: unless-stopped
-    network_mode: "host"
     volumes:
       - bambucam_data:/app/data
       - bambucam_logs:/app/logs
+    network_mode: "host"
 
   go2rtc:
     image: alexxit/go2rtc
