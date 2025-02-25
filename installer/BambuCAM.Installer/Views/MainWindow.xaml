@@ -3,9 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="BambuCAM Setup"
         Height="600" Width="800"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
     
-    <Grid>
-        <ContentControl Content="{Binding CurrentView}" />
-    </Grid>
+    <ContentControl x:Name="MainContent" />
 </Window> 

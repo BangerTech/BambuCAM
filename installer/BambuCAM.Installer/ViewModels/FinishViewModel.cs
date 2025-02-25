@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows.Input;
+using System.Runtime.InteropServices;
 
 namespace BambuCAM.Installer.ViewModels
 {
@@ -16,7 +17,11 @@ namespace BambuCAM.Installer.ViewModels
 
         private void LaunchApplication()
         {
-            Process.Start("http://localhost");
+            var url = "http://localhost";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
             CloseInstaller();
         }
 
