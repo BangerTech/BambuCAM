@@ -9,11 +9,10 @@ namespace BambuCAM.Installer.Services
 {
     public class DockerService
     {
-        public async Task<bool> IsDockerInstalled()
+        public bool IsDockerInstalled()
         {
             try
             {
-                // Prüfe nur ob Docker Desktop installiert ist
                 var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
                 var dockerPath = Path.Combine(programFiles, "Docker", "Docker", "Docker Desktop.exe");
                 return File.Exists(dockerPath);
@@ -111,8 +110,8 @@ namespace BambuCAM.Installer.Services
 
         public async Task StartContainers()
         {
-            // Stelle sicher, dass Docker läuft
-            if (!await IsDockerInstalled())
+            // Stelle sicher, dass Docker installiert ist
+            if (!IsDockerInstalled())
             {
                 throw new Exception("Docker is not installed. Please install Docker Desktop first.");
             }
@@ -124,7 +123,6 @@ namespace BambuCAM.Installer.Services
                 await StartDockerDesktop();
             }
 
-            // Kopiere docker-compose.yml wenn nötig
             var installDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "BambuCAM"
@@ -134,8 +132,8 @@ namespace BambuCAM.Installer.Services
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "docker-compose",
-                    Arguments = "up -d",
+                    FileName = "docker",
+                    Arguments = "compose up -d",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true,
@@ -185,8 +183,8 @@ namespace BambuCAM.Installer.Services
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "docker-compose",
-                    Arguments = "down",
+                    FileName = "docker",
+                    Arguments = "compose down",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow = true,
