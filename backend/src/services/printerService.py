@@ -559,7 +559,8 @@ class PrinterService:
                 try:
                     # DELETE /api/streams/{name}
                     response = requests.delete(
-                        f"{self.go2rtc_api_url}/api/streams/{printer_id}"
+                        f"http://{self.host_ip}:1984/api/streams",
+                        params={"name": printer_id}
                     )
                     if response.status_code == 200:
                         logger.info(f"Successfully removed stream via API")
@@ -567,7 +568,9 @@ class PrinterService:
                         logger.warning(f"Failed to remove stream via API: {response.status_code} - {response.text}")
                     
                     # Lade Konfiguration neu
-                    reload_response = requests.post(f"{self.go2rtc_api_url}/api/reload")
+                    reload_response = requests.post(
+                        f"http://{self.host_ip}:1984/api/reload"
+                    )
                     if reload_response.status_code == 200:
                         logger.info("Successfully reloaded go2rtc config")
                     else:

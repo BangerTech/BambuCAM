@@ -22,7 +22,6 @@ import AddPrinterDialog from './AddPrinterDialog';
 import { printerApi } from '../api/printerApi';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import Header from './Header';
-import { useVisibilityChange } from '../hooks/useVisibilityChange';
 import CloudPrinterCard from './CloudPrinterCard';
 
 console.log('Using API URL:', API_URL);  // Debug log
@@ -555,12 +554,6 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       remaining_time: status.remaining_time
     };
   };
-
-  // Verwende den Visibility Hook
-  useVisibilityChange(() => {
-    // Wenn die Seite wieder sichtbar wird, lade sie neu
-    window.location.reload();
-  });
 
   if (fullscreenPrinter) {
     const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);

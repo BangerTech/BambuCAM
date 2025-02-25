@@ -24,7 +24,7 @@ const RTSPStream = ({ printer }) => {
       videoElement.parentNode.replaceChild(iframe, videoElement);
       streamRef.current = iframe;
 
-      return () => {
+    return () => {
         if (iframe.parentNode) {
           iframe.parentNode.removeChild(iframe);
           streamRef.current = null;
@@ -35,13 +35,13 @@ const RTSPStream = ({ printer }) => {
 
   // Für MJPEG Streams (Creality/OctoPrint)
   if (printer?.type !== 'BAMBULAB') {
-    return (
-      <img 
-        src={printer.streamUrl}
-        alt="Printer Stream"
+  return (
+        <img 
+          src={printer.streamUrl}
+          alt="Printer Stream" 
         style={{width: '100%', height: '100%'}}
         onError={() => setError('Failed to load stream')}
-        onLoad={() => setLoading(false)}
+          onLoad={() => setLoading(false)}
       />
     );
   }
@@ -51,7 +51,7 @@ const RTSPStream = ({ printer }) => {
       {error && <div>Error: {error}</div>}
       {loading && <div>Loading stream...</div>}
       <div
-        ref={videoRef}
+          ref={videoRef}
         style={{width: '100%', height: '100%'}}
       />
     </>
