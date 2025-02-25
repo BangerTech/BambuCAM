@@ -128,9 +128,39 @@ namespace BambuCAM.Installer.Services
                 "BambuCAM"
             );
 
+            // Prüfe ob docker-compose.yml existiert
+            var composeFile = Path.Combine(installDir, "docker-compose.yml");
+            if (!File.Exists(composeFile))
+            {
+                // Erstelle Standard docker-compose.yml
+                var composeContent = @"version: '3.8'
+services:
+  frontend:
+    image: bangertech/bambucam-frontend:latest
+    ports:
+      - '80:80'
+    restart: unless-stopped
+
+  api:
+    image: bangertech/bambucam-api:latest
+    ports:
+      - '4000:4000'
+    volumes:
+      - ./config:/app/config
+    restart: unless-stopped
+
+  camera:
+    image: bangertech/bambucam-camera:latest
+    ports:
+      - '1984:1984'
+    restart: unless-stopped";
+
+                await File.WriteAllTextAsync(composeFile, composeContent);
+            }
+
             // Mehrere Versuche für das Starten der Container
-            var retries = 5;  // 5 Versuche
-            var delay = 5000; // 5 Sekunden zwischen Versuchen
+            var retries = 5;
+            var delay = 5000;
 
             while (retries-- > 0)
             {
