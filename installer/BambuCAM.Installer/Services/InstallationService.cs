@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.IO;
 using BambuCAM.Installer.Models;
+using System.Diagnostics;
 
 namespace BambuCAM.Installer.Services
 {
@@ -56,6 +57,10 @@ namespace BambuCAM.Installer.Services
                 // Download and extract (70%)
                 progress.Report(new InstallationStatus(35, "Downloading BambuCAM..."));
                 await _downloadService.DownloadAndExtract(progress);
+
+                // Configure WSL (60%)
+                progress.Report(new InstallationStatus(60, "Configuring WSL..."));
+                await ConfigureWsl();
 
                 // Start containers (85%)
                 progress.Report(new InstallationStatus(70, "Starting Docker containers..."));
@@ -118,6 +123,95 @@ namespace BambuCAM.Installer.Services
                     }
                 }
             }
+        }
+
+        private async Task ConfigureWsl()
+        {
+            try
+            {
+                // Erstelle .wslconfig
+                var wslConfigPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".wslconfig"
+                );
+
+                await File.WriteAllTextAsync(wslConfigPath, @"[wsl2]
+localhostForwarding=true");
+
+                // Führe WSL-Befehle aus
+                var wslIp = await GetWslIp();
+
+                // Port-Forwarding Regeln hinzufügen (erfordert Admin-Rechte)
+                var ports = new[] { 80, 4000, 1984 };
+                foreach (var port in ports)
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "netsh",
+                            Arguments = $"interface portproxy add v4tov4 listenport={port} listenaddress=0.0.0.0 connectport={port} connectaddress={wslIp}",
+                            UseShellExecute = true,
+                            Verb = "runas"  // Als Administrator ausführen
+                        }
+                    };
+                    process.Start();
+                    await process.WaitForExitAsync();
+                }
+
+                // Firewall-Regeln hinzufügen (erfordert Admin-Rechte)
+                foreach (var port in ports)
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "powershell",
+                            Arguments = $"-Command New-NetFirewallRule -DisplayName \"BambuCAM Port {port}\" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {port}",
+                            UseShellExecute = true,
+                            Verb = "runas"
+                        }
+                    };
+                    process.Start();
+                    await process.WaitForExitAsync();
+                }
+
+                // WSL neustarten
+                var wslProcess = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "wsl",
+                        Arguments = "--shutdown",
+                        UseShellExecute = true
+                    }
+                };
+                wslProcess.Start();
+                await wslProcess.WaitForExitAsync();
+                await Task.Delay(5000); // Warte 5 Sekunden für den Neustart
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to configure WSL: {ex.Message}");
+            }
+        }
+
+        private async Task<string> GetWslIp()
+        {
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "wsl",
+                    Arguments = "hostname -I",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true
+                }
+            };
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            return output.Trim().Split(' ')[0];
         }
     }
 } 
