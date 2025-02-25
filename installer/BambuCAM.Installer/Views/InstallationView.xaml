@@ -1,0 +1,70 @@
+<UserControl x:Class="BambuCAM.Installer.Views.InstallationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes">
+    
+    <Grid Background="#1a1a1a">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="20">
+            <Image Source="/Assets/setup-icon.png" Height="80" Margin="0,0,0,20"/>
+            <TextBlock Text="Installing BambuCAM"
+                     FontSize="24"
+                     Foreground="#00ffff"
+                     HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Progress Section -->
+        <Grid Grid.Row="1" Margin="40,0">
+            <StackPanel VerticalAlignment="Center">
+                <!-- Progress Bar -->
+                <md:Card Margin="0,20" UniformCornerRadius="8" Background="#2a2a2a">
+                    <ProgressBar Value="{Binding Progress}"
+                               Height="8"
+                               Maximum="100"
+                               Foreground="#00ffff"
+                               Background="#3a3a3a"/>
+                </md:Card>
+
+                <!-- Status Messages -->
+                <TextBlock Text="{Binding StatusMessage}"
+                         FontSize="16"
+                         Foreground="#00ffff"
+                         HorizontalAlignment="Center"
+                         Margin="0,10"/>
+
+                <TextBlock Text="{Binding DetailMessage}"
+                         FontSize="12"
+                         Foreground="#80ffffff"
+                         HorizontalAlignment="Center"
+                         TextWrapping="Wrap"/>
+
+                <!-- Desktop Shortcut Option -->
+                <CheckBox Content="Create Desktop Shortcut"
+                         IsChecked="{Binding CreateDesktopShortcut}"
+                         Foreground="#00ffff"
+                         Margin="0,20"
+                         HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Installation Log -->
+        <md:Card Grid.Row="2" 
+                 Margin="20"
+                 UniformCornerRadius="8"
+                 Background="#2a2a2a">
+            <ScrollViewer Height="100" 
+                         Margin="10"
+                         VerticalScrollBarVisibility="Auto">
+                <TextBlock Text="{Binding InstallationLog}"
+                         Foreground="#80ffffff"
+                         TextWrapping="Wrap"/>
+            </ScrollViewer>
+        </md:Card>
+    </Grid>
+</UserControl> 

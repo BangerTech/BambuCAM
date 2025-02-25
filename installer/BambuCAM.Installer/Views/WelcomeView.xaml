@@ -1,0 +1,19 @@
+<UserControl x:Class="BambuCAM.Installer.Views.WelcomeView">
+    <Grid>
+        <StackPanel Margin="40">
+            <Image Source="/Assets/setup-icon.png" Height="120"/>
+            <TextBlock Text="Welcome to BambuCAM"
+                     FontSize="24"
+                     HorizontalAlignment="Center"
+                     Margin="0,20"/>
+            <TextBlock Text="This wizard will guide you through the installation of BambuCAM."
+                     TextWrapping="Wrap"
+                     HorizontalAlignment="Center"
+                     Margin="0,10"/>
+            <Button Content="Begin Installation"
+                    Command="{Binding StartInstallCommand}"
+                    HorizontalAlignment="Center"
+                    Margin="0,40"/>
+        </StackPanel>
+    </Grid>
+</UserControl> 
