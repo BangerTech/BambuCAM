@@ -9,10 +9,10 @@ services:
   backend:
     image: bangertech/bambucam-backend:prod
     restart: unless-stopped
+    network_mode: "host"
     volumes:
       - bambucam_data:/app/data
       - bambucam_logs:/app/logs
-    network_mode: "host"
 
   go2rtc:
     image: alexxit/go2rtc

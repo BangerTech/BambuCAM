@@ -32,35 +32,33 @@ namespace BambuCAM.Installer.Services
         {
             try
             {
-                // Check Docker (25%)
+                // Check Docker (20%)
                 progress.Report(new InstallationStatus(0, "Checking Docker installation..."));
                 if (!_dockerService.IsDockerInstalled())
                 {
                     progress.Report(new InstallationStatus(10, "Installing Docker Desktop..."));
                     await _dockerService.InstallDocker();
                 }
-                else
+
+                // Configure WSL (40%)
+                progress.Report(new InstallationStatus(20, "Configuring WSL..."));
+                await ConfigureWsl();
+
+                // Start Docker if needed
+                var dockerRunning = await _dockerService.CheckDockerRunning();
+                if (!dockerRunning)
                 {
-                    // Docker ist installiert, prüfe ob es läuft
-                    var dockerRunning = await _dockerService.CheckDockerRunning();
-                    if (!dockerRunning)
-                    {
-                        progress.Report(new InstallationStatus(10, "Starting Docker Desktop..."));
-                        await _dockerService.StartDockerDesktop();
-                    }
+                    progress.Report(new InstallationStatus(40, "Starting Docker Desktop..."));
+                    await _dockerService.StartDockerDesktop();
                 }
 
                 // Check ports (35%)
-                progress.Report(new InstallationStatus(25, "Checking port availability..."));
+                progress.Report(new InstallationStatus(35, "Checking port availability..."));
                 await _networkService.CheckRequiredPorts();
 
                 // Download and extract (70%)
                 progress.Report(new InstallationStatus(35, "Downloading BambuCAM..."));
                 await _downloadService.DownloadAndExtract(progress);
-
-                // Configure WSL (60%)
-                progress.Report(new InstallationStatus(60, "Configuring WSL..."));
-                await ConfigureWsl();
 
                 // Start containers (85%)
                 progress.Report(new InstallationStatus(70, "Starting Docker containers..."));
@@ -79,6 +77,10 @@ namespace BambuCAM.Installer.Services
                         "BambuCAM"
                     );
                 }
+
+                // Nach dem Docker-Start
+                var portForwardService = new WslPortForwardService();
+                await portForwardService.StartPortForwarding();
 
                 // Complete
                 progress.Report(new InstallationStatus(100, "Installation completed successfully!"));
@@ -129,66 +131,69 @@ namespace BambuCAM.Installer.Services
         {
             try
             {
+                // Prüfe ob Docker Desktop läuft und WSL2 aktiv ist
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "wsl",
+                        Arguments = "--status",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true  // Verstecke das Fenster
+                    }
+                };
+                process.Start();
+                await process.WaitForExitAsync();
+
                 // Erstelle .wslconfig
                 var wslConfigPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                     ".wslconfig"
                 );
 
-                await File.WriteAllTextAsync(wslConfigPath, @"[wsl2]
-localhostForwarding=true");
+                var wslConfig = @"[wsl2]
+localhostForwarding=true
+networkingMode=bridged  # Verbesserte Netzwerk-Konnektivität
+ports=80,4000,1984     # Explizit die Ports freigeben";
 
-                // Führe WSL-Befehle aus
-                var wslIp = await GetWslIp();
+                await File.WriteAllTextAsync(wslConfigPath, wslConfig);
 
-                // Port-Forwarding Regeln hinzufügen (erfordert Admin-Rechte)
-                var ports = new[] { 80, 4000, 1984 };
-                foreach (var port in ports)
-                {
-                    var process = new Process
-                    {
-                        StartInfo = new ProcessStartInfo
-                        {
-                            FileName = "netsh",
-                            Arguments = $"interface portproxy add v4tov4 listenport={port} listenaddress=0.0.0.0 connectport={port} connectaddress={wslIp}",
-                            UseShellExecute = true,
-                            Verb = "runas"  // Als Administrator ausführen
-                        }
-                    };
-                    process.Start();
-                    await process.WaitForExitAsync();
-                }
+                // Führe alle Befehle in einer einzigen elevated PowerShell aus
+                var script = @"
+                    # Port-Forwarding
+                    $wslIp = (wsl hostname -I).Trim().Split(' ')[0]
+                    $ports = @(80, 4000, 1984)
+                    foreach ($port in $ports) {
+                        netsh interface portproxy delete v4tov4 listenport=$port
+                        netsh interface portproxy add v4tov4 listenport=$port listenaddress=0.0.0.0 connectport=$port connectaddress=$wslIp
+                        New-NetFirewallRule -DisplayName ""BambuCAM Port $port"" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -ErrorAction SilentlyContinue
+                    }
+                    
+                    # WSL neu starten
+                    wsl --shutdown
+                    Start-Sleep -Seconds 5
+                    wsl --status";
 
-                // Firewall-Regeln hinzufügen (erfordert Admin-Rechte)
-                foreach (var port in ports)
-                {
-                    var process = new Process
-                    {
-                        StartInfo = new ProcessStartInfo
-                        {
-                            FileName = "powershell",
-                            Arguments = $"-Command New-NetFirewallRule -DisplayName \"BambuCAM Port {port}\" -Direction Inbound -Action Allow -Protocol TCP -LocalPort {port}",
-                            UseShellExecute = true,
-                            Verb = "runas"
-                        }
-                    };
-                    process.Start();
-                    await process.WaitForExitAsync();
-                }
+                var scriptPath = Path.Combine(Path.GetTempPath(), "configure-wsl.ps1");
+                await File.WriteAllTextAsync(scriptPath, script);
 
-                // WSL neustarten
-                var wslProcess = new Process
+                var psProcess = new Process
                 {
                     StartInfo = new ProcessStartInfo
                     {
-                        FileName = "wsl",
-                        Arguments = "--shutdown",
-                        UseShellExecute = true
+                        FileName = "powershell",
+                        Arguments = $"-ExecutionPolicy Bypass -File {scriptPath}",
+                        UseShellExecute = true,
+                        Verb = "runas",
+                        CreateNoWindow = true
                     }
                 };
-                wslProcess.Start();
-                await wslProcess.WaitForExitAsync();
-                await Task.Delay(5000); // Warte 5 Sekunden für den Neustart
+                psProcess.Start();
+                await psProcess.WaitForExitAsync();
+
+                // Cleanup
+                File.Delete(scriptPath);
             }
             catch (Exception ex)
             {
