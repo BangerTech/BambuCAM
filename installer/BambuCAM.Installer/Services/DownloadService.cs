@@ -61,7 +61,7 @@ namespace BambuCAM.Installer.Services
                     var rootFolder = archive.Entries[0].FullName;
                     Console.WriteLine($"Root folder: {rootFolder}");
 
-                    // Suche nach docker-compose.yml
+                    // Suche nach docker-compose.yml (nicht mehr .prod)
                     var composeEntry = archive.Entries.FirstOrDefault(e => 
                         e.FullName.EndsWith("docker-compose.yml", StringComparison.OrdinalIgnoreCase));
 

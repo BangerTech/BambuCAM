@@ -45,10 +45,39 @@ BambuCAM is a user-friendly web application for monitoring BambuLab 3D printers.
 
 The fastest way to get started is using our pre-built Docker images:
 
-1. Download the installation package:
-```bash
-wget https://github.com/BangerTech/BambuCAM/releases/latest/download/BambuCAM-docker.zip
-unzip BambuCAM-docker.zip
+1. Create a `docker-compose.yml`:
+```yaml
+
+services:
+  frontend:
+    image: bangertech/bambucam-frontend:latest
+    restart: unless-stopped
+    network_mode: "host"
+
+  backend:
+    image: bangertech/bambucam-backend:latest
+    restart: unless-stopped
+    volumes:
+      - bambucam_data:/app/data
+      - bambucam_logs:/app/logs
+    network_mode: "host"
+
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: go2rtc
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - bambucam_go2rtc:/config
+    environment:
+      - GO2RTC_CONFIG=/config/go2rtc.yaml
+      - GO2RTC_API=listen=:1984
+      - GO2RTC_API_BASE=/go2rtc
+
+volumes:
+  bambucam_logs:
+  bambucam_data:
+  bambucam_go2rtc:
 ```
 
 2. Start BambuCAM:
@@ -64,16 +93,15 @@ For Windows users who prefer a guided installation:
 
 #### 🚀 Quick Start
 
-1. Download the latest version of BambuCAM
-2. Extract the ZIP file
-3. Right-click `install-and-run.ps1` and select "Run with PowerShell"
-4. Follow the on-screen instructions
+1. Download the [BambuCAM Installer](https://github.com/BangerTech/BambuCAM/releases/latest)
+2. Run the installer as administrator
+3. Open BambuCAM via desktop shortcut or at http://localhost
 
 The installer will automatically:
-- Install required programs (Docker, Git) if not present
-- Install BambuCAM
+- Install Docker Desktop if needed
+- Configure WSL2 and port forwarding
+- Pull the latest Docker images
 - Create a desktop shortcut
-- Start the application
 
 #### 📋 System Requirements
 
@@ -85,13 +113,18 @@ The installer will automatically:
   - 1984 (go2rtc)
   - 4000 (Backend API)
 
-#### 🔄 Starting the Application
+#### ❓ Troubleshooting
 
-After installation, you can start BambuCAM in two ways:
-1. Via the "BambuCAM" desktop shortcut
-2. By running `start.bat`
+If you encounter issues:
+1. Make sure Docker Desktop is running
+2. Check if ports are not in use by another application
+3. Open an issue on GitHub
 
-The application will be available at http://localhost:3000
+#### 🔧 Uninstallation
+
+1. Run `docker compose down` in the installation directory
+2. Delete the folder `%LOCALAPPDATA%\BambuCAM`
+3. Remove the desktop shortcut
 
 #### ❓ Troubleshooting
 
@@ -99,12 +132,6 @@ If you encounter issues:
 1. Make sure Docker Desktop is running
 2. Check if port 3000 is not in use by another application
 3. Open an issue on GitHub
-
-#### 🔧 Uninstallation
-
-1. Run `docker-compose down` in the installation directory
-2. Delete the folder `%LOCALAPPDATA%\BambuCAM`
-3. Remove the desktop shortcut
 
 ### Method 3: Manual Installation (Linux)
 

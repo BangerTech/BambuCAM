@@ -1,53 +1,34 @@
-name: Create Release
+name: Build and Release Installer
 
 on:
   push:
     tags:
       - '*'
 
+# Füge Permissions hinzu
+permissions:
+  contents: write  # Für Release-Erstellung
+  packages: write  # Für Container-Registry
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          dotnet-version: '8.0.x'
 
-      - name: Build and push Frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile.prod
-          push: true
-          tags: |
-            bangertech/bambucam-frontend:latest
-            bangertech/bambucam-frontend:${{ github.ref_name }}
-
-      - name: Build and push Backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile.prod
-          push: true
-          tags: |
-            bangertech/bambucam-backend:latest
-            bangertech/bambucam-backend:${{ github.ref_name }}
-
-      - name: Create Release ZIP
+      - name: Build Installer
         run: |
-          mkdir -p release
-          cp docker-compose.prod.yml release/docker-compose.yml
-          cd release
-          zip -r ../BambuCAM.zip *
+          cd installer
+          dotnet publish -c Release -r win-x64 --self-contained true
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: BambuCAM.zip 
+          files: installer/BambuCAM.Installer/bin/Release/net8.0/win-x64/publish/BambuCAM.Installer.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
