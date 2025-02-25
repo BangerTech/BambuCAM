@@ -3,6 +3,7 @@ import { Logger } from '../utils/logger';
 
 const RTSPStream = ({ printer }) => {
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -10,26 +11,27 @@ const RTSPStream = ({ printer }) => {
     if (printer?.type === 'BAMBULAB') {
       const videoElement = videoRef.current;
       if (!videoElement) return;
+      if (streamRef.current) return;
 
-      // Direkte Stream-URL verwenden
       const streamUrl = `/go2rtc/stream.html?src=${encodeURIComponent(printer.streamUrl)}`;
       Logger.info('STREAM', 'Init', `Starting MSE stream from ${streamUrl}`);
 
-      // iframe statt video element
       const iframe = document.createElement('iframe');
       iframe.src = streamUrl;
       iframe.style.width = '100%';
       iframe.style.height = '100%';
       iframe.style.border = 'none';
       videoElement.parentNode.replaceChild(iframe, videoElement);
+      streamRef.current = iframe;
 
       return () => {
         if (iframe.parentNode) {
           iframe.parentNode.removeChild(iframe);
+          streamRef.current = null;
         }
       };
     }
-  }, [printer]);
+  }, [printer?.type]);
 
   // Für MJPEG Streams (Creality/OctoPrint)
   if (printer?.type !== 'BAMBULAB') {

@@ -25,6 +25,7 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
   const [isDeleting, setIsDeleting] = useState(false);
   const isMounted = useRef(true);  // Referenz um zu prüfen ob die Komponente mounted ist
   const videoRef = useRef(null);
+  const streamRef = useRef(null); // Referenz für die Stream-Verbindung
 
   // Cleanup beim Unmounting
   useEffect(() => {
@@ -75,6 +76,11 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
 
   useEffect(() => {
     if (printer.type === 'BAMBULAB' && videoRef.current) {
+      // Wenn bereits ein Stream existiert, nicht neu verbinden
+      if (streamRef.current) {
+        return;
+      }
+
       const videoUrl = `/go2rtc/stream.html?src=${encodeURIComponent(printer.streamUrl)}`;
       videoRef.current.innerHTML = '';
       const iframe = document.createElement('iframe');
@@ -83,15 +89,17 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
       iframe.style.height = '100%';
       iframe.style.border = 'none';
       videoRef.current.appendChild(iframe);
+      streamRef.current = iframe;
       
       // Cleanup beim Unmounting
       return () => {
         if (videoRef.current) {
           videoRef.current.innerHTML = '';
+          streamRef.current = null;
         }
       };
     }
-  }, [printer.type, printer.streamUrl]);
+  }, [printer.type]); // Nur bei Änderung des Printer-Typs neu verbinden
 
   return (
     <Paper

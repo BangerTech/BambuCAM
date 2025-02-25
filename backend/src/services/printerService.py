@@ -533,29 +533,54 @@ class PrinterService:
             return "0.0.0.0"
 
     def _remove_from_go2rtc_config(self, printer_id):
+        """Entfernt einen Stream aus der go2rtc Konfiguration"""
         try:
-            if os.path.exists(self.go2rtc_config_path):
-                logger.info(f"Removing stream {printer_id} from go2rtc config")
-                with open(self.go2rtc_config_path, 'r') as f:
-                    config = yaml.safe_load(f)
-                if 'streams' in config and printer_id in config['streams']:
-                    del config['streams'][printer_id]
-                    with open(self.go2rtc_config_path, 'w') as f:
-                        yaml.dump(config, f)
-                    logger.info("Successfully removed stream from config")
-                    # Entferne Stream über die API
-                    try:
-                        response = requests.delete(
-                            f"{self.go2rtc_api_url}/api/streams/{printer_id}"
-                        )
-                        if response.status_code == 200:
-                            logger.info(f"Successfully removed stream via API")
-                        else:
-                            logger.warning(f"Failed to remove stream via API: {response.status_code} - {response.text}")
-                    except Exception as e:
-                        logger.warning(f"Could not remove stream via API: {e}")
+            config_path = self.go2rtc_config_path
+            logger.info(f"Removing stream for printer {printer_id} from go2rtc config")
+            
+            # Lade aktuelle Konfiguration
+            try:
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f) or {}
+            except Exception as e:
+                logger.error(f"Failed to load config: {e}")
+                return False
+
+            # Entferne Stream aus Konfiguration
+            if 'streams' in config and printer_id in config['streams']:
+                del config['streams'][printer_id]
+                
+                # Speichere aktualisierte Konfiguration
+                with open(config_path, 'w') as f:
+                    yaml.safe_dump(config, f)
+                logger.info(f"Removed stream from config for printer {printer_id}")
+
+                # Entferne Stream über die API
+                try:
+                    # DELETE /api/streams/{name}
+                    response = requests.delete(
+                        f"{self.go2rtc_api_url}/api/streams/{printer_id}"
+                    )
+                    if response.status_code == 200:
+                        logger.info(f"Successfully removed stream via API")
+                    else:
+                        logger.warning(f"Failed to remove stream via API: {response.status_code} - {response.text}")
+                    
+                    # Lade Konfiguration neu
+                    reload_response = requests.post(f"{self.go2rtc_api_url}/api/reload")
+                    if reload_response.status_code == 200:
+                        logger.info("Successfully reloaded go2rtc config")
+                    else:
+                        logger.warning(f"Failed to reload config: {reload_response.status_code} - {reload_response.text}")
+                except Exception as e:
+                    logger.warning(f"Could not remove stream via API: {e}")
+
+                return True
+            return False
+            
         except Exception as e:
-            logger.error(f"Error removing stream from go2rtc config: {e}")
+            logger.error(f"Error removing stream from config: {e}")
+            return False
 
     def remove_printer(self, printer_id):
         try:
