@@ -45,7 +45,9 @@ BambuCAM is a user-friendly web application for monitoring BambuLab 3D printers.
 
 The fastest way to get started is using our pre-built Docker images:
 
-1. Create a `docker-compose.yml`:
+1. Create a Folder sudo mkdir BambuCAM
+2. Jump into the folder cd BambuCAM
+3. Create a `docker-compose.yml`:
 ```yaml
 
 services:
@@ -80,7 +82,7 @@ volumes:
   bambucam_go2rtc:
 ```
 
-2. Start BambuCAM:
+4. Start BambuCAM:
 ```bash
 docker compose up -d
 ```

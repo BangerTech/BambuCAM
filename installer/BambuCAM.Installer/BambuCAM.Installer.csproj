@@ -4,7 +4,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
-    <ApplicationIcon>Resources\bambucam.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\setup-icon.ico</ApplicationIcon>
     <AssemblyName>BambuCAM Setup</AssemblyName>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

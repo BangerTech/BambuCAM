@@ -24,8 +24,18 @@ jobs:
       - name: Build Installer
         run: |
           cd installer/BambuCAM.Installer
+          # Debug: Zeige Verzeichnisstruktur vor dem Build
+          Write-Host "Current directory structure:"
+          dir -Recurse Assets
+          
+          # Build
+          dotnet restore
+          dotnet build -c Release
           dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
-          dir bin/Release/net8.0-windows/win-x64/publish  # Debug output
+          
+          # Debug: Zeige Build-Output
+          Write-Host "Build output directory:"
+          dir bin/Release/net8.0-windows/win-x64/publish
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
