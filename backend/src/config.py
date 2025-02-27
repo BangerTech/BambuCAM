@@ -7,15 +7,17 @@ load_dotenv()
 
 # Logging Konfiguration
 logging.basicConfig(
-    level=logging.WARNING,  # Erhöhe Level auf WARNING
+    level=logging.DEBUG,  # Setze Basis-Level auf DEBUG
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
 # Spezifische Logger konfigurieren
-logging.getLogger('src.services.printerService').setLevel(logging.WARNING)
-logging.getLogger('src.app').setLevel(logging.WARNING)
-logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('src.services.printerService').setLevel(logging.DEBUG)
+logging.getLogger('src.services.bambuCloudService').setLevel(logging.DEBUG)
+logging.getLogger('src.routes.cloud').setLevel(logging.DEBUG)
+logging.getLogger('src.app').setLevel(logging.INFO)
+logging.getLogger('werkzeug').setLevel(logging.INFO)
 
 # Basis-Verzeichnisse
 BASE_DIR = Path(os.path.dirname(os.path.dirname(__file__)))

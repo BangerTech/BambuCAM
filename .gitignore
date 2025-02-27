@@ -48,10 +48,6 @@ Thumbs.db
 /frontend/build
 /frontend/dist
 
-# Sensitive data
-backend/config/bambu_cloud.json
-backend/config/*.json
-
 # Environment files
 .env
 .env.local

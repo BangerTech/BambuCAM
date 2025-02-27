@@ -75,23 +75,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Aktualisiere die Reihenfolge wenn sich die Drucker ändern
   useEffect(() => {
-    if (localPrinters.length > 0) {
-      // Entferne gelöschte Drucker aus der Reihenfolge
-      const validOrder = printerOrder.filter(id => 
-        localPrinters.some(printer => printer.id === id)
-      );
-      
-      // Füge neue Drucker hinzu
-      const newOrder = [...validOrder];
-      localPrinters.forEach(printer => {
-        if (!newOrder.includes(printer.id)) {
-          newOrder.push(printer.id);
-        }
-      });
-      
-      setPrinterOrder(newOrder);
-    }
-  }, [localPrinters]);
+    // Entferne gelöschte Drucker aus der Reihenfolge
+    const validOrder = printerOrder.filter(id => 
+      displayPrinters.some(printer => printer.id === id)
+    );
+    
+    // Füge neue Drucker hinzu
+    const newOrder = [...validOrder];
+    displayPrinters.forEach(printer => {
+      if (!newOrder.includes(printer.id)) {
+        newOrder.push(printer.id);
+      }
+    });
+    
+    setPrinterOrder(newOrder);
+  }, [displayPrinters]);
 
   // Speichere Drucker-Reihenfolge bei Änderungen
   useEffect(() => {
@@ -131,27 +129,17 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Lade Cloud-Drucker
   useEffect(() => {
+    let isMounted = true;
     const fetchCloudPrinters = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/cloud/printers`);
+        // Hole nur die bereits hinzugefügten Cloud-Drucker
+        const response = await fetch(`${API_URL}/printers`);
         const data = await response.json();
-        if (data.message === "success" && data.devices && Array.isArray(data.devices)) {
-          // Konvertiere Cloud-Drucker in das gleiche Format wie lokale Drucker
-          const formattedPrinters = data.devices.map(printer => ({
-            id: printer.dev_id,
-            name: printer.name,
-            ip: 'cloud',
-            type: 'bambulab',
-            model: printer.dev_product_name,
-            status: printer.online ? 'online' : 'offline',
-            accessCode: printer.dev_access_code,
-            nozzle_diameter: printer.nozzle_diameter,
-            print_status: printer.print_status,
-            dev_structure: printer.dev_structure,
-            isCloud: true
-          }));
-          console.log('Formatted cloud printers:', formattedPrinters);
-          setCloudPrinters(formattedPrinters);
+        if (isMounted && Array.isArray(data)) {
+          // Filtere nur die Cloud-Drucker
+          const cloudPrinters = data.filter(printer => printer.type === 'CLOUD' || printer.isCloud);
+          console.log('Loaded cloud printers from system:', cloudPrinters);
+          setCloudPrinters(cloudPrinters);
         }
       } catch (error) {
         console.error('Error fetching cloud printers:', error);
@@ -160,8 +148,11 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
     if (mode === 'cloud') {
       fetchCloudPrinters();
+      // Set up polling interval for cloud printers
+      const interval = setInterval(fetchCloudPrinters, 5000);
+      return () => clearInterval(interval);
     }
-  }, [mode]);
+  }, [mode]); // Entferne 'open' als Abhängigkeit
 
   const [scanTimer, setScanTimer] = useState(10);
   const [foundPrinters, setFoundPrinters] = useState([]);
@@ -302,42 +293,48 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   // Modifizierte handleDelete Funktion
   const handleDelete = async (printerId) => {
     try {
-      console.log('Lösche Drucker mit ID:', printerId);
-      
-      // Erst den Stream stoppen
-      try {
-        await fetch(`${API_URL}/stream/${printerId}/stop`, {
-          method: 'POST'
-        });
-      } catch (e) {
-        console.warn('Error stopping stream:', e);
+      const printer = [...localPrinters, ...cloudPrinters].find(p => p.id === printerId);
+      if (!printer) {
+        throw new Error('Printer not found');
       }
-      
-      // Dann den Drucker löschen
-      const response = await fetch(`${API_URL}/printers/${printerId}`, {
-        method: 'DELETE'
+
+      const isCloudPrinter = printer.type === 'CLOUD' || printer.isCloud;
+      const endpoint = isCloudPrinter 
+        ? `${API_URL}/cloud/printer/${printerId}`
+        : `${API_URL}/printers/${printerId}`;
+
+      const response = await fetch(endpoint, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
       });
-      
-      if (response.ok) {
-        const updatedPrinters = localPrinters.filter(p => p.id !== printerId);
-        setLocalPrinters(updatedPrinters);
-        
-        // Entferne den gelöschten Drucker aus der Reihenfolge
-        setPrinterOrder(prev => prev.filter(id => id !== printerId));
-        
-        setSnackbar({
-          open: true,
-          message: 'Printer deleted successfully',
-          severity: 'success'
-        });
-      } else {
+
+      if (!response.ok) {
         throw new Error('Failed to delete printer');
       }
+
+      // Aktualisiere die Listen
+      if (isCloudPrinter) {
+        setCloudPrinters(prev => prev.filter(p => p.id !== printerId));
+      } else {
+        setLocalPrinters(prev => prev.filter(p => p.id !== printerId));
+      }
+
+      // Zeige Erfolgsmeldung
+      setSnackbar({
+        open: true,
+        message: 'Printer deleted successfully',
+        severity: 'success'
+      });
+
     } catch (error) {
       console.error('Error deleting printer:', error);
       setSnackbar({
         open: true,
-        message: 'Error deleting printer',
+        message: 'Failed to delete printer',
         severity: 'error'
       });
     }
@@ -345,7 +342,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
   // Aktualisierte onDragEnd Funktion
   const onDragEnd = (result) => {
-    if (!result.destination || mode === 'cloud') return;
+    if (!result.destination) return;
     
     const items = Array.from(sortedPrinters);  // Benutze sortedPrinters statt localPrinters
     const [reorderedItem] = items.splice(result.source.index, 1);
@@ -606,7 +603,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
                   key={printer.id}
                   draggableId={printer.id}
                   index={index}
-                  isDragDisabled={mode === 'cloud'}
+                  isDragDisabled={false}
                 >
                   {(provided) => (
                     <Box
