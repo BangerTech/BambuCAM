@@ -344,7 +344,7 @@ class BambuCloudService:
                 logger.info(f"Using MQTT data for printer {printer_id}")
                 return mqtt_data
 
-            # Updated API endpoint for printer status
+            # Die korrekte URL für den Drucker-Status
             url = f"{self.base_url}/v1/iot-service/api/devices/{printer_id}"
             headers = {
                 **self.session.headers,
@@ -359,7 +359,56 @@ class BambuCloudService:
             if response.status_code == 200:
                 data = response.json()
                 logger.info(f"Got cloud printer status for {printer_id}")
-                return data
+                
+                # Format the response to match our MQTT data structure
+                formatted_data = {
+                    'device': {
+                        'status': data.get('status', 'OFFLINE'),
+                        'hotend_temp': float(data.get('nozzle_temper', 0)),
+                        'bed_temp': float(data.get('bed_temper', 0)),
+                        'chamber_temp': float(data.get('chamber_temper', 0)),
+                        'target_nozzle_temp': float(data.get('nozzle_target_temper', 0)),
+                        'target_bed_temp': float(data.get('bed_target_temper', 0))
+                    },
+                    'print': {
+                        'gcode_state': data.get('gcode_state', 'IDLE'),
+                        'mc_percent': float(data.get('mc_percent', 0)),
+                        'mc_remaining_time': int(data.get('mc_remaining_time', 0)),
+                        'current_layer': int(data.get('layer_num', 0)),
+                        'total_layers': int(data.get('total_layer_num', 0))
+                    }
+                }
+                return formatted_data
+            
+            # Try alternative URL format if the first one fails
+            alt_url = f"{self.base_url}/v1/iot-service/api/user/bind/device/{printer_id}/status"
+            logger.debug(f"First URL failed, trying alternative URL: {alt_url}")
+            
+            response = self.session.get(alt_url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Got cloud printer status from alternative URL for {printer_id}")
+                
+                # Format the response to match our MQTT data structure
+                formatted_data = {
+                    'device': {
+                        'status': data.get('status', 'OFFLINE'),
+                        'hotend_temp': float(data.get('nozzle_temper', 0)),
+                        'bed_temp': float(data.get('bed_temper', 0)),
+                        'chamber_temp': float(data.get('chamber_temper', 0)),
+                        'target_nozzle_temp': float(data.get('nozzle_target_temper', 0)),
+                        'target_bed_temp': float(data.get('bed_target_temper', 0))
+                    },
+                    'print': {
+                        'gcode_state': data.get('gcode_state', 'IDLE'),
+                        'mc_percent': float(data.get('mc_percent', 0)),
+                        'mc_remaining_time': int(data.get('mc_remaining_time', 0)),
+                        'current_layer': int(data.get('layer_num', 0)),
+                        'total_layers': int(data.get('total_layer_num', 0))
+                    }
+                }
+                return formatted_data
             
             logger.error(f"Failed to get cloud printer status: {response.status_code} - {response.text}")
             return None
@@ -604,98 +653,132 @@ class BambuCloudService:
             self.mqtt_connected = False
 
     def on_mqtt_message(self, client, userdata, msg):
-        """Callback when message is received"""
+        """Handle MQTT messages"""
         try:
-            logger.debug(f"MQTT message received on topic {msg.topic}")
-            payload = json.loads(msg.payload)
-            logger.debug(f"MQTT message payload: {payload}")
+            logger.debug(f"Received MQTT message on topic {msg.topic}")
             
-            # Extract printer ID from topic
-            printer_id = msg.topic.split('/')[1]
-            
-            # Initialize printer data structure if not exists
-            if printer_id not in self.printer_data:
-                self.printer_data[printer_id] = {
-                    'print': {},
-                    'device': {}
-                }
-
-            # Handle different message types
-            if 'print' in payload:
-                print_data = payload['print']
+            # Extract device ID from topic
+            topic_parts = msg.topic.split('/')
+            if len(topic_parts) >= 3:
+                device_id = topic_parts[1]
+                logger.debug(f"Message for device: {device_id}")
                 
-                # Handle push_status messages
-                if print_data.get('command') == 'push_status':
-                    # Extract device info
-                    device_info = print_data.get('device', {})
-                    
-                    # Extract temperature data if available
-                    if 'temperature' in device_info:
-                        temp_data = device_info['temperature']
-                        self.printer_data[printer_id]['device'].update({
-                            'hotend_temp': float(temp_data.get('nozzle', [0])[0]),
-                            'bed_temp': float(temp_data.get('bed', [0])[0]),
-                            'chamber_temp': float(temp_data.get('chamber', [0])[0]),
-                            'target_nozzle_temp': float(temp_data.get('nozzle_target', [0])[0]),
-                            'target_bed_temp': float(temp_data.get('bed_target', [0])[0])
-                        })
-                    
-                    # Extract online status and other info
-                    if 'online' in device_info:
-                        self.printer_data[printer_id]['device']['status'] = 'ACTIVE' if device_info['online'] else 'OFFLINE'
-                    
-                    # Extract print status if available
-                    if 'gcode_state' in print_data:
-                        self.printer_data[printer_id]['print']['gcode_state'] = print_data['gcode_state']
-                    
-                    # Extract progress info if available
-                    if 'mc_percent' in print_data:
-                        self.printer_data[printer_id]['print']['mc_percent'] = float(print_data['mc_percent'])
-                    if 'mc_remaining_time' in print_data:
-                        self.printer_data[printer_id]['print']['mc_remaining_time'] = int(print_data['mc_remaining_time'])
-                    if 'layer_num' in print_data:
-                        self.printer_data[printer_id]['print']['current_layer'] = int(print_data['layer_num'])
-                    if 'total_layer_num' in print_data:
-                        self.printer_data[printer_id]['print']['total_layers'] = int(print_data['total_layer_num'])
+                # Parse message payload
+                try:
+                    payload = msg.payload.decode('utf-8')
+                    data = json.loads(payload)
+                    logger.debug(f"Parsed message payload: {data}")
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse MQTT message as JSON: {msg.payload}")
+                    return
+                except UnicodeDecodeError:
+                    logger.error(f"Failed to decode MQTT message as UTF-8")
+                    return
                 
-                # Handle pushall response
-                elif print_data.get('command') == 'pushall':
-                    # Extract temperature data
-                    if 'bed_temper' in print_data:
-                        self.printer_data[printer_id]['device'].update({
-                            'bed_temp': float(print_data['bed_temper']),
-                            'target_bed_temp': float(print_data.get('bed_target_temper', 0))
-                        })
-                    if 'nozzle_temper' in print_data:
-                        self.printer_data[printer_id]['device'].update({
-                            'hotend_temp': float(print_data['nozzle_temper']),
-                            'target_nozzle_temp': float(print_data.get('nozzle_target_temper', 0))
-                        })
-                    if 'chamber_temper' in print_data:
-                        self.printer_data[printer_id]['device'].update({
-                            'chamber_temp': float(print_data['chamber_temper'])
-                        })
-                    
-                    # Extract online status
-                    if 'online' in print_data:
-                        self.printer_data[printer_id]['device']['status'] = 'ACTIVE' if print_data['online'] else 'OFFLINE'
-                    
-                    # Extract print status
-                    if 'gcode_state' in print_data:
-                        self.printer_data[printer_id]['print']['gcode_state'] = print_data['gcode_state']
-                    if 'mc_percent' in print_data:
-                        self.printer_data[printer_id]['print']['mc_percent'] = float(print_data['mc_percent'])
-                    if 'mc_remaining_time' in print_data:
-                        self.printer_data[printer_id]['print']['mc_remaining_time'] = int(print_data['mc_remaining_time'])
-                    if 'layer_num' in print_data:
-                        self.printer_data[printer_id]['print']['current_layer'] = int(print_data['layer_num'])
-                    if 'total_layer_num' in print_data:
-                        self.printer_data[printer_id]['print']['total_layers'] = int(print_data['total_layer_num'])
+                # Initialize or get existing printer data
+                if device_id not in self.printer_data:
+                    self.printer_data[device_id] = {
+                        'device': {
+                            'status': 'OFFLINE',
+                            'hotend_temp': 0.0,
+                            'bed_temp': 0.0,
+                            'chamber_temp': 0.0,
+                            'target_nozzle_temp': 0.0,
+                            'target_bed_temp': 0.0
+                        },
+                        'print': {
+                            'gcode_state': 'IDLE',
+                            'mc_percent': 0.0,
+                            'mc_remaining_time': 0,
+                            'current_layer': 0,
+                            'total_layers': 0
+                        }
+                    }
                 
-                logger.debug(f"Updated printer data for {printer_id}: {self.printer_data[printer_id]}")
-            
-        except json.JSONDecodeError:
-            logger.error(f"Failed to decode MQTT message: {msg.payload}")
+                if device_id not in self.temperature_data:
+                    self.temperature_data[device_id] = {
+                        'temperatures': {
+                            'hotend': 0.0,
+                            'bed': 0.0,
+                            'chamber': 0.0
+                        },
+                        'targets': {
+                            'hotend': 0.0,
+                            'bed': 0.0
+                        }
+                    }
+                
+                # Get current values to preserve them if not updated
+                current_printer_data = self.printer_data[device_id]
+                current_temp_data = self.temperature_data[device_id]
+                
+                # Extract print data
+                print_data = data.get('print', {})
+                
+                # Update temperatures from direct fields if provided
+                if 'nozzle_temper' in print_data:
+                    temp = float(print_data['nozzle_temper'])
+                    if temp > 0 or temp == 0 and 'nozzle_target_temper' in print_data:  # Only update if >0 or if we have target temp
+                        current_printer_data['device']['hotend_temp'] = temp
+                        current_temp_data['temperatures']['hotend'] = temp
+                
+                if 'bed_temper' in print_data:
+                    temp = float(print_data['bed_temper'])
+                    current_printer_data['device']['bed_temp'] = temp
+                    current_temp_data['temperatures']['bed'] = temp
+                
+                if 'chamber_temper' in print_data:
+                    temp = float(print_data['chamber_temper'])
+                    current_printer_data['device']['chamber_temp'] = temp
+                    current_temp_data['temperatures']['chamber'] = temp
+                
+                # Update target temperatures if provided
+                if 'nozzle_target_temper' in print_data:
+                    temp = float(print_data['nozzle_target_temper'])
+                    current_printer_data['device']['target_nozzle_temp'] = temp
+                    current_temp_data['targets']['hotend'] = temp
+                
+                if 'bed_target_temper' in print_data:
+                    temp = float(print_data['bed_target_temper'])
+                    current_printer_data['device']['target_bed_temp'] = temp
+                    current_temp_data['targets']['bed'] = temp
+                
+                # Check for nested device.nozzle temperature data
+                if 'device' in print_data:
+                    device_data = print_data['device']
+                    if 'nozzle' in device_data:
+                        nozzle_data = device_data['nozzle']
+                        if '0' in nozzle_data and 'temp' in nozzle_data['0']:
+                            temp = float(nozzle_data['0']['temp'])
+                            if temp > 0:  # Only update if temperature is greater than 0
+                                current_printer_data['device']['hotend_temp'] = temp
+                                current_temp_data['temperatures']['hotend'] = temp
+                
+                # Update print status if provided
+                if 'gcode_state' in print_data:
+                    current_printer_data['print']['gcode_state'] = print_data['gcode_state']
+                if 'mc_percent' in print_data:
+                    current_printer_data['print']['mc_percent'] = float(print_data['mc_percent'])
+                if 'mc_remaining_time' in print_data:
+                    current_printer_data['print']['mc_remaining_time'] = int(print_data['mc_remaining_time'])
+                if 'current_layer' in print_data:
+                    current_printer_data['print']['current_layer'] = int(print_data['current_layer'])
+                if 'total_layers' in print_data:
+                    current_printer_data['print']['total_layers'] = int(print_data['total_layers'])
+                
+                # Update the status based on whether we're receiving temperature data
+                if any([
+                    current_printer_data['device']['hotend_temp'] > 0,
+                    current_printer_data['device']['bed_temp'] > 0,
+                    current_printer_data['device']['chamber_temp'] > 0,
+                    current_printer_data['device']['target_nozzle_temp'] > 0,
+                    current_printer_data['device']['target_bed_temp'] > 0
+                ]):
+                    current_printer_data['device']['status'] = 'ACTIVE'
+                
+                logger.debug(f"Updated printer data for {device_id}: {current_printer_data}")
+                logger.debug(f"Updated temperature data for {device_id}: {current_temp_data}")
+                
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}", exc_info=True)
 

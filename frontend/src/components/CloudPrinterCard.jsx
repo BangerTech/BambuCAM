@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Paper, Typography, Box, Chip } from '@mui/material';
+import { Paper, Typography, Box, Chip, LinearProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { IconButton } from '@mui/material';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
@@ -426,6 +426,42 @@ const CloudPrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle 
           />
         </Box>
 
+        {/* Progress Bar and Time */}
+        {printerInfo.print_status?.toLowerCase() === 'printing' && (
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: '8px',
+              background: 'rgba(0,0,0,0.7)',
+              color: '#fff',
+              zIndex: 2
+            }}
+          >
+            <LinearProgress 
+              variant="determinate" 
+              value={printerInfo.progress || 0} 
+              sx={{
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                '& .MuiLinearProgress-bar': {
+                  backgroundColor: '#fff'
+                }
+              }}
+            />
+            <Typography variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
+              Progress: {(printerInfo.progress || 0).toFixed(1)}%
+              {printerInfo.remaining_time > 0 && ` (${Math.floor(printerInfo.remaining_time / 60)}min remaining)`}
+              {printerInfo.current_layer > 0 && printerInfo.total_layers > 0 && 
+                ` | Layer ${printerInfo.current_layer}/${printerInfo.total_layers}`
+              }
+            </Typography>
+          </Box>
+        )}
+
         {/* Footer mit Temperaturen und Progress */}
         <Box
           sx={{
@@ -439,26 +475,6 @@ const CloudPrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle 
             zIndex: 2,
           }}
         >
-          {/* Progress und Zeit wenn der Drucker druckt */}
-          {printerInfo.progress > 0 && (
-            <Box sx={{ 
-              padding: '8px 12px 0 12px',
-            }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: '#fff',
-                  fontSize: '0.9rem',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
-                }}
-              >
-                Progress: {printerInfo.progress?.toFixed(1) || '0.0'}%
-                {printerInfo.current_layer > 0 && ` (Layer ${printerInfo.current_layer}/${printerInfo.total_layers})`}
-                {printerInfo.remaining_time > 0 && ` | Time Left: ${Math.floor(printerInfo.remaining_time / 60)}h ${printerInfo.remaining_time % 60}m`}
-              </Typography>
-            </Box>
-          )}
-
           <Typography
             variant="body2"
             sx={{

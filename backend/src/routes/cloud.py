@@ -180,7 +180,34 @@ def get_cloud_printer_status(printer_id):
             
         logger.debug(f"Fetching status for cloud printer {printer_id} (cloudId: {printer.get('cloudId')})")
         
-        # Get status from Bambu API
+        # First try to get data from MQTT cache
+        mqtt_data = bambu_cloud_service.temperature_data.get(printer.get('cloudId'))
+        printer_data = bambu_cloud_service.printer_data.get(printer.get('cloudId'))
+        
+        if mqtt_data:
+            logger.debug(f"Using MQTT data for printer {printer_id}: {mqtt_data}")
+            # Format response using MQTT data
+            response = {
+                'online': True,  # If we have MQTT data, the printer is online
+                'print_status': printer_data.get('print', {}).get('gcode_state', 'IDLE'),
+                'temperatures': mqtt_data.get('temperatures', {
+                    'hotend': 0.0,
+                    'bed': 0.0,
+                    'chamber': 0.0
+                }),
+                'targets': mqtt_data.get('targets', {
+                    'hotend': 0.0,
+                    'bed': 0.0
+                }),
+                'progress': printer_data.get('print', {}).get('mc_percent', 0.0),
+                'remaining_time': printer_data.get('print', {}).get('mc_remaining_time', 0),
+                'current_layer': printer_data.get('print', {}).get('current_layer', 0),
+                'total_layers': printer_data.get('print', {}).get('total_layers', 0)
+            }
+            logger.debug(f"Formatted MQTT status response: {response}")
+            return response
+            
+        # Fallback to API if no MQTT data
         status = bambu_cloud_service.get_cloud_printer_status(printer.get('cloudId'), printer.get('accessCode'))
         logger.debug(f"Raw cloud printer status: {status}")
         
@@ -210,7 +237,7 @@ def get_cloud_printer_status(printer_id):
             'total_layers': print_status.get('total_layers', 0)
         }
         
-        logger.debug(f"Formatted cloud printer status: {response}")
+        logger.debug(f"Formatted API status response: {response}")
         return response
         
     except Exception as e:
