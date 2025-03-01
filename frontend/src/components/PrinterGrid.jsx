@@ -23,6 +23,7 @@ import { printerApi } from '../api/printerApi';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import Header from './Header';
 import CloudPrinterCard from './CloudPrinterCard';
+import CloudPrinterDialog from './CloudPrinterDialog';
 
 console.log('Using API URL:', API_URL);  // Debug log
 
@@ -44,6 +45,8 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [showGuide, setShowGuide] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const [cloudPrinterDialogOpen, setCloudPrinterDialogOpen] = useState(false);
+  const [availableCloudPrinters, setAvailableCloudPrinters] = useState([]);
 
   // Stelle sicher, dass printers immer ein Array ist
   const printerList = Array.isArray(printers) ? printers : [];
@@ -51,10 +54,26 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const [cloudPrinters, setCloudPrinters] = useState([]);
   const [printerOrder, setPrinterOrder] = useState(() => {
     const savedOrder = localStorage.getItem('printerOrder');
+    console.log('Loading printer order from localStorage:', savedOrder);
+    
     try {
-      const parsed = savedOrder ? JSON.parse(savedOrder) : [];
-      // Stelle sicher, dass es ein Array ist
-      return Array.isArray(parsed) ? parsed : [];
+      if (!savedOrder) return [];
+      
+      const parsed = JSON.parse(savedOrder);
+      
+      // Handle both array and object formats for backward compatibility
+      if (Array.isArray(parsed)) {
+        console.log('Loaded printer order (array format):', parsed);
+        return parsed;
+      } else if (typeof parsed === 'object') {
+        // Convert object format {id: position} to array of ids sorted by position
+        const entries = Object.entries(parsed);
+        entries.sort((a, b) => a[1] - b[1]); // Sort by position value
+        const result = entries.map(entry => entry[0]); // Return array of ids
+        console.log('Loaded printer order (converted from object):', result);
+        return result;
+      }
+      return [];
     } catch (e) {
       console.warn('Error parsing printerOrder from localStorage:', e);
       return [];
@@ -72,9 +91,30 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     if (indexB === -1) return -1;
     return indexA - indexB;
   });
+  
+  // Debug log for sorted printers
+  useEffect(() => {
+    console.log('Sorted printers:', {
+      printerOrder,
+      displayPrinters: displayPrinters.map(p => ({ id: p.id, name: p.name })),
+      sortedPrinters: sortedPrinters.map(p => ({ id: p.id, name: p.name }))
+    });
+  }, [printerOrder, displayPrinters, sortedPrinters]);
 
   // Aktualisiere die Reihenfolge wenn sich die Drucker ändern
   useEffect(() => {
+    // Skip this effect if displayPrinters is empty (during initial load)
+    if (displayPrinters.length === 0) {
+      console.log('Skipping printer order update because displayPrinters is empty');
+      return;
+    }
+    
+    // Skip this effect if we're just reordering the same printers
+    if (displayPrinters.length === printerOrder.length && 
+        displayPrinters.every(printer => printerOrder.includes(printer.id))) {
+      return;
+    }
+    
     // Entferne gelöschte Drucker aus der Reihenfolge
     const validOrder = printerOrder.filter(id => 
       displayPrinters.some(printer => printer.id === id)
@@ -88,12 +128,19 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       }
     });
     
+    console.log('Updating printer order based on available printers:', {
+      previous: printerOrder,
+      new: newOrder,
+      displayPrinters: displayPrinters.map(p => ({ id: p.id, name: p.name }))
+    });
+    
     setPrinterOrder(newOrder);
   }, [displayPrinters]);
 
   // Speichere Drucker-Reihenfolge bei Änderungen
   useEffect(() => {
     localStorage.setItem('printerOrder', JSON.stringify(printerOrder));
+    console.log('Saved printer order:', printerOrder);
   }, [printerOrder]);
 
   // Lade Drucker und ihre Positionen
@@ -107,7 +154,9 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        setLocalPrinters(data);
+        // Filter printers based on type
+        const lanPrinters = data.filter(printer => !printer.isCloud && printer.type !== 'CLOUD');
+        setLocalPrinters(lanPrinters);
         setError(null);
       } catch (err) {
         console.error('Error loading printers:', err);
@@ -151,16 +200,22 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
       // Set up polling interval for cloud printers
       const interval = setInterval(fetchCloudPrinters, 5000);
       return () => clearInterval(interval);
+    } else {
+      // Clear cloud printers when switching to LAN mode
+      setCloudPrinters([]);
     }
-  }, [mode]); // Entferne 'open' als Abhängigkeit
+  }, [mode]); // Run when mode changes
 
   const [scanTimer, setScanTimer] = useState(10);
   const [foundPrinters, setFoundPrinters] = useState([]);
   const [printerStatus, setPrinterStatus] = useState({});
 
-  // Status-Polling für alle Drucker
+  // Status-Polling für LAN Drucker
   useEffect(() => {
-    const updatePrinterStatus = async () => {
+    const updateLANPrinterStatus = async () => {
+      // Nur ausführen wenn wir im LAN Modus sind
+      if (mode !== 'lan') return;
+
       for (const printer of localPrinters) {
         try {
           const data = await printerApi.fetchStatus(printer.id);
@@ -169,31 +224,120 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
             [printer.id]: data
           }));
         } catch (error) {
-          Logger.error('Error updating printer status:', error);
+          Logger.error('Error updating LAN printer status:', error);
         }
       }
     };
 
-    if (localPrinters.length > 0) {
-      updatePrinterStatus();
-      const interval = setInterval(updatePrinterStatus, 5000);
+    if (localPrinters.length > 0 && mode === 'lan') {
+      updateLANPrinterStatus();
+      const interval = setInterval(updateLANPrinterStatus, 5000);
       return () => clearInterval(interval);
     }
-  }, [localPrinters]);
+  }, [localPrinters, mode]);
 
-  // Kombiniere Drucker mit ihrem Status
-  const printersWithStatus = localPrinters.map(printer => ({
-    ...printer,
-    ...printerStatus[printer.id]
-  }));
+  // Status-Polling für OctoPrint Drucker
+  useEffect(() => {
+    const updateOctoPrintStatus = async () => {
+      // Nur ausführen wenn wir im LAN Modus sind
+      if (mode !== 'lan') return;
+
+      // Filtere nur OctoPrint Drucker
+      const octoPrinters = localPrinters.filter(printer => printer.type === 'OCTOPRINT');
+      
+      for (const printer of octoPrinters) {
+        try {
+          const response = await fetch(`${API_URL}/printers/${printer.id}/status`);
+          if (!response.ok) continue;
+          
+          const data = await response.json();
+          Logger.info('OctoPrint status update:', data);
+          
+          // Get current printer status to preserve temperature data if needed
+          const currentStatus = printerStatus[printer.id] || {};
+          const currentTemps = currentStatus.temperatures || {};
+          
+          // Only update temperatures if they are non-zero in the new data
+          const newTemps = data.temps || data.temperatures || {};
+          const mergedTemps = {
+            hotend: newTemps.hotend > 0 ? newTemps.hotend : (currentTemps.hotend || 0),
+            nozzle: newTemps.nozzle > 0 ? newTemps.nozzle : (currentTemps.nozzle || 0),
+            bed: newTemps.bed > 0 ? newTemps.bed : (currentTemps.bed || 0),
+            chamber: newTemps.chamber > 0 ? newTemps.chamber : (currentTemps.chamber || 0)
+          };
+          
+          setPrinterStatus(prev => ({
+            ...prev,
+            [printer.id]: {
+              ...data,
+              temperatures: mergedTemps
+            }
+          }));
+        } catch (error) {
+          Logger.error('Error updating OctoPrint printer status:', error);
+        }
+      }
+    };
+
+    if (localPrinters.length > 0 && mode === 'lan') {
+      updateOctoPrintStatus();
+      const interval = setInterval(updateOctoPrintStatus, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [localPrinters, mode]);
+
+  // Status-Polling für Cloud Drucker
+  useEffect(() => {
+    const updateCloudPrinterStatus = async () => {
+      // Nur ausführen wenn wir im Cloud Modus sind
+      if (mode !== 'cloud') return;
+
+      for (const printer of cloudPrinters) {
+        try {
+          const response = await fetch(`${API_URL}/api/cloud/printers/${printer.id}/status`, {
+            credentials: 'include'
+          });
+          if (!response.ok) continue;
+          
+          const data = await response.json();
+          setPrinterStatus(prev => ({
+            ...prev,
+            [printer.id]: data
+          }));
+        } catch (error) {
+          Logger.error('Error updating cloud printer status:', error);
+        }
+      }
+    };
+
+    if (cloudPrinters.length > 0 && mode === 'cloud') {
+      updateCloudPrinterStatus();
+      const interval = setInterval(updateCloudPrinterStatus, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [cloudPrinters, mode]);
+
+  // Kombiniere Drucker mit ihrem Status basierend auf dem Modus
+  const printersWithStatus = mode === 'cloud' ? 
+    cloudPrinters.map(printer => ({
+      ...printer,
+      ...printerStatus[printer.id]
+    })) :
+    localPrinters.map(printer => ({
+      ...printer,
+      ...printerStatus[printer.id]
+    }));
+
+  // Beim Moduswechsel Status zurücksetzen
+  useEffect(() => {
+    setPrinterStatus({}); // Status beim Moduswechsel zurücksetzen
+  }, [mode]);
 
   // Funktion zum Aktualisieren der Positionen
   const updatePrinterOrder = (printers) => {
-    const orderMap = {};
-    printers.forEach((printer, index) => {
-      orderMap[printer.id] = index;
-    });
-    localStorage.setItem('printerOrder', JSON.stringify(orderMap));
+    const newOrder = printers.map(printer => printer.id);
+    setPrinterOrder(newOrder);
+    console.log('Updated printer order:', newOrder);
   };
 
   // Modifizierte handleAddPrinter Funktion
@@ -344,13 +488,20 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
   const onDragEnd = (result) => {
     if (!result.destination) return;
     
+    console.log('Drag end result:', {
+      source: result.source,
+      destination: result.destination,
+      draggableId: result.draggableId
+    });
+    
     const items = Array.from(sortedPrinters);  // Benutze sortedPrinters statt localPrinters
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
     
-    // Aktualisiere die Reihenfolge
-    const newOrder = items.map(printer => printer.id);
-    setPrinterOrder(newOrder);
+    console.log('Reordered items:', items.map(p => ({ id: p.id, name: p.name })));
+    
+    // Aktualisiere die Reihenfolge mit der updatePrinterOrder Funktion
+    updatePrinterOrder(items);
   };
 
   const handleClose = () => {
@@ -382,6 +533,17 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         switch(type) {
           case 'nozzle':
             return temps.hotend?.toFixed(1) || '-.--';  // Creality nutzt 'hotend' statt 'nozzle'
+          case 'bed':
+            return temps.bed?.toFixed(1) || '-.--';
+          case 'chamber':
+            return temps.chamber?.toFixed(1) || '-.--';
+          default:
+            return '-.--';
+        }
+      } else if (printer.type === 'OCTOPRINT') {
+        switch(type) {
+          case 'nozzle':
+            return temps.hotend?.toFixed(1) || temps.nozzle?.toFixed(1) || '-.--';  // OctoPrint kann beide Namen verwenden
           case 'bed':
             return temps.bed?.toFixed(1) || '-.--';
           case 'chamber':
@@ -442,6 +604,29 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
           return { text: 'Error', color: '#f44336' };
         case 'offline':
           return { text: 'Offline', color: '#9e9e9e' };
+        default:
+          return { text: status, color: '#9e9e9e' };
+      }
+    } else if (printer.type === 'OCTOPRINT') {
+      const status = printerStatus[printer.id]?.status?.toLowerCase() || 'unknown';
+      
+      switch(status) {
+        case 'ready':
+          return { text: 'Ready', color: '#2196f3' };
+        case 'printing':
+          return { text: 'Printing', color: '#4caf50' };
+        case 'paused':
+          return { text: 'Paused', color: '#ff9800' };
+        case 'completed':
+          return { text: 'Finished', color: '#4caf50' };
+        case 'failed':
+          return { text: 'Failed', color: '#f44336' };
+        case 'error':
+          return { text: 'Error', color: '#f44336' };
+        case 'offline':
+          return { text: 'Offline', color: '#9e9e9e' };
+        case 'connecting':
+          return { text: 'Connecting...', color: '#9e9e9e' };
         default:
           return { text: status, color: '#9e9e9e' };
       }
@@ -552,6 +737,32 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     };
   };
 
+  const handleAddPrinterClick = async () => {
+    if (mode === 'cloud') {
+      try {
+        // Fetch available cloud printers
+        const response = await fetch(`${API_URL}/api/cloud/printers`, {
+          credentials: 'include'
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch cloud printers');
+        }
+        const printers = await response.json();
+        setAvailableCloudPrinters(printers);
+        setCloudPrinterDialogOpen(true);
+      } catch (error) {
+        console.error('Error fetching cloud printers:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to fetch cloud printers',
+          severity: 'error'
+        });
+      }
+    } else {
+      setOpen(true);
+    }
+  };
+
   if (fullscreenPrinter) {
     const printerWithStatus = getPrinterWithStatus(fullscreenPrinter);
     return (
@@ -587,7 +798,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         isDarkMode={isDarkMode}
         mode={mode}
         onModeChange={onModeChange}
-        onAddPrinter={() => setOpen(true)}
+        onAddPrinter={handleAddPrinterClick}
       />
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -646,6 +857,21 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
         isScanning={isScanning}
         scanTimer={scanTimer}
         onScan={handleScan}
+      />
+
+      <CloudPrinterDialog
+        open={cloudPrinterDialogOpen}
+        onClose={(added) => {
+          setCloudPrinterDialogOpen(false);
+          if (added) {
+            setSnackbar({
+              open: true,
+              message: 'Cloud printer added successfully',
+              severity: 'success'
+            });
+          }
+        }}
+        printers={availableCloudPrinters}
       />
 
       {/* Styled Snackbar */}

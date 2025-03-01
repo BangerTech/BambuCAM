@@ -69,8 +69,15 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
       id: printer.id,
       name: printer.name,
       status: printer.status,
-      temps: printer.temperatures,
+      temps: printer.temps || printer.temperatures,
       state: printer.state
+    });
+    
+    // Log temperature data for debugging
+    Logger.printer('Temperature data:', {
+      temps: printer.temps,
+      temperatures: printer.temperatures,
+      type: printer.type
     });
   }, [printer]);
 
@@ -263,10 +270,10 @@ const PrinterCard = ({ printer, onDelete, isFullscreen, onFullscreenToggle }) =>
             {printer.type === 'BAMBULAB' ? 'Nozzle' : 'Hotend'}: {
               printer.type === 'BAMBULAB' 
                 ? printer.temperatures?.nozzle?.toFixed(1) 
-                : printer.temperatures?.hotend?.toFixed(1) || '0.0'
+                : (printer.temperatures?.hotend || printer.temperatures?.nozzle || printer.temps?.hotend || printer.temps?.nozzle || 0).toFixed(1)
             }°C | 
-            Bed: {printer.temperatures?.bed?.toFixed(1) || '0.0'}°C | 
-            Chamber: {printer.temperatures?.chamber?.toFixed(1) || '0.0'}°C
+            Bed: {(printer.temperatures?.bed || printer.temps?.bed || 0).toFixed(1)}°C | 
+            Chamber: {(printer.temperatures?.chamber || printer.temps?.chamber || 0).toFixed(1)}°C
           </Typography>
         </Box>
       </Box>

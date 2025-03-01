@@ -6,6 +6,7 @@ import json
 import os
 import logging
 from src.services.printerService import getPrinterById
+from src.services.octoprintService import octoprint_service
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +74,55 @@ def get_cloud_printers():
 @cross_origin(supports_credentials=True, allow_headers=['Content-Type', 'Accept', 'Cache-Control'])
 def get_cloud_status():
     try:
-        if os.path.exists(Config.BAMBU_CLOUD_FILE):
-            with open(Config.BAMBU_CLOUD_FILE, 'r') as f:
-                config = json.load(f)
-                return jsonify({
-                    'connected': config.get('connected', False),
-                    'mqtt_connected': bambu_cloud_service.mqtt_connected
-                })
-        return jsonify({'connected': False, 'mqtt_connected': False})
+        # Get mode from query parameters
+        mode = request.args.get('mode', 'lan')
+        
+        # If switching to LAN mode, disconnect MQTT
+        if mode == 'lan':
+            bambu_cloud_service.disconnect_mqtt()
+            # Reconnect OctoPrint printers since they should still work in LAN mode
+            octoprint_service.reconnect_all()
+            return jsonify({
+                'connected': False,
+                'mqtt_connected': False,
+                'needs_login': True
+            })
+        
+        # Check if we have valid credentials
+        config_status = bambu_cloud_service.load_config()
+        
+        if config_status.get('success'):
+            return jsonify({
+                'connected': True,
+                'mqtt_connected': bambu_cloud_service.mqtt_connected,
+                'token': config_status.get('token'),
+                'email': config_status.get('email'),
+                'user_id': config_status.get('user_id')
+            })
+            
+        # If config exists but token is invalid
+        if config_status.get('error') == 'Token expired':
+            return jsonify({
+                'connected': False,
+                'mqtt_connected': False,
+                'needs_login': True,
+                'error': 'Token expired'
+            })
+            
+        return jsonify({
+            'connected': False,
+            'mqtt_connected': False,
+            'needs_login': True
+        })
+        
     except Exception as e:
         logger.error(f"Error getting cloud status: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e),
+            'connected': False,
+            'mqtt_connected': False,
+            'needs_login': True
+        }), 500
 
 @cloud_bp.route('/api/cloud/printers/add', methods=['POST', 'OPTIONS'])
 @cross_origin(supports_credentials=True, allow_headers=['Content-Type', 'Accept', 'Cache-Control'])

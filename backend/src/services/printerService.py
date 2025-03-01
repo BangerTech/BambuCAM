@@ -447,6 +447,24 @@ class PrinterService:
                 # Starte Polling für Creality
                 self.connect_printer(printer_data['id'], 'CREALITY', printer_data['ip'])
             
+            elif printer_data['type'] == 'OCTOPRINT':
+                logger.info(f"Setting up OctoPrint printer {printer_data['name']} ({printer_data['ip']})")
+                
+                # Stelle sicher, dass die MQTT-Konfiguration korrekt ist
+                if 'mqtt' not in printer_data and ('mqttBroker' in printer_data and 'mqttPort' in printer_data):
+                    printer_data['mqtt'] = {
+                        'broker': printer_data['mqttBroker'],
+                        'port': int(printer_data['mqttPort'])
+                    }
+                
+                # Stelle sicher, dass die Stream-URL korrekt ist
+                if 'streamUrl' not in printer_data:
+                    printer_data['streamUrl'] = f"http://{data['ip']}/webcam/?action=stream"
+                
+                # OctoPrint Service kümmert sich um die MQTT-Verbindung
+                from src.services.octoprintService import octoprint_service
+                octoprint_service.add_printer(printer_data)
+            
             # Drucker speichern
             self._save_printer(printer_id, printer_data)
             

@@ -84,53 +84,67 @@ function App() {
     localStorage.setItem('theme', !isDarkMode ? 'dark' : 'light');
   };
 
-  // Mode-Änderung mit localStorage
+  // Mode-Wechsel Handler
   const handleModeChange = async (newMode) => {
-    if (newMode === 'cloud') {
-      const token = localStorage.getItem('cloudToken');
-      if (token) {
-        // Wenn Token existiert, Cloud-Drucker laden
-        setMode('cloud');
-        localStorage.setItem('mode', 'cloud');
-        loadCloudPrinters(token);
-      } else {
-        // Login-Dialog öffnen, aber noch nicht auf Cloud wechseln
-        setLoginOpen(true);
+    try {
+      if (newMode === 'cloud') {
+        // Check cloud status first
+        const response = await fetch(`${API_URL}/cloud/status?mode=${newMode}`);
+        const status = await response.json();
         
-        // Wenn Login fehlschlägt, bleibt der Switch auf LAN
+        if (status.connected && status.token) {
+          // Already logged in, just switch mode
+          setMode('cloud');
+          localStorage.setItem('mode', 'cloud');
+          loadCloudPrinters(status.token);
+        } else {
+          // Need to login
+          setLoginOpen(true);
+        }
+      } else {
+        // Switching to LAN mode - tell backend to disconnect cloud
+        await fetch(`${API_URL}/cloud/status?mode=lan`);
+        setMode(newMode);
+        localStorage.setItem('mode', newMode);
+      }
+    } catch (error) {
+      console.error('Error changing mode:', error);
+      setMode('lan');
+      localStorage.setItem('mode', 'lan');
+    }
+  };
+
+  // Initial mode check
+  useEffect(() => {
+    const checkInitialMode = async () => {
+      const savedMode = localStorage.getItem('mode') || 'lan';
+      
+      if (savedMode === 'cloud') {
         try {
-          await new Promise((resolve, reject) => {
-            const cleanup = () => {
-              window.removeEventListener('cloud-login-success', handleSuccess);
-              window.removeEventListener('cloud-login-failed', handleFailure);
-            };
-            
-            const handleSuccess = () => {
-              cleanup();
-              setMode('cloud'); // Erst nach erfolgreichem Login auf Cloud setzen
-              resolve();
-            };
-            
-            const handleFailure = () => {
-              cleanup();
-              reject();
-            };
-            
-            window.addEventListener('cloud-login-success', handleSuccess);
-            window.addEventListener('cloud-login-failed', handleFailure);
-          });
+          const response = await fetch(`${API_URL}/cloud/status?mode=cloud`);
+          const status = await response.json();
+          
+          if (status.connected && status.token) {
+            setMode('cloud');
+            loadCloudPrinters(status.token);
+          } else {
+            // Token invalid/expired, switch back to LAN
+            await fetch(`${API_URL}/cloud/status?mode=lan`); // Disconnect cloud
+            setMode('lan');
+            localStorage.setItem('mode', 'lan');
+          }
         } catch (error) {
-          // Bei Login-Fehler bleibt es bei LAN
+          console.error('Error checking cloud status:', error);
           setMode('lan');
           localStorage.setItem('mode', 'lan');
         }
+      } else {
+        setMode(savedMode);
       }
-    } else {
-      setMode('lan');
-      localStorage.setItem('mode', 'lan');
-      localStorage.removeItem('cloudToken');
-    }
-  };
+    };
+    
+    checkInitialMode();
+  }, []);
 
   // Cloud-Drucker laden
   const loadCloudPrinters = async (token) => {
@@ -152,14 +166,6 @@ function App() {
       localStorage.removeItem('cloudToken');
     }
   };
-
-  // Initial Cloud-Drucker laden wenn im Cloud-Mode
-  useEffect(() => {
-    const token = localStorage.getItem('cloudToken');
-    if (mode === 'cloud' && token) {
-      loadCloudPrinters(token);
-    }
-  }, []);
 
   // Cloud Login Handler
   const handleCloudLogin = async (loginData) => {

@@ -20,8 +20,8 @@ class OctoPrintService:
             'ip': printer_data['ip'],
             'name': printer_data['name'],
             'mqtt': {  # MQTT-Konfiguration hinzufügen
-                'broker': printer_data['mqtt']['broker'],
-                'port': printer_data['mqtt']['port']
+                'broker': printer_data.get('mqttBroker', printer_data.get('mqtt', {}).get('broker', 'localhost')),
+                'port': int(printer_data.get('mqttPort', printer_data.get('mqtt', {}).get('port', 1883)))
             },
             'status': {
                 'temperatures': {
@@ -52,7 +52,7 @@ class OctoPrintService:
             
             def on_connect(client, userdata, flags, rc):
                 if rc == 0:
-                    logger.info(f"Successfully connected to MQTT broker")
+                    logger.info(f"Successfully connected to MQTT broker for OctoPrint printer {printer_id}")
                     # OctoPrint MQTT Topics
                     topics = [
                         ("octoPrint/temperature/tool0", 0),  # QoS 0
@@ -67,7 +67,7 @@ class OctoPrintService:
                         logger.info(f"Subscribing to {topic}")
                         client.subscribe(topic, qos)
                 else:
-                    logger.error(f"Failed to connect to MQTT broker, return code: {rc}")
+                    logger.error(f"Failed to connect to MQTT broker for OctoPrint printer {printer_id}, return code: {rc}")
             
             def on_message(client, userdata, msg):
                 try:
@@ -121,9 +121,9 @@ class OctoPrintService:
             
             def on_disconnect(client, userdata, rc):
                 if rc != 0:
-                    logger.error(f"Unexpected MQTT disconnection, rc: {rc}")
+                    logger.error(f"Unexpected MQTT disconnection for OctoPrint printer {printer_id}, rc: {rc}")
                 else:
-                    logger.info("MQTT client disconnected")
+                    logger.info(f"MQTT client disconnected for OctoPrint printer {printer_id}")
             
             client.on_connect = on_connect
             client.on_message = on_message
@@ -134,10 +134,10 @@ class OctoPrintService:
             client.loop_start()
             
             self.mqtt_clients[printer_id] = client
-            logger.info(f"MQTT client started for printer {printer_id}")
+            logger.info(f"MQTT client started for OctoPrint printer {printer_id}")
             
         except Exception as e:
-            logger.error(f"Error in MQTT connection: {e}", exc_info=True)
+            logger.error(f"Error in MQTT connection for OctoPrint printer {printer_id}: {e}", exc_info=True)
             self.printers[printer_id]['status']['status'] = 'offline'
     
     def remove_printer(self, printer_id: str):
@@ -152,11 +152,58 @@ class OctoPrintService:
     
     def get_printer_status(self, printer_id: str) -> Optional[Dict[str, Any]]:
         """Holt den aktuellen Status eines OctoPrint Druckers"""
-        return self.printers.get(printer_id, {}).get('status')
+        printer_data = self.printers.get(printer_id, {})
+        status = printer_data.get('status')
+        if status:
+            # Format the status to match the expected frontend format
+            hotend_temp = status['temperatures']['hotend']
+            return {
+                'id': printer_id,
+                'name': printer_data.get('name', ''),
+                'temps': {
+                    'hotend': hotend_temp,
+                    'nozzle': hotend_temp,  # Add nozzle property for frontend compatibility
+                    'bed': status['temperatures']['bed'],
+                    'chamber': status['temperatures']['chamber']
+                },
+                'temperatures': {  # Add temperatures property for frontend compatibility
+                    'hotend': hotend_temp,
+                    'nozzle': hotend_temp,
+                    'bed': status['temperatures']['bed'],
+                    'chamber': status['temperatures']['chamber']
+                },
+                'status': status['status'],
+                'progress': status['progress']
+            }
+        return None
     
     def set_status_callback(self, printer_id: str, callback: Callable):
         """Setzt einen Callback für Status-Updates"""
         self.status_callbacks[printer_id] = callback
+        
+    def disconnect_all(self):
+        """Trennt alle MQTT Verbindungen"""
+        for printer_id, client in list(self.mqtt_clients.items()):
+            try:
+                logger.info(f"Disconnecting MQTT client for OctoPrint printer {printer_id}")
+                client.loop_stop()
+                client.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting MQTT client for printer {printer_id}: {e}")
+        self.mqtt_clients.clear()
+        
+    def reconnect_all(self):
+        """Verbindet alle MQTT Verbindungen neu"""
+        logger.info(f"Reconnecting all OctoPrint MQTT clients")
+        # Erst alle Verbindungen trennen
+        self.disconnect_all()
+        
+        # Dann alle neu verbinden
+        for printer_id in self.printers:
+            try:
+                self._connect_mqtt(printer_id)
+            except Exception as e:
+                logger.error(f"Error reconnecting MQTT for printer {printer_id}: {e}")
 
 # Globale Instanz
 octoprint_service = OctoPrintService() 

@@ -51,8 +51,22 @@ class BambuCloudService:
         self.printer_data = {}  # Initialize printer data dictionary
         self.load_config()
 
+    def disconnect_mqtt(self):
+        """Disconnect and cleanup MQTT connection"""
+        try:
+            if self.mqtt_client:
+                logger.info("Disconnecting MQTT client")
+                self.mqtt_client.loop_stop()
+                self.mqtt_client.disconnect()
+                self.mqtt_client = None
+            self.mqtt_connected = False
+            self.printer_data = {}  # Clear stored printer data
+            logger.info("MQTT client disconnected and data cleared")
+        except Exception as e:
+            logger.error(f"Error disconnecting MQTT: {e}", exc_info=True)
+
     def load_config(self):
-        """Load saved cloud credentials"""
+        """Load saved cloud credentials and automatically set up service if valid"""
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r') as f:
@@ -61,22 +75,65 @@ class BambuCloudService:
                     
                     if self.config.get('token'):
                         self.token = self.config['token']
+                        # Update session headers with token
                         self.session.headers.update({
                             "Authorization": f"Bearer {self.token}"
                         })
-                        logger.info("Loaded token and updated session headers")
                         
-                        # Don't automatically set up MQTT here, wait until printers are requested
-                        if self.config.get('user_id'):
-                            logger.info("Found user ID in config, will set up MQTT when printers are requested")
-                        else:
-                            logger.warning("No user ID found in config")
+                        # Test if token is still valid
+                        try:
+                            response = self.session.get(f"{self.base_url}/v1/design-user-service/my/preference")
+                            if response.status_code == 200:
+                                logger.info("Token is valid")
+                                return {
+                                    "success": True,
+                                    "token": self.token,
+                                    "email": self.config.get('email'),
+                                    "user_id": self.config.get('user_id')
+                                }
+                            else:
+                                logger.warning("Token is expired or invalid")
+                                # Disconnect MQTT and clear data
+                                self.disconnect_mqtt()
+                                # Clear token and config
+                                self.token = None
+                                self.config = {}
+                                # Delete config file
+                                os.remove(self.config_file)
+                                return {
+                                    "success": False,
+                                    "error": "Token expired"
+                                }
+                        except Exception as e:
+                            logger.error(f"Error testing token: {e}", exc_info=True)
+                            # Disconnect MQTT and clear data
+                            self.disconnect_mqtt()
+                            return {
+                                "success": False,
+                                "error": str(e)
+                            }
                     else:
                         logger.warning("No token found in config")
+                        return {
+                            "success": False,
+                            "error": "No token found"
+                        }
+            else:
+                logger.info("No config file found")
+                return {
+                    "success": False,
+                    "error": "No config file"
+                }
         except Exception as e:
             logger.error(f"Error loading cloud config: {e}", exc_info=True)
             self.config = {}
             self.token = None
+            # Disconnect MQTT and clear data
+            self.disconnect_mqtt()
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     def get_cloud_printers_internal(self):
         """Internal method to get list of cloud printers"""
@@ -220,7 +277,7 @@ class BambuCloudService:
         except Exception as e:
             logger.error(f"Failed to get user ID: {e}", exc_info=True)
             return None
-
+            
     def setup_mqtt(self):
         """Setup MQTT connection"""
         if not self.token or not self.config.get('user_id'):
@@ -326,7 +383,7 @@ class BambuCloudService:
             logger.info(f"Connecting to MQTT broker at {self.mqtt_host}")
             self.mqtt_client.connect(self.mqtt_host, 8883, 60)
             self.mqtt_client.loop_start()
-
+            
         except Exception as e:
             logger.error(f"Error setting up MQTT: {e}", exc_info=True)
             self.mqtt_connected = False
@@ -337,7 +394,7 @@ class BambuCloudService:
             if not self.token:
                 logger.warning("No token available for cloud printer status request")
                 return None
-
+            
             # Check if we have MQTT data for this printer
             mqtt_data = self.get_printer_data(printer_id)
             if mqtt_data:
@@ -483,7 +540,7 @@ class BambuCloudService:
                     'total_layers': data.get('print', {}).get('total_layers', 0)
                 }
             }
-        return None
+            return None
 
     def request_full_printer_status(self, printer_id):
         """Request full printer status using pushing.pushall command"""
