@@ -23,41 +23,51 @@ const API_URL = `http://${window.location.hostname}:4000`;
 
 const GlassDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
-    background: 'rgba(0, 0, 0, 0.8)',
+    background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.95)',
     backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(0, 255, 255, 0.2)',
+    border: theme.palette.mode === 'dark' 
+      ? '1px solid rgba(0, 255, 255, 0.2)' 
+      : '1px solid rgba(0, 128, 128, 0.2)',
     borderRadius: '15px',
-    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 30px rgba(0, 255, 255, 0.2)' 
+      : '0 0 30px rgba(0, 128, 128, 0.1)',
     minWidth: '400px',
-    color: '#00ffff',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
     '& .MuiDialogTitle-root': {
-      borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
-      color: '#00ffff'
+      borderBottom: theme.palette.mode === 'dark' 
+        ? '1px solid rgba(0, 255, 255, 0.1)' 
+        : '1px solid rgba(0, 128, 128, 0.1)',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
     },
     '& .MuiListItemText-primary': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
       fontSize: '1.1rem'
     },
     '& .MuiListItemText-secondary': {
-      color: 'rgba(0, 255, 255, 0.7)',
+      color: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
       fontSize: '0.9rem'
     },
     '& .MuiIconButton-root': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
       '&:hover': {
-        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+        backgroundColor: theme.palette.mode === 'dark' 
+          ? 'rgba(0, 255, 255, 0.1)' 
+          : 'rgba(0, 128, 128, 0.1)'
       }
     },
     '& .MuiButton-root': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
       '&:hover': {
-        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+        backgroundColor: theme.palette.mode === 'dark' 
+          ? 'rgba(0, 255, 255, 0.1)' 
+          : 'rgba(0, 128, 128, 0.1)'
       }
     },
     '& .MuiChip-root': {
       margin: '0 10px',
-      color: '#00ffff',
-      borderColor: 'rgba(0, 255, 255, 0.5)'
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
+      borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 128, 128, 0.5)'
     }
   }
 }));

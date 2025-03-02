@@ -25,65 +25,75 @@ import InfoIcon from '@mui/icons-material/Info';
 // Styled Components
 const NeonDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiPaper-root': {
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    border: '1px solid #00ffff',
-    boxShadow: '0 0 10px #00ffff',
-    color: '#fff'
+    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+    border: theme.palette.mode === 'dark' 
+      ? '1px solid #00ffff' 
+      : '1px solid #008080',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 10px #00ffff' 
+      : '0 0 10px rgba(0, 128, 128, 0.3)',
+    color: theme.palette.mode === 'dark' ? '#fff' : '#333'
   }
 }));
 
 const NeonButton = styled(Button)(({ theme }) => ({
-  color: '#00ffff',
-  borderColor: '#00ffff',
+  color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
   '&:hover': {
-    backgroundColor: 'rgba(0, 255, 255, 0.1)',
-    borderColor: '#00ffff',
+    backgroundColor: theme.palette.mode === 'dark' 
+      ? 'rgba(0, 255, 255, 0.1)' 
+      : 'rgba(0, 128, 128, 0.1)',
+    borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
   },
   '&.Mui-disabled': {
-    borderColor: 'rgba(0, 255, 255, 0.3)',
-    color: 'rgba(0, 255, 255, 0.3)',
+    borderColor: theme.palette.mode === 'dark' 
+      ? 'rgba(0, 255, 255, 0.3)' 
+      : 'rgba(0, 128, 128, 0.3)',
+    color: theme.palette.mode === 'dark' 
+      ? 'rgba(0, 255, 255, 0.3)' 
+      : 'rgba(0, 128, 128, 0.3)',
   }
 }));
 
-const NeonTextField = styled(TextField)({
+const NeonTextField = styled(TextField)(({ theme }) => ({
   '& .MuiOutlinedInput-root': {
-    color: '#fff',
+    color: theme.palette.mode === 'dark' ? '#fff' : '#333',
     '& fieldset': {
-      borderColor: '#00ffff',
+      borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
     },
     '&:hover fieldset': {
-      borderColor: '#00ffff',
+      borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
     },
     '&.Mui-focused fieldset': {
-      borderColor: '#00ffff',
+      borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
     },
   },
   '& .MuiInputLabel-root': {
-    color: '#00ffff',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
     '&.Mui-focused': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
     },
   },
-});
+}));
 
-const NeonStepper = styled(Stepper)({
+const NeonStepper = styled(Stepper)(({ theme }) => ({
   '& .MuiStepIcon-root': {
-    color: '#00ffff',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
   },
   '& .MuiStepIcon-root.Mui-active': {
-    color: '#00ffff',
-    filter: 'drop-shadow(0 0 2px #00ffff)',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+    filter: theme.palette.mode === 'dark' ? 'drop-shadow(0 0 2px #00ffff)' : 'drop-shadow(0 0 2px rgba(0, 128, 128, 0.5))',
   },
   '& .MuiStepIcon-root.Mui-completed': {
-    color: '#00ffff',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
   },
   '& .MuiStepLabel-label': {
-    color: '#fff',
+    color: theme.palette.mode === 'dark' ? '#fff' : '#333',
   },
   '& .MuiStepConnector-line': {
-    borderColor: '#00ffff',
+    borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
   }
-});
+}));
 
 const NotificationDialog = ({ open, onClose }) => {
   const [activeStep, setActiveStep] = useState(0);
@@ -144,11 +154,11 @@ const NotificationDialog = ({ open, onClose }) => {
       }}
     >
       <DialogTitle sx={{ 
-        color: '#00ffff',
+        color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
         textAlign: 'center',
         fontSize: '1.5rem',
         fontWeight: 'bold',
-        textShadow: '0 0 10px #00ffff',
+        textShadow: theme => theme.palette.mode === 'dark' ? '0 0 10px #00ffff' : 'none',
         borderBottom: '1px solid rgba(0,0,0,0.1)',
         pb: 2,
         display: 'flex',
@@ -159,7 +169,7 @@ const NotificationDialog = ({ open, onClose }) => {
         <IconButton
           onClick={() => setShowGuide(!showGuide)}
           title="Setup Guide"
-          sx={{ color: '#00ffff' }}
+          sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}
         >
           <InfoIcon />
         </IconButton>
@@ -168,10 +178,10 @@ const NotificationDialog = ({ open, onClose }) => {
       <DialogContent>
         <Collapse in={showGuide}>
           <Box sx={{ mb: 3, mt: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2, color: '#00ffff' }}>
+            <Typography variant="h6" sx={{ mb: 2, color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
               Setup Guide:
             </Typography>
-            <ol style={{ paddingLeft: '20px', color: '#00ffff' }}>
+            <ol style={{ paddingLeft: '20px', color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
               <li>Create a new Telegram bot:
                 <ul>
                   <li>Open Telegram and search for @BotFather</li>
@@ -198,16 +208,16 @@ const NotificationDialog = ({ open, onClose }) => {
 
         {activeStep === 0 && (
           <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h6" gutterBottom sx={{ color: '#00ffff' }}>
+            <Typography variant="h6" gutterBottom sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
               1. Create Bot
             </Typography>
-            <Typography paragraph sx={{ color: '#fff' }}>
-              • Open <Link href="https://t.me/BotFather" target="_blank" sx={{ color: '#00ffff' }}>@BotFather</Link> in Telegram
+            <Typography paragraph sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
+              • Open <Link href="https://t.me/BotFather" target="_blank" sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>@BotFather</Link> in Telegram
             </Typography>
-            <Typography paragraph sx={{ color: '#fff' }}>
-              • Send <code style={{ color: '#00ffff' }}>/newbot</code> and follow the instructions
+            <Typography paragraph sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
+              • Send <code style={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>/newbot</code> and follow the instructions
             </Typography>
-            <Typography paragraph sx={{ color: '#fff' }}>
+            <Typography paragraph sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
               • Copy the Bot Token
             </Typography>
             <NeonButton 
@@ -222,7 +232,7 @@ const NotificationDialog = ({ open, onClose }) => {
 
         {activeStep === 1 && (
           <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h6" gutterBottom sx={{ color: '#00ffff' }}>
+            <Typography variant="h6" gutterBottom sx={{ color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
               2. Enter Token
             </Typography>
             <NeonTextField

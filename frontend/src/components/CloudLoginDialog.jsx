@@ -13,48 +13,59 @@ import styled from '@emotion/styled';
 
 const GlassDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
-    background: 'rgba(0, 0, 0, 0.8)',
+    background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.95)',
     backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(0, 255, 255, 0.2)',
+    border: theme.palette.mode === 'dark' 
+      ? '1px solid rgba(0, 255, 255, 0.2)' 
+      : '1px solid rgba(0, 100, 200, 0.2)',
     borderRadius: '15px',
-    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
-    color: '#00ffff',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 30px rgba(0, 255, 255, 0.2)' 
+      : '0 0 30px rgba(0, 100, 200, 0.1)',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
     '& .MuiDialogTitle-root': {
-      color: '#00ffff'
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
     }
   }
 }));
 
 const NeonTextField = styled(TextField)(({ theme }) => ({
   '& .MuiOutlinedInput-root': {
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
     '& fieldset': {
-      borderColor: 'rgba(0, 255, 255, 0.5)',
+      borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 100, 200, 0.3)',
     },
     '&:hover fieldset': {
-      borderColor: 'rgba(0, 255, 255, 0.5)',
+      borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 100, 200, 0.5)',
     },
     '&.Mui-focused fieldset': {
-      borderColor: '#00ffff',
+      borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
     }
   },
   '& .MuiInputLabel-root': {
-    color: '#00ffff',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : 'rgba(0, 0, 0, 0.6)',
     '&.Mui-focused': {
-      color: '#00ffff'
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
     }
   },
   '& .MuiInputBase-input': {
-    color: '#00ffff'
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333'
   }
 }));
 
 const NeonButton = styled(Button)(({ theme }) => ({
-  background: 'rgba(0, 255, 255, 0.1)',
-  border: '1px solid rgba(0, 255, 255, 0.3)',
-  color: '#00ffff',
+  background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+  color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  border: theme.palette.mode === 'dark' 
+    ? '1px solid rgba(0, 255, 255, 0.3)' 
+    : '1px solid rgba(0, 128, 128, 0.3)',
   '&:hover': {
-    background: 'rgba(0, 255, 255, 0.2)',
-    boxShadow: '0 0 20px rgba(0, 255, 255, 0.3)'
+    background: theme.palette.mode === 'dark' 
+      ? 'rgba(0, 255, 255, 0.2)' 
+      : 'rgba(0, 128, 128, 0.1)',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 20px rgba(0, 255, 255, 0.3)' 
+      : '0 0 20px rgba(0, 128, 128, 0.2)'
   }
 }));
 

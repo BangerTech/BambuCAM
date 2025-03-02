@@ -5,92 +5,133 @@ import InfoIcon from '@mui/icons-material/Info';
 import { CircularProgress } from '@mui/material';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
-const GlassDialog = styled(Dialog)({
+const GlassDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
-    background: 'rgba(0, 0, 0, 0.8)',
+    background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.95)',
     backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(0, 255, 255, 0.2)',
+    border: theme.palette.mode === 'dark' 
+      ? '1px solid rgba(0, 255, 255, 0.2)' 
+      : '1px solid rgba(0, 128, 128, 0.2)',
     borderRadius: '15px',
-    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
-    color: '#00ffff'
-  }
-});
-
-const NeonButton = styled(Button)({
-  background: 'rgba(0, 0, 0, 0.8)',
-  color: '#00ffff',
-  border: '1px solid rgba(0, 255, 255, 0.3)',
-  '&:hover': {
-    background: 'rgba(0, 255, 255, 0.2)',
-    boxShadow: '0 0 20px rgba(0, 255, 255, 0.3)'
-  }
-});
-
-const NeonTextField = styled(TextField)({
-  '& .MuiOutlinedInput-root': {
-    '& fieldset': {
-      borderColor: 'rgba(0, 255, 255, 0.5)'
-    },
-    '&:hover fieldset': {
-      borderColor: 'rgba(0, 255, 255, 0.5)',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: '#00ffff',
-    }
-  },
-  '& .MuiInputLabel-root': {
-    color: '#00ffff'
-  },
-  '& .MuiInputBase-input': {
-    color: '#00ffff'
-  }
-});
-
-const PrinterCard = styled(Box)(({ theme }) => ({
-  background: 'rgba(0, 0, 0, 0.6)',
-  borderRadius: '10px',
-  padding: '15px',
-  border: '1px solid rgba(0, 255, 255, 0.3)',
-  transition: 'all 0.3s ease',
-  cursor: 'pointer',
-  '&:hover': {
-    border: '1px solid rgba(0, 255, 255, 0.8)',
-    boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
-    transform: 'translateY(-2px)'
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 30px rgba(0, 255, 255, 0.2)' 
+      : '0 0 30px rgba(0, 128, 128, 0.1)',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333'
   }
 }));
 
-const ModeBadge = styled(Chip)(({ mode }) => ({
+const NeonButton = styled(Button)(({ theme }) => ({
+  background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+  color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  border: theme.palette.mode === 'dark' 
+    ? '1px solid rgba(0, 255, 255, 0.3)' 
+    : '1px solid rgba(0, 128, 128, 0.3)',
+  '&:hover': {
+    background: theme.palette.mode === 'dark' 
+      ? 'rgba(0, 255, 255, 0.2)' 
+      : 'rgba(0, 128, 128, 0.1)',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 20px rgba(0, 255, 255, 0.3)' 
+      : '0 0 20px rgba(0, 128, 128, 0.2)'
+  }
+}));
+
+const NeonTextField = styled(TextField)(({ theme }) => ({
+  '& .MuiOutlinedInput-root': {
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
+    '& fieldset': {
+      borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(0, 128, 128, 0.3)',
+    },
+    '&:hover fieldset': {
+      borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 128, 128, 0.5)',
+    },
+    '&.Mui-focused fieldset': {
+      borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+    },
+  },
+  '& .MuiInputLabel-root': {
+    color: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+    '&.Mui-focused': {
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+    },
+  },
+  '& .MuiInputBase-input': {
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
+  }
+}));
+
+const NeonSelect = styled(Select)(({ theme }) => ({
+  color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
+  '& .MuiOutlinedInput-notchedOutline': {
+    borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(0, 128, 128, 0.3)',
+  },
+  '&:hover .MuiOutlinedInput-notchedOutline': {
+    borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 128, 128, 0.5)',
+  },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+    borderColor: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  },
+  '& .MuiSvgIcon-root': {
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  }
+}));
+
+const NeonInputLabel = styled(InputLabel)(({ theme }) => ({
+  color: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+  '&.Mui-focused': {
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  }
+}));
+
+const PrinterCard = styled(Box)(({ theme }) => ({
+  background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.9)',
+  border: theme.palette.mode === 'dark' ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(0, 128, 128, 0.3)',
+  borderRadius: '10px',
+  padding: '16px',
+  position: 'relative',
+  cursor: 'pointer',
+  marginBottom: '10px',
+  transition: 'all 0.2s ease-in-out',
+  boxShadow: theme.palette.mode === 'dark' ? '0 0 10px rgba(0, 255, 255, 0.1)' : '0 0 10px rgba(0, 128, 128, 0.1)',
+}));
+
+const ModeBadge = styled(Chip)(({ mode, theme }) => ({
   position: 'relative',
   float: 'right',
   marginBottom: '5px',
-  backgroundColor: mode === 'lan' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(0, 150, 255, 0.3)',
-  color: mode === 'lan' ? '#00ff00' : '#00ffff',
-  border: `1px solid ${mode === 'lan' ? '#00ff00' : '#00ffff'}`,
+  backgroundColor: mode === 'lan' 
+    ? (theme.palette.mode === 'dark' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(0, 180, 0, 0.1)')
+    : (theme.palette.mode === 'dark' ? 'rgba(0, 150, 255, 0.3)' : 'rgba(0, 128, 128, 0.1)'),
+  color: mode === 'lan' 
+    ? (theme.palette.mode === 'dark' ? '#00ff00' : '#008800')
+    : (theme.palette.mode === 'dark' ? '#00ffff' : '#008080'),
+  border: mode === 'lan'
+    ? `1px solid ${theme.palette.mode === 'dark' ? '#00ff00' : '#00aa00'}`
+    : `1px solid ${theme.palette.mode === 'dark' ? '#00ffff' : '#008080'}`,
   fontSize: '0.75rem',
   height: '24px'
 }));
 
-const ScanButton = styled(Button)({
+const ScanButton = styled(Button)(({ theme }) => ({
   width: '100%',
   marginTop: '20px',
   marginBottom: '20px',
   padding: '10px',
-  background: 'rgba(0, 0, 0, 0.8)',
-  color: '#00ffff',
-  border: '1px solid #00ffff',
+  background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+  color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
+  border: theme.palette.mode === 'dark' ? '1px solid #00ffff' : '1px solid #008080',
   borderRadius: '8px',
   textTransform: 'none',
   fontSize: '1rem',
   '&:hover': {
-    background: 'rgba(0, 255, 255, 0.1)',
-    boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+    background: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.1)' : 'rgba(0, 128, 128, 0.1)',
+    boxShadow: theme.palette.mode === 'dark' ? '0 0 15px rgba(0, 255, 255, 0.3)' : '0 0 15px rgba(0, 128, 128, 0.3)',
   },
   '&.Mui-disabled': {
-    color: 'rgba(0, 255, 255, 0.3)',
-    borderColor: 'rgba(0, 255, 255, 0.3)',
+    color: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(0, 128, 128, 0.3)',
+    borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(0, 128, 128, 0.3)',
   }
-});
+}));
 
 const PRINTER_TYPES = [
   { value: 'BAMBULAB', label: 'Bambu Lab' },
@@ -98,54 +139,65 @@ const PRINTER_TYPES = [
   { value: 'OCTOPRINT', label: 'OctoPrint' }
 ];
 
-const SetupHeader = styled(Box)({
+const SetupHeader = styled(Box)(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   marginBottom: '16px',
   '& .MuiTypography-root': {
     fontSize: '0.9rem',
     fontWeight: 500,
-    color: 'rgba(0, 255, 255, 0.9)'
+    color: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.9)' : 'rgba(0, 128, 128, 0.9)'
   },
   '& .MuiIconButton-root': {
     padding: '4px',
     marginLeft: '8px',
     '& .MuiSvgIcon-root': {
-      fontSize: '1rem'
+      fontSize: '1rem',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
     }
   }
-});
+}));
 
-const PrinterTypeCard = styled(Paper)(({ selected }) => ({
+const PrinterTypeCard = styled(Paper)(({ selected, theme }) => ({
   position: 'relative',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
   padding: '20px',
-  background: 'rgba(0, 0, 0, 0.6)',
-  border: selected ? '2px solid #00ffff' : '1px solid rgba(0, 255, 255, 0.3)',
+  background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.9)',
+  border: selected 
+    ? theme.palette.mode === 'dark' ? '2px solid #00ffff' : '2px solid #008080'
+    : theme.palette.mode === 'dark' ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(0, 128, 128, 0.3)',
   borderRadius: '10px',
   cursor: 'pointer',
   transition: 'all 0.3s ease',
   '&:hover': {
-    border: '1px solid rgba(0, 255, 255, 0.8)',
-    boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+    border: theme.palette.mode === 'dark' 
+      ? '1px solid rgba(0, 255, 255, 0.8)' 
+      : '1px solid rgba(0, 128, 128, 0.8)',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 15px rgba(0, 255, 255, 0.3)' 
+      : '0 0 15px rgba(0, 128, 128, 0.3)',
     transform: 'translateY(-2px)'
   }
 }));
 
-const PrinterIcon = styled('img')({
+const PrinterIcon = styled('img')(({ theme }) => ({
   width: '50px',
   height: '50px',
-  filter: 'brightness(0) invert(1) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(0.9)',
+  filter: theme.palette.mode === 'dark'
+    ? 'brightness(0) invert(1) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(0.9)'
+    : 'brightness(0) invert(0.4) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(0.5)',
   opacity: 0.9,
   transition: 'all 0.2s ease',
   '&:hover': {
     opacity: 1,
-    filter: 'brightness(0) invert(1) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(1)'
+    filter: theme.palette.mode === 'dark'
+      ? 'brightness(0) invert(1) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(1)'
+      : 'brightness(0) invert(0.4) sepia(100%) saturate(1000%) hue-rotate(155deg) brightness(0.6)'
   }
-});
+}));
 
 // Guides for each printer type
 const PRINTER_GUIDES = {
@@ -298,8 +350,9 @@ const AddPrinterDialog = ({
     <GlassDialog open={open} onClose={onClose}>
       <DialogTitle 
         sx={{ 
-          borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
-          textAlign: 'center'
+          borderBottom: theme => `1px solid ${theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.1)' : 'rgba(0, 128, 128, 0.1)'}`,
+          textAlign: 'center',
+          color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
         }}
       >
         Add Printer
@@ -314,13 +367,13 @@ const AddPrinterDialog = ({
               justifyContent: 'center'
             },
             '& .MuiTab-root': {
-              color: '#00ffff',
+              color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
               '&.Mui-selected': {
-                color: '#00ffff'
+                color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
               }
             },
             '& .MuiTabs-indicator': {
-              backgroundColor: '#00ffff'
+              backgroundColor: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
             }
           }}
         >
@@ -390,7 +443,9 @@ const AddPrinterDialog = ({
                     position: 'absolute',
                     top: 5,
                     right: 5,
-                    color: showGuide === type.value ? '#00ffff' : 'rgba(0, 255, 255, 0.6)'
+                    color: theme => showGuide === type.value 
+                      ? (theme.palette.mode === 'dark' ? '#00ffff' : '#008080') 
+                      : (theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.6)' : 'rgba(0, 128, 128, 0.6)')
                   }}
                 >
                   <InfoIcon fontSize={isMobile ? 'small' : 'medium'} />
@@ -400,13 +455,26 @@ const AddPrinterDialog = ({
           </Box>
 
           <Collapse in={!!showGuide}>
-            <Box sx={{ mb: 3, p: 2, border: '1px solid rgba(0, 255, 255, 0.2)', borderRadius: 1 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            <Box sx={{ 
+              mb: 3, 
+              p: 2, 
+              border: theme => theme.palette.mode === 'dark' 
+                ? '1px solid rgba(0, 255, 255, 0.2)' 
+                : '1px solid rgba(0, 128, 128, 0.2)', 
+              borderRadius: 1 
+            }}>
+              <Typography variant="subtitle2" sx={{ 
+                mb: 1,
+                color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
+              }}>
                 {PRINTER_GUIDES[showGuide]?.title}
               </Typography>
               <ol style={{ margin: 0, paddingLeft: '20px' }}>
                 {PRINTER_GUIDES[showGuide]?.steps.map((step, index) => (
-                  <li key={index} style={{ marginBottom: '4px' }}>
+                  <li key={index} style={{ 
+                    marginBottom: '4px',
+                    color: 'inherit'
+                  }}>
                     {step}
                   </li>
                 ))}
@@ -414,7 +482,7 @@ const AddPrinterDialog = ({
             </Box>
           </Collapse>
 
-          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: '#00ffff' }}>
+          <Typography variant="subtitle1" sx={{ mt: 2, mb: 1, color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
             Manual Setup:
           </Typography>
 
@@ -425,29 +493,29 @@ const AddPrinterDialog = ({
               onChange={(e) => handleInputChange('type', e.target.value)}
               label="Printer Type"
               sx={{ 
-                color: '#00ffff',
-                '& .MuiSelect-icon': { color: '#00ffff' },
+                color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
+                '& .MuiSelect-icon': { color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' },
                 '& .MuiOutlinedInput-notchedOutline': {
-                  borderColor: 'rgba(0, 255, 255, 0.5)'
+                  borderColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 128, 128, 0.5)'
                 },
                 '& .MuiPaper-root': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.9)'
+                  backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.95)'
                 }
               }}
               MenuProps={{
                 PaperProps: {
                   sx: {
-                    bgcolor: 'rgba(0, 0, 0, 0.9)',
-                    border: '1px solid rgba(0, 255, 255, 0.3)',
+                    bgcolor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+                    border: theme => theme.palette.mode === 'dark' ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(0, 128, 128, 0.3)',
                     '& .MuiMenuItem-root': {
-                      color: '#00ffff',
+                      color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
                       '&:hover': {
-                        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+                        backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.1)' : 'rgba(0, 128, 128, 0.1)'
                       },
                       '&.Mui-selected': {
-                        backgroundColor: 'rgba(0, 255, 255, 0.2)',
+                        backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.2)' : 'rgba(0, 128, 128, 0.2)',
                         '&:hover': {
-                          backgroundColor: 'rgba(0, 255, 255, 0.3)'
+                          backgroundColor: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(0, 128, 128, 0.3)'
                         }
                       }
                     }
@@ -489,7 +557,7 @@ const AddPrinterDialog = ({
 
           {scannedPrinters.length > 0 && (
             <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle1" sx={{ mb: 1, color: '#00ffff' }}>
+              <Typography variant="subtitle1" sx={{ mb: 1, color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#008080' }}>
                 Found Printers:
               </Typography>
               <Grid container spacing={2}>
@@ -499,14 +567,18 @@ const AddPrinterDialog = ({
                       key={printer.ip} 
                       onClick={() => handleScannedPrinterSelect(printer)}
                       sx={{
-                        border: printerData.ip === printer.ip ? '2px solid #00ffff' : '1px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: printerData.ip === printer.ip ? '0 0 15px rgba(0, 255, 255, 0.3)' : 'none',
+                        border: printerData.ip === printer.ip 
+                          ? theme.palette.mode === 'dark' ? '2px solid #00ffff' : '2px solid #008080'
+                          : theme.palette.mode === 'dark' ? '1px solid rgba(0, 255, 255, 0.3)' : '1px solid rgba(0, 128, 128, 0.3)',
+                        boxShadow: printerData.ip === printer.ip 
+                          ? theme.palette.mode === 'dark' ? '0 0 15px rgba(0, 255, 255, 0.3)' : '0 0 15px rgba(0, 128, 128, 0.3)'
+                          : 'none',
                         transform: printerData.ip === printer.ip ? 'translateY(-2px)' : 'none',
                         '&:hover': {
                           border: printerData.ip === printer.ip 
-                            ? '2px solid #00ffff' 
-                            : '1px solid rgba(0, 255, 255, 0.8)',
-                          boxShadow: '0 0 15px rgba(0, 255, 255, 0.3)',
+                            ? theme.palette.mode === 'dark' ? '2px solid #00ffff' : '2px solid #008080'
+                            : theme.palette.mode === 'dark' ? '1px solid rgba(0, 255, 255, 0.8)' : '1px solid rgba(0, 128, 128, 0.8)',
+                          boxShadow: theme.palette.mode === 'dark' ? '0 0 15px rgba(0, 255, 255, 0.3)' : '0 0 15px rgba(0, 128, 128, 0.3)',
                           transform: 'translateY(-2px)'
                         }
                       }}
@@ -517,26 +589,26 @@ const AddPrinterDialog = ({
                         size="small"
                       />
                       <Typography variant="h6" sx={{ 
-                        color: '#00ffff',
+                        color: theme => theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
                         mb: 1,
                         fontSize: '1rem',
                         fontWeight: 500
                       }}>
                         {printer.name}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                      <Typography variant="body2" sx={{ color: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>
                         IP: {printer.ip}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                      <Typography variant="body2" sx={{ color: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>
                         Model: {printer.model}
                       </Typography>
                       {printer.serial && (
-                        <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                        <Typography variant="body2" sx={{ color: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>
                           S/N: {printer.serial}
                         </Typography>
                       )}
                       {printer.version && (
-                        <Typography variant="body2" sx={{ color: 'rgba(0, 255, 255, 0.7)' }}>
+                        <Typography variant="body2" sx={{ color: theme => theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' }}>
                           Version: {printer.version}
                         </Typography>
                       )}
