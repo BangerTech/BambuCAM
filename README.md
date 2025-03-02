@@ -9,7 +9,7 @@
   <img src="assets/logo.png" alt="BambuCAM Logo" width="400"/>
 </div>
 
-> 🎥 A modern web application for monitoring BambuLab 3D printers with enhanced streaming capabilities and cloud support
+> 🎥 A modern web application for monitoring multiple 3D Printer (BambuLab X1C, Creality / Fluidd / Moonraker, OctoPrint) through their camera feeds
 
 ## Screenshots
 
@@ -26,15 +26,15 @@ _Left to right: Home screen, Add printer, Monitoring view with multiple printers
 - [Support](#support)
 
 ## What is BambuCAM?
-BambuCAM is a user-friendly web application for monitoring BambuLab 3D printers. It supports both local and cloud printers, offering enhanced video streaming through go2rtc integration and a clean, modern interface.
+BambuCAM is a user-friendly web application for monitoring different 3D printers (Bambulab X1C, Creality / Moonraker, OctoPrint). It supports both local and cloud printers, offering enhanced video streaming through go2rtc integration and a clean, modern interface.
 
 ### Features
-- 🎥 Enhanced live camera feeds with go2rtc integration
+- 🎥 Enhanced live camera feeds with [go2rtc](https://github.com/AlexxIT/go2rtc) integration
 - 🖱️ Drag & drop interface for camera arrangement
 - 🖥️ Fullscreen mode for each printer
 - ➕ Easy adding and removing of printers
 - 🔄 Improved stream stability and auto-reconnection
-- 🌐 Support for Bambu Cloud printers
+- 🌐 Support for Bambu Cloud printers ( no videostreaming on Cloud Mode yet )
 - 🔔 Status notifications and monitoring
 - 🚀 Optimized performance with nginx
 - 📱 Responsive design for all devices
@@ -190,7 +190,6 @@ If you cannot connect to the printer:
 
 For issues or questions, please create a [GitHub Issue](https://github.com/BangerTech/BambuCAM/issues).
 
-## Sponsorship
 
 ## Sponsorship
 
