@@ -14,11 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract tag name
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v5
@@ -26,7 +36,10 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile.prod
           push: true
-          tags: bangertech/bambucam-frontend:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            bangertech/bambucam-frontend:latest
+            bangertech/bambucam-frontend:${{ steps.tag.outputs.TAG }}
 
       - name: Build and push Backend
         uses: docker/build-push-action@v5
@@ -34,4 +47,7 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile.prod
           push: true
-          tags: bangertech/bambucam-backend:latest 
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            bangertech/bambucam-backend:latest
+            bangertech/bambucam-backend:${{ steps.tag.outputs.TAG }} 
