@@ -3,8 +3,15 @@ import json
 import logging
 from typing import Dict, Any, Optional, Callable
 from datetime import datetime
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Definiere Basis-Verzeichnis für Drucker-Dateien
+BASE_DIR = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+DATA_DIR = BASE_DIR / 'data'
+PRINTERS_DIR = DATA_DIR / 'printers'
 
 class OctoPrintService:
     def __init__(self):
@@ -48,104 +55,170 @@ class OctoPrintService:
             mqtt_broker = mqtt_config.get('broker', 'localhost')
             mqtt_port = int(mqtt_config.get('port', 1883))  # Port als Integer
             
-            logger.info(f"Connecting to MQTT broker at {mqtt_broker}:{mqtt_port}")
+            # Callbacks setzen
+            client.on_connect = lambda client, userdata, flags, rc: self._on_connect(client, userdata, flags, rc, printer_id)
+            client.on_message = lambda client, userdata, msg: self._on_message(client, userdata, msg, printer_id)
+            client.on_disconnect = lambda client, userdata, rc: self._on_disconnect(client, userdata, rc, printer_id)
             
-            def on_connect(client, userdata, flags, rc):
-                if rc == 0:
-                    logger.info(f"Successfully connected to MQTT broker for OctoPrint printer {printer_id}")
-                    # OctoPrint MQTT Topics
-                    topics = [
-                        ("octoPrint/temperature/tool0", 0),  # QoS 0
-                        ("octoPrint/temperature/bed", 0),
-                        ("octoPrint/event/PrintStarted", 0),
-                        ("octoPrint/event/PrintDone", 0),
-                        ("octoPrint/event/PrintFailed", 0),
-                        ("octoPrint/progress/printing", 0)
-                    ]
-                    
-                    for topic, qos in topics:
-                        logger.info(f"Subscribing to {topic}")
-                        client.subscribe(topic, qos)
-                else:
-                    logger.error(f"Failed to connect to MQTT broker for OctoPrint printer {printer_id}, return code: {rc}")
+            logger.info(f"Connecting to MQTT broker at {mqtt_broker}:{mqtt_port} for OctoPrint printer {printer_id}")
             
-            def on_message(client, userdata, msg):
-                try:
-                    logger.debug(f"Received MQTT message on topic {msg.topic}")
-                    
-                    topic = msg.topic
-                    payload = msg.payload.decode()
-                    data = json.loads(payload)
-                    
-                    if "progress/printing" in topic:
-                        # Status aus den printer_data flags auslesen
-                        if 'printer_data' in data and 'state' in data['printer_data']:
-                            state = data['printer_data']['state']
-                            flags = state.get('flags', {})
-                            
-                            if flags.get('error'):
-                                self.printers[printer_id]['status']['status'] = 'error'
-                            elif flags.get('printing'):
-                                self.printers[printer_id]['status']['status'] = 'printing'
-                            elif flags.get('paused'):
-                                self.printers[printer_id]['status']['status'] = 'paused'
-                            elif flags.get('operational'):
-                                self.printers[printer_id]['status']['status'] = 'ready'
-                            else:
-                                self.printers[printer_id]['status']['status'] = 'offline'
-                            
-                            # Progress aktualisieren
-                            if 'progress' in data['printer_data']:
-                                completion = data['printer_data']['progress'].get('completion', 0)
-                                if completion is not None:
-                                    self.printers[printer_id]['status']['progress'] = float(completion)
-                    
-                    if "temperature" in topic:
-                        if "tool0" in topic:
-                            self.printers[printer_id]['status']['temperatures']['hotend'] = float(data.get('actual', 0))
-                        elif "bed" in topic:
-                            self.printers[printer_id]['status']['temperatures']['bed'] = float(data.get('actual', 0))
-                    elif "event" in topic:
-                        event_type = topic.split('/')[-1]
-                        if event_type == "PrintStarted":
-                            self.printers[printer_id]['status']['status'] = 'printing'
-                        elif event_type == "PrintDone":
-                            self.printers[printer_id]['status']['status'] = 'completed'
-                        elif event_type == "PrintFailed":
-                            self.printers[printer_id]['status']['status'] = 'failed'
-                    
-                    logger.debug(f"Updated printer status: {self.printers[printer_id]['status']}")
-                    
-                except Exception as e:
-                    logger.error(f"Error processing MQTT message: {e}", exc_info=True)
-            
-            def on_disconnect(client, userdata, rc):
-                if rc != 0:
-                    logger.error(f"Unexpected MQTT disconnection for OctoPrint printer {printer_id}, rc: {rc}")
-                else:
-                    logger.info(f"MQTT client disconnected for OctoPrint printer {printer_id}")
-            
-            client.on_connect = on_connect
-            client.on_message = on_message
-            client.on_disconnect = on_disconnect
-            
-            # Verbinde zum konfigurierten MQTT Broker
+            # Verbindung herstellen
             client.connect(mqtt_broker, mqtt_port, 60)
             client.loop_start()
             
+            # Client speichern
             self.mqtt_clients[printer_id] = client
-            logger.info(f"MQTT client started for OctoPrint printer {printer_id}")
             
         except Exception as e:
-            logger.error(f"Error in MQTT connection for OctoPrint printer {printer_id}: {e}", exc_info=True)
+            logger.error(f"Error connecting to MQTT for OctoPrint printer {printer_id}: {e}", exc_info=True)
+            # Status auf offline setzen
+            if printer_id in self.printers and 'status' in self.printers[printer_id]:
+                self.printers[printer_id]['status']['status'] = 'offline'
+    
+    def _on_connect(self, client, userdata, flags, rc, printer_id):
+        """Callback wenn MQTT verbunden ist"""
+        if rc == 0:
+            logger.info(f"Connected to MQTT broker for OctoPrint printer {printer_id}")
+            # Auf relevante Topics subscriben
+            client.subscribe("octoPrint/temperature/#")
+            client.subscribe("octoPrint/progress")
+            client.subscribe("octoPrint/event/#")
+            
+            # Status auf verbunden setzen
+            if printer_id in self.printers and 'status' in self.printers[printer_id]:
+                self.printers[printer_id]['status']['status'] = 'ready'
+        else:
+            logger.error(f"Failed to connect to MQTT broker for OctoPrint printer {printer_id}, rc={rc}")
+            # Status auf offline setzen
+            if printer_id in self.printers and 'status' in self.printers[printer_id]:
+                self.printers[printer_id]['status']['status'] = 'offline'
+    
+    def _on_disconnect(self, client, userdata, rc, printer_id):
+        """Callback wenn MQTT getrennt wird"""
+        logger.warning(f"Disconnected from MQTT broker for OctoPrint printer {printer_id}, rc={rc}")
+        # Status auf offline setzen
+        if printer_id in self.printers and 'status' in self.printers[printer_id]:
             self.printers[printer_id]['status']['status'] = 'offline'
     
+    def _on_message(self, client, userdata, msg, printer_id):
+        """Callback für MQTT Nachrichten"""
+        try:
+            logger.debug(f"Received MQTT message on topic {msg.topic}")
+            
+            # Temperatur-Updates verarbeiten
+            if msg.topic.startswith("octoPrint/temperature/"):
+                sensor = msg.topic.split("/")[-1]
+                payload_str = msg.payload.decode('utf-8')
+                
+                try:
+                    # Versuche, die Nachricht als JSON zu parsen
+                    payload_json = json.loads(payload_str)
+                    
+                    # Extrahiere den tatsächlichen Temperaturwert
+                    if "actual" in payload_json:
+                        temperature = float(payload_json["actual"])
+                    elif "temperature" in payload_json:
+                        temperature = float(payload_json["temperature"])
+                    else:
+                        logger.warning(f"Unbekanntes Temperaturformat: {payload_str}")
+                        return
+                        
+                except json.JSONDecodeError:
+                    # Fallback: Versuche, die Nachricht direkt als Float zu konvertieren
+                    try:
+                        temperature = float(payload_str)
+                    except ValueError:
+                        logger.warning(f"Konnte Temperatur nicht parsen: {payload_str}")
+                        return
+                
+                if printer_id in self.printers and 'status' in self.printers[printer_id]:
+                    if sensor == "tool0":
+                        self.printers[printer_id]['status']['temperatures']['hotend'] = temperature
+                    elif sensor == "bed":
+                        self.printers[printer_id]['status']['temperatures']['bed'] = temperature
+                    elif sensor == "chamber":
+                        self.printers[printer_id]['status']['temperatures']['chamber'] = temperature
+                    
+                    # Status aktualisieren
+                    self.printers[printer_id]['status']['status'] = 'ready'
+                    
+                    # Debug-Ausgabe des aktualisierten Status
+                    logger.debug(f"Updated printer status: {self.printers[printer_id]['status']}")
+                    
+                    # Callback aufrufen, wenn vorhanden
+                    if printer_id in self.status_callbacks:
+                        self.status_callbacks[printer_id](self.printers[printer_id]['status'])
+            
+            # Fortschritt verarbeiten
+            elif msg.topic == "octoPrint/progress":
+                payload_str = msg.payload.decode('utf-8')
+                
+                try:
+                    # Versuche, die Nachricht als JSON zu parsen
+                    payload_json = json.loads(payload_str)
+                    
+                    # Extrahiere den Fortschrittswert
+                    if "completion" in payload_json:
+                        progress = float(payload_json["completion"])
+                    else:
+                        # Fallback: Versuche, die Nachricht direkt als Float zu konvertieren
+                        progress = float(payload_str)
+                        
+                except (json.JSONDecodeError, ValueError):
+                    try:
+                        # Fallback: Versuche, die Nachricht direkt als Float zu konvertieren
+                        progress = float(payload_str)
+                    except ValueError:
+                        logger.warning(f"Konnte Fortschritt nicht parsen: {payload_str}")
+                        return
+                
+                if printer_id in self.printers and 'status' in self.printers[printer_id]:
+                    self.printers[printer_id]['status']['progress'] = progress
+                    
+                    # Status auf Drucken setzen, wenn Fortschritt > 0
+                    if progress > 0:
+                        self.printers[printer_id]['status']['status'] = 'printing'
+                    
+                    # Callback aufrufen, wenn vorhanden
+                    if printer_id in self.status_callbacks:
+                        self.status_callbacks[printer_id](self.printers[printer_id]['status'])
+            
+            # Event-Updates verarbeiten
+            elif msg.topic.startswith("octoPrint/event/"):
+                event_type = msg.topic.split("/")[-1]
+                
+                if printer_id in self.printers and 'status' in self.printers[printer_id]:
+                    if event_type == "PrintStarted":
+                        self.printers[printer_id]['status']['status'] = 'printing'
+                    elif event_type == "PrintDone":
+                        self.printers[printer_id]['status']['status'] = 'completed'
+                    elif event_type == "PrintFailed":
+                        self.printers[printer_id]['status']['status'] = 'failed'
+                    elif event_type == "PrintPaused":
+                        self.printers[printer_id]['status']['status'] = 'paused'
+                    elif event_type == "PrintResumed":
+                        self.printers[printer_id]['status']['status'] = 'printing'
+                    
+                    # Callback aufrufen, wenn vorhanden
+                    if printer_id in self.status_callbacks:
+                        self.status_callbacks[printer_id](self.printers[printer_id]['status'])
+            
+        except Exception as e:
+            logger.error(f"Error processing MQTT message: {e}", exc_info=True)
+    
     def remove_printer(self, printer_id: str):
-        """Entfernt einen Drucker und trennt MQTT"""
+        """Entfernt einen OctoPrint Drucker"""
         if printer_id in self.mqtt_clients:
-            self.mqtt_clients[printer_id].loop_stop()
-            self.mqtt_clients[printer_id].disconnect()
-            del self.mqtt_clients[printer_id]
+            try:
+                client = self.mqtt_clients[printer_id]
+                client.loop_stop()
+                client.disconnect()
+                del self.mqtt_clients[printer_id]
+            except Exception as e:
+                logger.error(f"Error disconnecting MQTT client for printer {printer_id}: {e}")
+        
+        if printer_id in self.status_callbacks:
+            del self.status_callbacks[printer_id]
         
         if printer_id in self.printers:
             del self.printers[printer_id]
@@ -204,6 +277,46 @@ class OctoPrintService:
                 self._connect_mqtt(printer_id)
             except Exception as e:
                 logger.error(f"Error reconnecting MQTT for printer {printer_id}: {e}")
+                
+    def initialize_from_stored_printers(self):
+        """Lädt alle gespeicherten OctoPrint-Drucker und stellt MQTT-Verbindungen her"""
+        logger.info("Initializing OctoPrint service from stored printers")
+        try:
+            # Stelle sicher, dass das Verzeichnis existiert
+            if not os.path.exists(PRINTERS_DIR):
+                logger.warning(f"Printers directory {PRINTERS_DIR} does not exist")
+                return
+                
+            # Zähle gefundene OctoPrint-Drucker
+            octoprint_count = 0
+            
+            # Durchlaufe alle Drucker-Dateien
+            for printer_file in os.listdir(PRINTERS_DIR):
+                if printer_file.endswith('.json'):
+                    try:
+                        with open(os.path.join(PRINTERS_DIR, printer_file), 'r') as f:
+                            printer_data = json.load(f)
+                            
+                            # Prüfe, ob es ein OctoPrint-Drucker ist
+                            if printer_data.get('type') == 'OCTOPRINT':
+                                printer_id = printer_data.get('id')
+                                if not printer_id:
+                                    # Verwende Dateinamen ohne .json als ID
+                                    printer_id = printer_file.replace('.json', '')
+                                    printer_data['id'] = printer_id
+                                
+                                logger.info(f"Found OctoPrint printer: {printer_data.get('name')} (ID: {printer_id})")
+                                
+                                # Füge Drucker hinzu und verbinde MQTT
+                                self.add_printer(printer_data)
+                                octoprint_count += 1
+                    except Exception as e:
+                        logger.error(f"Error loading printer from {printer_file}: {e}", exc_info=True)
+            
+            logger.info(f"Initialized {octoprint_count} OctoPrint printers")
+            
+        except Exception as e:
+            logger.error(f"Error initializing OctoPrint service: {e}", exc_info=True)
 
 # Globale Instanz
 octoprint_service = OctoPrintService() 

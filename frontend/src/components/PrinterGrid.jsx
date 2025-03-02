@@ -294,7 +294,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
 
       for (const printer of cloudPrinters) {
         try {
-          const response = await fetch(`${API_URL}/api/cloud/printers/${printer.id}/status`, {
+          const response = await fetch(`${API_URL}/cloud/printers/${printer.id}/status`, {
             credentials: 'include'
           });
           if (!response.ok) continue;
@@ -741,7 +741,7 @@ const PrinterGrid = ({ onThemeToggle, isDarkMode, mode, onModeChange, printers =
     if (mode === 'cloud') {
       try {
         // Fetch available cloud printers
-        const response = await fetch(`${API_URL}/api/cloud/printers`, {
+        const response = await fetch(`${API_URL}/cloud/printers`, {
           credentials: 'include'
         });
         if (!response.ok) {

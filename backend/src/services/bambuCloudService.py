@@ -10,6 +10,7 @@ import paho.mqtt.client as mqtt
 import threading
 import time
 import ssl
+from src.services.printerService import getPrinters
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,7 @@ class BambuCloudService:
         """Setup MQTT connection"""
         if not self.token or not self.config.get('user_id'):
             logger.warning("Token or user ID missing for MQTT setup")
-            return
+            return False
 
         try:
             # Stop existing client if any
@@ -304,65 +305,12 @@ class BambuCloudService:
                 transport="tcp"
             )
             
-            def on_connect(client, userdata, flags, rc):
-                """Callback when client connects to MQTT broker"""
-                rc_codes = {
-                    0: "Connection successful",
-                    1: "Connection refused - incorrect protocol version",
-                    2: "Connection refused - invalid client identifier",
-                    3: "Connection refused - server unavailable",
-                    4: "Connection refused - bad username or password",
-                    5: "Connection refused - not authorized"
-                }
-                if rc == 0:
-                    logger.info("MQTT Connected successfully")
-                    self.mqtt_connected = True
-                    # Subscribe to all device topics
-                    for printer in self.printers:
-                        topic = f"device/{printer['dev_id']}/report"
-                        logger.info(f"Subscribing to topic: {topic}")
-                        client.subscribe(topic)
-                else:
-                    logger.error(f"MQTT Connection failed: {rc_codes.get(rc, f'Unknown error {rc}')}")
-                    self.mqtt_connected = False
-
-            def on_disconnect(client, userdata, rc):
-                """Callback when client disconnects from MQTT broker"""
-                logger.warning(f"MQTT Disconnected with result code: {rc}")
-                self.mqtt_connected = False
-
-            def on_message(client, userdata, msg):
-                """Callback when message is received"""
-                try:
-                    logger.debug(f"MQTT message received on topic {msg.topic}")
-                    payload = json.loads(msg.payload)
-                    logger.debug(f"MQTT message payload: {payload}")
-                    
-                    # Extract printer ID from topic
-                    printer_id = msg.topic.split('/')[1]
-                    
-                    # Update printer data
-                    if printer_id in self.printer_data:
-                        self.printer_data[printer_id].update(payload)
-                    else:
-                        self.printer_data[printer_id] = payload
-                        
-                    logger.debug(f"Updated printer data for {printer_id}: {self.printer_data[printer_id]}")
-                    
-                except json.JSONDecodeError:
-                    logger.error(f"Failed to decode MQTT message: {msg.payload}")
-                except Exception as e:
-                    logger.error(f"Error processing MQTT message: {e}", exc_info=True)
-
-            def on_subscribe(client, userdata, mid, granted_qos):
-                """Callback when subscription is confirmed"""
-                logger.info(f"MQTT Subscription confirmed. Message ID: {mid}, QoS: {granted_qos}")
-
             # Set callbacks
-            self.mqtt_client.on_connect = on_connect
-            self.mqtt_client.on_disconnect = on_disconnect
-            self.mqtt_client.on_message = on_message
-            self.mqtt_client.on_subscribe = on_subscribe
+            self.mqtt_client.on_connect = self.on_mqtt_connect
+            self.mqtt_client.on_disconnect = self.on_mqtt_disconnect
+            self.mqtt_client.on_message = self.on_mqtt_message
+            self.mqtt_client.on_subscribe = self.on_mqtt_subscribe
+            self.mqtt_client.on_log = self.on_mqtt_log
 
             # Configure TLS
             logger.debug("Configuring TLS for MQTT connection")
@@ -378,15 +326,22 @@ class BambuCloudService:
             password = self.token
             logger.debug(f"Setting MQTT credentials - Username: {username}")
             self.mqtt_client.username_pw_set(username, password)
-
-            # Connect
-            logger.info(f"Connecting to MQTT broker at {self.mqtt_host}")
-            self.mqtt_client.connect(self.mqtt_host, 8883, 60)
+            
+            # Start MQTT loop
             self.mqtt_client.loop_start()
             
+            # Connect to MQTT broker
+            try:
+                self.mqtt_client.connect(self.mqtt_host, 8883, keepalive=60)
+                logger.info("MQTT connection initiated")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to connect to MQTT broker: {e}", exc_info=True)
+                return False
+                
         except Exception as e:
             logger.error(f"Error setting up MQTT: {e}", exc_info=True)
-            self.mqtt_connected = False
+            return False
 
     def get_cloud_printer_status(self, printer_id: str, access_code: str):
         """Get status of a cloud printer"""
@@ -540,7 +495,7 @@ class BambuCloudService:
                     'total_layers': data.get('print', {}).get('total_layers', 0)
                 }
             }
-            return None
+        return None
 
     def request_full_printer_status(self, printer_id):
         """Request full printer status using pushing.pushall command"""
@@ -851,6 +806,72 @@ class BambuCloudService:
     def on_mqtt_log(self, client, userdata, level, buf):
         """Callback for MQTT client logging"""
         logger.debug(f"MQTT Log: {buf}")
+
+    def reconnect_mqtt(self):
+        """Attempt to reconnect MQTT if disconnected"""
+        if not self.mqtt_client:
+            logger.info("No MQTT client exists, setting up new connection")
+            return self.setup_mqtt()
+            
+        if self.mqtt_connected:
+            logger.info("MQTT already connected, no need to reconnect")
+            return True
+            
+        try:
+            logger.info("Attempting to reconnect MQTT client")
+            self.mqtt_client.reconnect()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to reconnect MQTT: {e}", exc_info=True)
+            # If reconnect fails, try a full setup
+            logger.info("Reconnect failed, attempting full MQTT setup")
+            return self.setup_mqtt()
+            
+    def initialize_from_stored_printers(self):
+        """Lädt alle gespeicherten Cloud-Drucker und stellt MQTT-Verbindungen her"""
+        logger.info("Initializing Bambu Cloud service from stored printers")
+        try:
+            # Prüfe zuerst, ob lokale Bambu Cloud-Drucker vorhanden sind
+            stored_printers = getPrinters()
+            cloud_printers = [p for p in stored_printers if p.get('type') == 'CLOUD' or 
+                             (p.get('type') == 'BAMBULAB' and p.get('isCloud') == True)]
+            
+            if not cloud_printers:
+                logger.info("No local Bambu Cloud printers found in printers directory, skipping cloud initialization")
+                return
+                
+            logger.info(f"Found {len(cloud_printers)} local Bambu Cloud printers, proceeding with cloud initialization")
+            
+            # Prüfe, ob wir gültige Zugangsdaten haben
+            config_status = self.load_config()
+            if not config_status.get('success'):
+                logger.warning("No valid cloud credentials found, skipping cloud printer initialization")
+                return
+                
+            # Hole Cloud-Drucker
+            cloud_printers_api = self.get_cloud_printers_internal()
+            if not cloud_printers_api:
+                logger.info("No cloud printers found in Bambu API")
+                return
+                
+            # Stelle MQTT-Verbindung her
+            mqtt_setup_success = self.setup_mqtt()
+            logger.info(f"MQTT setup {'successful' if mqtt_setup_success else 'failed'}")
+            
+            # Verbinde mit jedem Drucker
+            for printer in cloud_printers_api:
+                try:
+                    printer_id = printer.get('dev_id')
+                    if printer_id:
+                        logger.info(f"Setting up MQTT for cloud printer: {printer.get('name')} (ID: {printer_id})")
+                        self.setup_mqtt_for_printer(printer_id)
+                except Exception as e:
+                    logger.error(f"Error setting up MQTT for cloud printer: {e}", exc_info=True)
+                    
+            logger.info(f"Initialized {len(cloud_printers_api)} cloud printers")
+            
+        except Exception as e:
+            logger.error(f"Error initializing Bambu Cloud service: {e}", exc_info=True)
 
 # Global instance
 bambu_cloud_service = BambuCloudService() 

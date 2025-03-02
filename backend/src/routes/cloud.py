@@ -5,7 +5,7 @@ from src.config import Config
 import json
 import os
 import logging
-from src.services.printerService import getPrinterById
+from src.services.printerService import getPrinterById, printer_service
 from src.services.octoprintService import octoprint_service
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,15 @@ def get_cloud_status():
         config_status = bambu_cloud_service.load_config()
         
         if config_status.get('success'):
+            # Explicitly set up MQTT when switching to cloud mode
+            if mode == 'cloud' and not bambu_cloud_service.mqtt_connected:
+                logger.info("Setting up MQTT connection for cloud mode")
+                # Get cloud printers first to populate the printers list
+                bambu_cloud_service.get_cloud_printers_internal()
+                # Then reconnect MQTT
+                mqtt_reconnect_success = bambu_cloud_service.reconnect_mqtt()
+                logger.info(f"MQTT reconnection {'successful' if mqtt_reconnect_success else 'failed'}")
+            
             return jsonify({
                 'connected': True,
                 'mqtt_connected': bambu_cloud_service.mqtt_connected,
@@ -210,12 +219,15 @@ def add_cloud_printer():
 @cloud_bp.route('/api/cloud/printers/<printer_id>/status', methods=['GET'])
 @cross_origin(supports_credentials=True)
 def get_cloud_printer_status(printer_id):
-    """Get status of a cloud printer"""
     try:
-        # Get printer info from database
+        # Get printer from database
         printer = getPrinterById(printer_id)
         if not printer:
-            raise HTTPException(status_code=404, detail="Printer not found")
+            return jsonify({'error': 'Printer not found'}), 404
+        
+        # Add debug logging
+        logger.debug(f"Printer object in status route: {printer}")
+        logger.debug(f"CloudId in status route: {printer.get('cloudId')}")
             
         logger.debug(f"Fetching status for cloud printer {printer_id} (cloudId: {printer.get('cloudId')})")
         
@@ -228,7 +240,7 @@ def get_cloud_printer_status(printer_id):
             # Format response using MQTT data
             response = {
                 'online': True,  # If we have MQTT data, the printer is online
-                'print_status': printer_data.get('print', {}).get('gcode_state', 'IDLE'),
+                'print_status': 'IDLE',  # Default value
                 'temperatures': mqtt_data.get('temperatures', {
                     'hotend': 0.0,
                     'bed': 0.0,
@@ -238,11 +250,22 @@ def get_cloud_printer_status(printer_id):
                     'hotend': 0.0,
                     'bed': 0.0
                 }),
-                'progress': printer_data.get('print', {}).get('mc_percent', 0.0),
-                'remaining_time': printer_data.get('print', {}).get('mc_remaining_time', 0),
-                'current_layer': printer_data.get('print', {}).get('current_layer', 0),
-                'total_layers': printer_data.get('print', {}).get('total_layers', 0)
+                'progress': 0.0,
+                'remaining_time': 0,
+                'current_layer': 0,
+                'total_layers': 0
             }
+            
+            # Only try to access printer_data if it's not None
+            if printer_data:
+                response.update({
+                    'print_status': printer_data.get('print', {}).get('gcode_state', 'IDLE'),
+                    'progress': printer_data.get('print', {}).get('mc_percent', 0.0),
+                    'remaining_time': printer_data.get('print', {}).get('mc_remaining_time', 0),
+                    'current_layer': printer_data.get('print', {}).get('current_layer', 0),
+                    'total_layers': printer_data.get('print', {}).get('total_layers', 0)
+                })
+            
             logger.debug(f"Formatted MQTT status response: {response}")
             return response
             
@@ -281,18 +304,17 @@ def get_cloud_printer_status(printer_id):
         
     except Exception as e:
         logger.error(f"Error getting cloud printer status: {e}", exc_info=True)
-        if not status:
-            logger.warning(f"No status received for printer {printer_id}")
-        return {
+        # Return a fallback response with proper JSON formatting
+        return jsonify({
             'online': False,
-            'print_status': 'IDLE',
+            'print_status': 'OFFLINE',
             'temperatures': {'hotend': 0.0, 'bed': 0.0, 'chamber': 0.0},
             'targets': {'hotend': 0.0, 'bed': 0.0},
             'progress': 0.0,
             'remaining_time': 0,
             'current_layer': 0,
             'total_layers': 0
-        }
+        })
 
 @cloud_bp.route('/api/cloud/printers/<printer_id>/stream', methods=['GET'])
 @cross_origin(supports_credentials=True)
@@ -303,6 +325,10 @@ def get_cloud_printer_stream(printer_id):
         
         if not printer:
             return jsonify({'error': 'Printer not found'}), 404
+        
+        # Add debug logging
+        logger.debug(f"Printer object: {printer}")
+        logger.debug(f"CloudId: {printer.get('cloudId')}, AccessCode: {printer.get('accessCode')}")
             
         # Get stream info from cloud service
         stream_info = bambu_cloud_service.get_stream_url(
