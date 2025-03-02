@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Typography, LinearProgress } from '@mui/material';
+import { Box, Typography, LinearProgress, IconButton } from '@mui/material';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import { Logger, LOG_CATEGORIES } from '../../utils/logger';
 
-const BambuLabInfo = ({ printer, status }) => {
+const BambuLabInfo = ({ printer, status, onEmergencyStop }) => {
   // Debug-Logging
   Logger.debug('BambuLabInfo render:', {
     printer_id: printer?.id,
@@ -29,9 +30,29 @@ const BambuLabInfo = ({ printer, status }) => {
     }}>
       {/* Status und Temperaturen */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="body2">
-          Status: {status?.status || 'Offline'}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2">
+            Status: {status?.status || 'Offline'}
+          </Typography>
+          <IconButton
+            onClick={() => onEmergencyStop && onEmergencyStop(printer.id)}
+            disabled={!status || status.status === 'offline'}
+            sx={{
+              color: '#ff5555',
+              padding: '2px',
+              height: '24px',
+              width: '24px',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 0, 0, 0.1)'
+              },
+              '&.Mui-disabled': {
+                color: 'rgba(255, 85, 85, 0.3)'
+              }
+            }}
+          >
+            <StopCircleIcon fontSize="small" />
+          </IconButton>
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Typography variant="body2">
             Hotend: {formatTemp(status?.temperatures?.hotend)} / {formatTemp(status?.targets?.hotend)}

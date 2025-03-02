@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, LinearProgress } from '@mui/material';
+import { Box, Typography, LinearProgress, IconButton } from '@mui/material';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import { styled } from '@mui/material/styles';
 import { API_URL } from '../../config';
 
@@ -28,7 +29,7 @@ const statusMap = {
   'failed': 'Print Failed'
 };
 
-const OctoPrintInfo = ({ printer }) => {
+const OctoPrintInfo = ({ printer, onEmergencyStop }) => {
   const [printerStatus, setPrinterStatus] = useState({
     id: printer.id,
     name: printer.name,
@@ -127,9 +128,29 @@ const OctoPrintInfo = ({ printer }) => {
 
   return (
     <InfoContainer>
-      <Typography variant="body1" sx={{ mb: 1 }}>
-        Status: {statusMap[status] || status}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Typography variant="body1">
+          Status: {statusMap[status] || status}
+        </Typography>
+        <IconButton
+          onClick={() => onEmergencyStop && onEmergencyStop(printer.id)}
+          disabled={status === 'offline' || status === 'connecting'}
+          sx={{
+            color: '#ff5555',
+            padding: '2px',
+            height: '24px',
+            width: '24px',
+            '&:hover': {
+              backgroundColor: 'rgba(255, 0, 0, 0.1)'
+            },
+            '&.Mui-disabled': {
+              color: 'rgba(255, 85, 85, 0.3)'
+            }
+          }}
+        >
+          <StopCircleIcon fontSize="small" />
+        </IconButton>
+      </Box>
       <Typography variant="body2">
         Hotend: {hotendTemp?.toFixed(1)}°C
       </Typography>

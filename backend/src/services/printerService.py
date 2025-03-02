@@ -461,6 +461,10 @@ class PrinterService:
                 if 'streamUrl' not in printer_data:
                     printer_data['streamUrl'] = f"http://{data['ip']}/webcam/?action=stream"
                 
+                # Stelle sicher, dass der API-Key gespeichert wird
+                if 'apiKey' not in printer_data and 'api_key' in data:
+                    printer_data['apiKey'] = data['api_key']
+                
                 # OctoPrint Service kümmert sich um die MQTT-Verbindung
                 from src.services.octoprintService import octoprint_service
                 octoprint_service.add_printer(printer_data)
@@ -620,6 +624,65 @@ class PrinterService:
         
         except Exception as e:
             logger.error(f"Error removing printer: {e}")
+            return False
+
+    def emergency_stop_creality(self, printer_id: str):
+        """Sendet einen Notfall-Stopp-Befehl an einen Creality Drucker"""
+        try:
+            printer = getPrinterById(printer_id)
+            if not printer:
+                logger.error(f"Printer {printer_id} not found")
+                return False
+                
+            printer_ip = printer.get('ip')
+            if not printer_ip:
+                logger.error(f"No IP address found for printer {printer_id}")
+                return False
+                
+            # Creality K1 verwendet die Moonraker API
+            # Sende einen Emergency Stop Befehl
+            base_url = f"http://{printer_ip}:7125"
+            
+            logger.info(f"Sending emergency stop command to Creality printer {printer_id} at {printer_ip}")
+            
+            # Try JSON-RPC format first (official Moonraker API)
+            try:
+                json_rpc_payload = {
+                    "id": int(time.time()),
+                    "method": "emergency_stop"
+                }
+                response = requests.post(f"{base_url}/printer/api", json=json_rpc_payload, timeout=5)
+                
+                if response.status_code == 200:
+                    logger.info(f"Emergency stop command sent successfully via JSON-RPC to Creality printer {printer_id}")
+                    
+                    # Aktualisiere den Status des Druckers
+                    if printer_id in self.printer_data:
+                        self.printer_data[printer_id]['status'] = 'stopped'
+                        self.printer_data[printer_id]['state'] = 'error'
+                    
+                    return True
+            except Exception as e:
+                logger.warning(f"JSON-RPC emergency stop failed, trying REST endpoint: {e}")
+            
+            # Fallback to REST-style endpoint
+            response = requests.post(f"{base_url}/printer/emergency_stop", timeout=5)
+            
+            if response.status_code == 200:
+                logger.info(f"Emergency stop command sent successfully via REST endpoint to Creality printer {printer_id}")
+                
+                # Aktualisiere den Status des Druckers
+                if printer_id in self.printer_data:
+                    self.printer_data[printer_id]['status'] = 'stopped'
+                    self.printer_data[printer_id]['state'] = 'error'
+                
+                return True
+            else:
+                logger.error(f"Failed to send emergency stop command: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending emergency stop command to Creality printer: {e}", exc_info=True)
             return False
 
 # Globale Instanz des PrinterService

@@ -873,5 +873,37 @@ class BambuCloudService:
         except Exception as e:
             logger.error(f"Error initializing Bambu Cloud service: {e}", exc_info=True)
 
+    def emergency_stop_printer(self, printer_id):
+        """Sendet einen Notfall-Stopp-Befehl an einen Bambu Cloud Drucker"""
+        try:
+            if not self.mqtt_client or not self.mqtt_connected:
+                logger.error("MQTT client not connected, cannot send emergency stop")
+                return False
+                
+            # Sende M112 Notfall-Stopp-Befehl
+            request_topic = f"device/{printer_id}/request"
+            command = {
+                "print": {
+                    "sequence_id": str(int(time.time())),
+                    "command": "gcode_line",
+                    "param": "M112",  # Emergency Stop Gcode
+                    "user_id": "PrintCam"
+                }
+            }
+            
+            logger.info(f"Sending emergency stop command to cloud printer {printer_id}")
+            result = self.mqtt_client.publish(request_topic, json.dumps(command))
+            
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                logger.info(f"Emergency stop command sent successfully to cloud printer {printer_id}")
+                return True
+            else:
+                logger.error(f"Failed to send emergency stop command: {result.rc}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending emergency stop command to cloud printer: {e}", exc_info=True)
+            return False
+
 # Global instance
 bambu_cloud_service = BambuCloudService() 

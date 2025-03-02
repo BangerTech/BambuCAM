@@ -244,4 +244,75 @@ def add_octoprint_printer():
         
     except Exception as e:
         logger.error(f"Error adding OctoPrint printer: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+
+@printers_bp.route('/printers/<printer_id>/emergency_stop', methods=['POST', 'OPTIONS'])
+@cross_origin(supports_credentials=True, allow_headers=['Content-Type', 'Accept', 'Cache-Control'])
+def emergency_stop_printer(printer_id):
+    """Notfall-Stopp für einen Drucker ausführen"""
+    try:
+        logger.info(f"Emergency stop requested for printer {printer_id}")
+        
+        # Drucker-Daten abrufen
+        printer = getPrinterById(printer_id)
+        if not printer:
+            return jsonify({
+                'success': False,
+                'error': f'Printer with ID {printer_id} not found'
+            }), 404
+            
+        printer_type = printer.get('type', '').upper()
+        
+        result = {
+            'success': False,
+            'message': 'Not implemented for this printer type'
+        }
+        
+        # Je nach Druckertyp unterschiedliche Stopp-Methode aufrufen
+        if printer_type == 'BAMBULAB':
+            # Für Bambu Lab LAN-Drucker
+            success = mqtt_service.emergency_stop_printer(printer_id)
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to Bambu Lab printer'
+            }
+            
+        elif printer_type == 'CLOUD':
+            # Für Bambu Lab Cloud-Drucker
+            from src.services.bambuCloudService import bambu_cloud_service
+            success = bambu_cloud_service.emergency_stop_printer(printer.get('cloudId') or printer.get('dev_id'))
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to Bambu Cloud printer'
+            }
+            
+        elif printer_type == 'OCTOPRINT':
+            # Für OctoPrint-Drucker
+            success = octoprint_service.emergency_stop_printer(printer_id)
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to OctoPrint printer'
+            }
+            
+        elif printer_type == 'CREALITY':
+            # Für Creality-Drucker
+            success = printer_service.emergency_stop_creality(printer_id)
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to Creality printer'
+            }
+            
+        # Logging des Ergebnisses
+        if result['success']:
+            logger.info(f"Emergency stop successful for {printer_type} printer {printer_id}")
+        else:
+            logger.error(f"Emergency stop failed for {printer_type} printer {printer_id}")
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error during emergency stop for printer {printer_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500 

@@ -6,6 +6,7 @@ from datetime import datetime
 from .notificationService import send_printer_notification
 from pathlib import Path
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,44 @@ class MQTTService:
         except Exception as e:
             logger.error(f"Error processing status data: {e}")
             return None
+
+    def emergency_stop_printer(self, printer_id):
+        """Sendet einen Notfall-Stopp-Befehl an einen Bambu Lab Drucker über MQTT"""
+        try:
+            if printer_id not in self.clients:
+                logger.error(f"No MQTT client found for printer {printer_id}")
+                return False
+                
+            client = self.clients[printer_id]
+            if not client.is_connected():
+                logger.error(f"MQTT client for printer {printer_id} is not connected")
+                return False
+                
+            # Sende M112 Notfall-Stopp-Befehl
+            # Für Bambu Lab müssen wir den Befehl im richtigen Format senden
+            command_topic = f"device/{printer_id}/request"
+            command = {
+                "print": {
+                    "sequence_id": str(int(time.time())),
+                    "command": "gcode_line",
+                    "param": "M112",  # Emergency Stop Gcode
+                    "user_id": "PrintCam"
+                }
+            }
+            
+            logger.info(f"Sending emergency stop command to printer {printer_id}")
+            result = client.publish(command_topic, json.dumps(command))
+            
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                logger.info(f"Emergency stop command sent successfully to printer {printer_id}")
+                return True
+            else:
+                logger.error(f"Failed to send emergency stop command: {result.rc}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending emergency stop command: {e}", exc_info=True)
+            return False
 
 # Globale Instanz
 mqtt_service = MQTTService() 

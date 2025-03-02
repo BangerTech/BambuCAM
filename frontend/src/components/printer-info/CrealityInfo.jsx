@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Typography, LinearProgress } from '@mui/material';
+import { Box, Typography, LinearProgress, IconButton } from '@mui/material';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import { Logger, LOG_CATEGORIES } from '../../utils/logger';
 
-const CrealityInfo = ({ printer }) => {
+const CrealityInfo = ({ printer, onEmergencyStop }) => {
   Logger.printer('Rendering CrealityInfo with data:', {
     temps: printer.temperatures,
     targets: printer.targets,
@@ -28,9 +29,29 @@ const CrealityInfo = ({ printer }) => {
       zIndex: 2
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-        <Typography variant="body2">
-          Status: {printer.state || 'offline'}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2">
+            Status: {printer.state || 'offline'}
+          </Typography>
+          <IconButton
+            onClick={() => onEmergencyStop && onEmergencyStop(printer.id)}
+            disabled={!printer.state || printer.state === 'offline'}
+            sx={{
+              color: '#ff5555',
+              padding: '2px',
+              height: '24px',
+              width: '24px',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 0, 0, 0.1)'
+              },
+              '&.Mui-disabled': {
+                color: 'rgba(255, 85, 85, 0.3)'
+              }
+            }}
+          >
+            <StopCircleIcon fontSize="small" />
+          </IconButton>
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Typography variant="body2">
             Hotend: {temps.hotend?.toFixed(1) || '-.--'}°C

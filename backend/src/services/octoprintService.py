@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 import os
 from pathlib import Path
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class OctoPrintService:
         self.printers[printer_id] = {
             'ip': printer_data['ip'],
             'name': printer_data['name'],
+            'apiKey': printer_data.get('apiKey', ''),  # Store API key
             'mqtt': {  # MQTT-Konfiguration hinzufügen
                 'broker': printer_data.get('mqttBroker', printer_data.get('mqtt', {}).get('broker', 'localhost')),
                 'port': int(printer_data.get('mqttPort', printer_data.get('mqtt', {}).get('port', 1883)))
@@ -317,6 +319,99 @@ class OctoPrintService:
             
         except Exception as e:
             logger.error(f"Error initializing OctoPrint service: {e}", exc_info=True)
+
+    def emergency_stop_printer(self, printer_id: str):
+        """Sendet einen Notfall-Stopp-Befehl an einen OctoPrint Drucker"""
+        try:
+            if printer_id not in self.printers:
+                logger.error(f"Printer {printer_id} not found")
+                return False
+                
+            printer = self.printers[printer_id]
+            printer_ip = printer.get('ip')
+            
+            if not printer_ip:
+                logger.error(f"No IP address found for printer {printer_id}")
+                return False
+            
+            success = False
+            
+            # Try MQTT first
+            if printer_id in self.mqtt_clients:
+                client = self.mqtt_clients[printer_id]
+                if client.is_connected():
+                    # Sende Notfall-Stopp über MQTT
+                    # OctoPrint verwendet normalerweise ein anderes Topic-Format
+                    command_topic = "octoPrint/command/emergency_stop"
+                    
+                    logger.info(f"Sending emergency stop command to OctoPrint printer {printer_id} via MQTT")
+                    result = client.publish(command_topic, "M112")  # M112 ist der Emergency Stop G-Code
+                    
+                    if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                        logger.info(f"Emergency stop command sent successfully to OctoPrint printer {printer_id} via MQTT")
+                        success = True
+                    else:
+                        logger.warning(f"Failed to send emergency stop command via MQTT: {result.rc}")
+                else:
+                    logger.warning(f"MQTT client for printer {printer_id} is not connected")
+            else:
+                logger.warning(f"No MQTT client found for printer {printer_id}")
+            
+            # If MQTT failed, try REST API
+            if not success:
+                try:
+                    # Get API key from printer data
+                    api_key = printer.get('apiKey')
+                    
+                    if not api_key:
+                        logger.warning(f"No API key found for OctoPrint printer {printer_id}, trying without authentication")
+                    
+                    # Build the REST API URL
+                    api_url = f"http://{printer_ip}/api/printer/command"
+                    
+                    # Prepare headers with API key if available
+                    headers = {
+                        'Content-Type': 'application/json'
+                    }
+                    
+                    if api_key:
+                        headers['X-Api-Key'] = api_key
+                    
+                    # Prepare payload with M112 command
+                    payload = {
+                        "commands": ["M112"]
+                    }
+                    
+                    logger.info(f"Sending emergency stop command to OctoPrint printer {printer_id} via REST API")
+                    
+                    response = requests.post(api_url, json=payload, headers=headers, timeout=5)
+                    
+                    if response.status_code == 204 or response.status_code == 200:
+                        logger.info(f"Emergency stop command sent successfully to OctoPrint printer {printer_id} via REST API")
+                        success = True
+                    else:
+                        logger.error(f"Failed to send emergency stop command via REST API: {response.status_code} - {response.text}")
+                except Exception as e:
+                    logger.error(f"Error sending emergency stop command via REST API: {e}", exc_info=True)
+            
+            # Update printer status if successful
+            if success:
+                # Aktualisiere den Status des Druckers
+                if 'status' in self.printers[printer_id]:
+                    self.printers[printer_id]['status']['status'] = 'stopped'
+                    
+                    # Callback aufrufen, wenn vorhanden
+                    if printer_id in self.status_callbacks:
+                        self.status_callbacks[printer_id](self.printers[printer_id]['status'])
+                
+                return True
+            else:
+                logger.error(f"Failed to send emergency stop command to OctoPrint printer {printer_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending emergency stop command to OctoPrint printer: {e}", exc_info=True)
+            return False
 
 # Globale Instanz
 octoprint_service = OctoPrintService() 
