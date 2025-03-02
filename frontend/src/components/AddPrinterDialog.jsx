@@ -61,10 +61,10 @@ const PrinterCard = styled(Box)(({ theme }) => ({
 }));
 
 const ModeBadge = styled(Chip)(({ mode }) => ({
-  position: 'absolute',
-  top: '10px',
-  right: '10px',
-  backgroundColor: mode === 'lan' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(0, 150, 255, 0.2)',
+  position: 'relative',
+  float: 'right',
+  marginBottom: '5px',
+  backgroundColor: mode === 'lan' ? 'rgba(0, 255, 0, 0.2)' : 'rgba(0, 150, 255, 0.3)',
   color: mode === 'lan' ? '#00ff00' : '#00ffff',
   border: `1px solid ${mode === 'lan' ? '#00ff00' : '#00ffff'}`,
   fontSize: '0.75rem',

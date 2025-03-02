@@ -46,12 +46,8 @@ def parse_printer_info(response, ip):
     
     try:
         # Check LAN mode using RTSP port
-        if test_lan_mode(ip):
-            printer_info['mode'] = 'lan'
-            printer_info['lan_mode_enabled'] = True
-        else:
-            printer_info['mode'] = 'cloud'
-            printer_info['lan_mode_enabled'] = False
+        lan_mode_available = test_lan_mode(ip)
+        printer_info['lan_mode_enabled'] = lan_mode_available
 
         # Parse SSDP response for additional info
         for line in response.split('\r\n'):
@@ -59,8 +55,17 @@ def parse_printer_info(response, ip):
                 printer_info['name'] = line.split(':', 1)[1].strip()
             elif 'DevModel.bambu.com:' in line:
                 printer_info['model'] = line.split(':', 1)[1].strip()
-            elif 'DevFWVer.bambu.com:' in line:
+            elif 'DevVersion.bambu.com:' in line:
                 printer_info['version'] = line.split(':', 1)[1].strip()
+            elif 'DevConnect.bambu.com:' in line:
+                connect_mode = line.split(':', 1)[1].strip().lower()
+                printer_info['mode'] = connect_mode  # Use the actual mode from the header
+            elif 'USN:' in line:
+                printer_info['serial'] = line.split(':', 1)[1].strip()
+
+        # If DevConnect header wasn't found, fall back to the port test
+        if printer_info['mode'] == 'unknown':
+            printer_info['mode'] = 'lan' if lan_mode_available else 'cloud'
 
         logger.debug(f"Found printer: {printer_info}")
         return printer_info
