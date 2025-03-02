@@ -73,34 +73,32 @@ const Header = ({ onThemeToggle, isDarkMode, mode, onModeChange, onAddPrinter })
         flex: '0 0 auto',
         marginRight: isExtraSmall ? '8px' : isMobile ? '12px' : '20px'
       }}>
-        {mode === 'lan' && (
-          <Button
-            variant="contained"
-            onClick={onAddPrinter}
-            sx={{
-              background: 'rgba(0, 0, 0, 0.8)',
-              color: '#00ffff',
-              borderRadius: '1.5rem',
-              textTransform: 'none',
-              padding: '8px 24px',
-              border: '0.15rem solid #00ffff',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 0 2rem rgba(0, 255, 255, 0.3)',
-              '&:hover': {
-                boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
-                background: 'rgba(0, 0, 0, 0.85)'
-              },
-              '& .hover-text': {
-                display: 'none'
-              },
-              '&:hover .hover-text': {
-                display: 'inline'
-              }
-            }}
-          >
-            + <span className="hover-text">ADD PRINTER</span>
-          </Button>
-        )}
+        <Button
+          variant="contained"
+          onClick={onAddPrinter}
+          sx={{
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: '#00ffff',
+            borderRadius: '1.5rem',
+            textTransform: 'none',
+            padding: '8px 24px',
+            border: '0.15rem solid #00ffff',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 0 2rem rgba(0, 255, 255, 0.3)',
+            '&:hover': {
+              boxShadow: '0 0 5rem rgba(0, 255, 255, 0.6)',
+              background: 'rgba(0, 0, 0, 0.85)'
+            },
+            '& .hover-text': {
+              display: 'none'
+            },
+            '&:hover .hover-text': {
+              display: 'inline'
+            }
+          }}
+        >
+          + <span className="hover-text">ADD PRINTER</span>
+        </Button>
       </Box>
     </Box>
   );

@@ -1,6 +1,8 @@
-import React, { useEffect } from 'react';
-import { Box, Typography, LinearProgress } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Box, Typography, LinearProgress, IconButton } from '@mui/material';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import { styled } from '@mui/material/styles';
+import { API_URL } from '../../config';
 
 const InfoContainer = styled(Box)(({ theme }) => ({
   padding: '1rem',
@@ -22,49 +24,141 @@ const statusMap = {
   'paused': 'Paused',
   'error': 'Error',
   'offline': 'Offline',
-  'connecting': 'Connecting...'
+  'connecting': 'Connecting...',
+  'completed': 'Print Completed',
+  'failed': 'Print Failed'
 };
 
-const OctoPrintInfo = ({ printer }) => {
-  const {
-    temperatures = {},
-    progress = 0,
-    status = 'connecting',
-    currentFile = '',
-    streamUrl = ''
-  } = printer;
+const OctoPrintInfo = ({ printer, onEmergencyStop }) => {
+  const [printerStatus, setPrinterStatus] = useState({
+    id: printer.id,
+    name: printer.name,
+    temps: {
+      hotend: 0,
+      nozzle: 0,
+      bed: 0,
+      chamber: 0
+    },
+    temperatures: {
+      hotend: 0,
+      nozzle: 0,
+      bed: 0,
+      chamber: 0
+    },
+    status: 'connecting',
+    progress: 0
+  });
 
+  // Fetch status periodically
   useEffect(() => {
-    // Verbinde mit MQTT über WebSocket
-    const ws = new WebSocket(`ws://${window.location.hostname}/mqtt`);
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      // Update UI mit neuen Daten
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch(`${API_URL}/printers/${printer.id}/status`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('OctoPrint status response:', data);
+          
+          // Get current temps to preserve non-zero values
+          const currentTemps = printerStatus.temps || {};
+          const currentTemperatures = printerStatus.temperatures || {};
+          
+          // Only update temperatures if they are non-zero in the new data
+          const newTemps = data.temps || {};
+          const newTemperatures = data.temperatures || {};
+          
+          const mergedTemps = {
+            hotend: newTemps.hotend > 0 ? newTemps.hotend : (currentTemps.hotend || 0),
+            nozzle: newTemps.nozzle > 0 ? newTemps.nozzle : (currentTemps.nozzle || 0),
+            bed: newTemps.bed > 0 ? newTemps.bed : (currentTemps.bed || 0),
+            chamber: newTemps.chamber > 0 ? newTemps.chamber : (currentTemps.chamber || 0)
+          };
+          
+          const mergedTemperatures = {
+            hotend: newTemperatures.hotend > 0 ? newTemperatures.hotend : (currentTemperatures.hotend || 0),
+            nozzle: newTemperatures.nozzle > 0 ? newTemperatures.nozzle : (currentTemperatures.nozzle || 0),
+            bed: newTemperatures.bed > 0 ? newTemperatures.bed : (currentTemperatures.bed || 0),
+            chamber: newTemperatures.chamber > 0 ? newTemperatures.chamber : (currentTemperatures.chamber || 0)
+          };
+          
+          // Merge the API response with existing printer data
+          setPrinterStatus(prevStatus => ({
+            ...prevStatus,
+            id: printer.id,
+            name: printer.name,
+            temps: mergedTemps,
+            temperatures: mergedTemperatures,
+            status: data.status || prevStatus.status,
+            progress: data.progress || prevStatus.progress
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching OctoPrint status:', error);
+      }
     };
-    
-    return () => ws.close();
-  }, [printer.id]);
+
+    // Initial fetch
+    fetchStatus();
+
+    // Set up polling
+    const interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, [printer.id, printer.name]);
+
+  // Use the status from state
+  const {
+    temps = { hotend: 0, nozzle: 0, bed: 0, chamber: 0 },
+    temperatures = { hotend: 0, nozzle: 0, bed: 0, chamber: 0 },
+    status = 'connecting',
+    progress = 0
+  } = printerStatus;
+
+  // Get hotend temperature, supporting both 'hotend' and 'nozzle' property names
+  const hotendTemp = temps.hotend ?? temps.nozzle ?? temperatures.hotend ?? temperatures.nozzle ?? 0;
+  const bedTemp = temps.bed ?? temperatures.bed ?? 0;
+  const chamberTemp = temps.chamber ?? temperatures.chamber ?? 0;
 
   useEffect(() => {
-    if (streamUrl) {
+    if (printer.streamUrl) {
       const video = document.getElementById(`video-${printer.id}`);
       if (video) {
-        video.src = streamUrl;
+        video.src = printer.streamUrl;
       }
     }
-  }, [streamUrl, printer.id]);
+  }, [printer.streamUrl, printer.id]);
 
   return (
     <InfoContainer>
-      <Typography variant="body1" sx={{ mb: 1 }}>
-        Status: {statusMap[status] || status}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Typography variant="body1">
+          Status: {statusMap[status] || status}
+        </Typography>
+        <IconButton
+          onClick={() => onEmergencyStop && onEmergencyStop(printer.id)}
+          disabled={status === 'offline' || status === 'connecting'}
+          sx={{
+            color: '#ff5555',
+            padding: '2px',
+            height: '24px',
+            width: '24px',
+            '&:hover': {
+              backgroundColor: 'rgba(255, 0, 0, 0.1)'
+            },
+            '&.Mui-disabled': {
+              color: 'rgba(255, 85, 85, 0.3)'
+            }
+          }}
+        >
+          <StopCircleIcon fontSize="small" />
+        </IconButton>
+      </Box>
+      <Typography variant="body2">
+        Hotend: {hotendTemp?.toFixed(1)}°C
       </Typography>
       <Typography variant="body2">
-        Hotend: {temperatures.hotend?.toFixed(1)}°C
+        Bed: {bedTemp?.toFixed(1)}°C
       </Typography>
       <Typography variant="body2">
-        Bed: {temperatures.bed?.toFixed(1)}°C
+        Chamber: {chamberTemp?.toFixed(1)}°C
       </Typography>
       {status === 'printing' && (
         <Box sx={{ mt: 1 }}>

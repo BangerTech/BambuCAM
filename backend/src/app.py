@@ -21,6 +21,8 @@ from pathlib import Path
 import yaml
 import socket
 from src.config import Config
+from src.services.octoprintService import octoprint_service
+from src.services.bambuCloudService import bambu_cloud_service
 
 def get_host_ip():
     """Ermittelt die Host-IP"""
@@ -91,6 +93,14 @@ CORS(app, resources={
 
 # Blueprints nur EINMAL registrieren
 register_blueprints(app)
+
+# Initialisiere OctoPrint-Drucker
+logger.info("Initializing OctoPrint printers from stored configurations")
+octoprint_service.initialize_from_stored_printers()
+
+# Initialisiere Bambu Cloud-Drucker
+logger.info("Initializing Bambu Cloud printers from stored configurations")
+bambu_cloud_service.initialize_from_stored_printers()
 
 @app.before_request
 def log_request_info():

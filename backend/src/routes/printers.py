@@ -154,8 +154,17 @@ def get_printer_status(printer_id: str):
         elif printer['type'] == 'OCTOPRINT':
             # Hole Status vom OctoPrint Service
             status = octoprint_service.get_printer_status(printer_id)
-            return jsonify(status or {
-                'temps': {'hotend': 0, 'bed': 0},
+            logger.info(f"OctoPrint status for {printer_id}: {status}")
+            
+            if status:
+                return jsonify(status)
+            
+            # Fallback wenn kein Status verfügbar ist
+            return jsonify({
+                'id': printer_id,
+                'name': printer.get('name', ''),
+                'temps': {'hotend': 0, 'nozzle': 0, 'bed': 0, 'chamber': 0},
+                'temperatures': {'hotend': 0, 'nozzle': 0, 'bed': 0, 'chamber': 0},
                 'status': 'offline',
                 'progress': 0
             })
@@ -177,7 +186,10 @@ def get_printer_status(printer_id: str):
     except Exception as e:
         logger.error(f"Error getting printer status: {e}")
         return jsonify({
-            'temps': {'hotend': 0, 'bed': 0, 'chamber': 0},
+            'id': printer_id,
+            'name': getPrinterById(printer_id).get('name', '') if getPrinterById(printer_id) else '',
+            'temps': {'hotend': 0, 'nozzle': 0, 'bed': 0, 'chamber': 0},
+            'temperatures': {'hotend': 0, 'nozzle': 0, 'bed': 0, 'chamber': 0},
             'status': 'offline',
             'progress': 0
         })
@@ -197,6 +209,7 @@ def update_status(printer_id):
 def add_octoprint_printer():
     try:
         data = request.get_json()
+        logger.info(f"Adding OctoPrint printer with data: {data}")
         
         # Validiere erforderliche Felder
         required = ['ip', 'name', 'mqttBroker', 'mqttPort']
@@ -210,10 +223,16 @@ def add_octoprint_printer():
             'name': data['name'],
             'ip': data['ip'],
             'mqttBroker': data['mqttBroker'],
-            'mqttPort': data['mqttPort'],
+            'mqttPort': int(data['mqttPort']),
+            'mqtt': {
+                'broker': data['mqttBroker'],
+                'port': int(data['mqttPort'])
+            },
             'streamUrl': f"http://{data['ip']}/webcam/?action=stream",
             'status': 'connecting'
         }
+        
+        logger.info(f"Creating OctoPrint printer with data: {printer_data}")
         
         # Speichere in PrinterService
         printer = addPrinter(printer_data)
@@ -224,5 +243,76 @@ def add_octoprint_printer():
         return jsonify({'success': True, 'printer': printer})
         
     except Exception as e:
-        logger.error(f"Error adding OctoPrint printer: {e}")
-        return jsonify({'error': str(e)}), 500 
+        logger.error(f"Error adding OctoPrint printer: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+@printers_bp.route('/printers/<printer_id>/emergency_stop', methods=['POST', 'OPTIONS'])
+@cross_origin(supports_credentials=True, allow_headers=['Content-Type', 'Accept', 'Cache-Control'])
+def emergency_stop_printer(printer_id):
+    """Notfall-Stopp für einen Drucker ausführen"""
+    try:
+        logger.info(f"Emergency stop requested for printer {printer_id}")
+        
+        # Drucker-Daten abrufen
+        printer = getPrinterById(printer_id)
+        if not printer:
+            return jsonify({
+                'success': False,
+                'error': f'Printer with ID {printer_id} not found'
+            }), 404
+            
+        printer_type = printer.get('type', '').upper()
+        
+        result = {
+            'success': False,
+            'message': 'Not implemented for this printer type'
+        }
+        
+        # Je nach Druckertyp unterschiedliche Stopp-Methode aufrufen
+        if printer_type == 'BAMBULAB':
+            # Für Bambu Lab LAN-Drucker
+            success = mqtt_service.emergency_stop_printer(printer_id)
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to Bambu Lab printer'
+            }
+            
+        elif printer_type == 'CLOUD':
+            # Für Bambu Lab Cloud-Drucker
+            from src.services.bambuCloudService import bambu_cloud_service
+            success = bambu_cloud_service.emergency_stop_printer(printer.get('cloudId') or printer.get('dev_id'))
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to Bambu Cloud printer'
+            }
+            
+        elif printer_type == 'OCTOPRINT':
+            # Für OctoPrint-Drucker
+            success = octoprint_service.emergency_stop_printer(printer_id)
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to OctoPrint printer'
+            }
+            
+        elif printer_type == 'CREALITY':
+            # Für Creality-Drucker
+            success = printer_service.emergency_stop_creality(printer_id)
+            result = {
+                'success': success,
+                'message': 'Emergency stop command sent to Creality printer'
+            }
+            
+        # Logging des Ergebnisses
+        if result['success']:
+            logger.info(f"Emergency stop successful for {printer_type} printer {printer_id}")
+        else:
+            logger.error(f"Emergency stop failed for {printer_type} printer {printer_id}")
+            
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error during emergency stop for printer {printer_id}: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500 

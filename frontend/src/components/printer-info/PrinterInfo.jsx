@@ -3,7 +3,7 @@ import BambuLabInfo from './BambuLabInfo';
 import CrealityInfo from './CrealityInfo';
 import logger from '../../utils/logger';
 
-const PrinterInfo = ({ printer, status }) => {
+const PrinterInfo = ({ printer, status, onEmergencyStop }) => {
   // Daten-Mapping für unterschiedliche Druckertypen
   const mappedStatus = printer?.type === 'CREALITY' ? {
     ...status,
@@ -23,9 +23,9 @@ const PrinterInfo = ({ printer, status }) => {
   // Wähle die richtige Info-Komponente basierend auf dem Druckertyp
   switch (printer?.type) {
     case 'BAMBULAB':
-      return <BambuLabInfo printer={printer} status={mappedStatus} />;
+      return <BambuLabInfo printer={printer} status={mappedStatus} onEmergencyStop={onEmergencyStop} />;
     case 'CREALITY':
-      return <CrealityInfo printer={printer} status={mappedStatus} />;
+      return <CrealityInfo printer={printer} status={mappedStatus} onEmergencyStop={onEmergencyStop} />;
     default:
       logger.warn(`Unknown printer type: ${printer?.type}`);
       return null;

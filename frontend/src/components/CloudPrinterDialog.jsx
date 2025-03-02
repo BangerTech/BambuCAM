@@ -18,47 +18,56 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import styled from '@emotion/styled';
-import { Logger, LOG_CATEGORIES } from '../utils/logger';
 
 const API_URL = `http://${window.location.hostname}:4000`;
 
 const GlassDialog = styled(Dialog)(({ theme }) => ({
   '& .MuiDialog-paper': {
-    background: 'rgba(0, 0, 0, 0.8)',
+    background: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.95)',
     backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(0, 255, 255, 0.2)',
+    border: theme.palette.mode === 'dark' 
+      ? '1px solid rgba(0, 255, 255, 0.2)' 
+      : '1px solid rgba(0, 128, 128, 0.2)',
     borderRadius: '15px',
-    boxShadow: '0 0 30px rgba(0, 255, 255, 0.2)',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 0 30px rgba(0, 255, 255, 0.2)' 
+      : '0 0 30px rgba(0, 128, 128, 0.1)',
     minWidth: '400px',
-    color: '#00ffff',
+    color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
     '& .MuiDialogTitle-root': {
-      borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
-      color: '#00ffff'
+      borderBottom: theme.palette.mode === 'dark' 
+        ? '1px solid rgba(0, 255, 255, 0.1)' 
+        : '1px solid rgba(0, 128, 128, 0.1)',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080'
     },
     '& .MuiListItemText-primary': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
       fontSize: '1.1rem'
     },
     '& .MuiListItemText-secondary': {
-      color: 'rgba(0, 255, 255, 0.7)',
+      color: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
       fontSize: '0.9rem'
     },
     '& .MuiIconButton-root': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
       '&:hover': {
-        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+        backgroundColor: theme.palette.mode === 'dark' 
+          ? 'rgba(0, 255, 255, 0.1)' 
+          : 'rgba(0, 128, 128, 0.1)'
       }
     },
     '& .MuiButton-root': {
-      color: '#00ffff',
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#008080',
       '&:hover': {
-        backgroundColor: 'rgba(0, 255, 255, 0.1)'
+        backgroundColor: theme.palette.mode === 'dark' 
+          ? 'rgba(0, 255, 255, 0.1)' 
+          : 'rgba(0, 128, 128, 0.1)'
       }
     },
     '& .MuiChip-root': {
       margin: '0 10px',
-      color: '#00ffff',
-      borderColor: 'rgba(0, 255, 255, 0.5)'
+      color: theme.palette.mode === 'dark' ? '#00ffff' : '#333333',
+      borderColor: theme.palette.mode === 'dark' ? 'rgba(0, 255, 255, 0.5)' : 'rgba(0, 128, 128, 0.5)'
     }
   }
 }));
@@ -70,7 +79,7 @@ const CloudPrinterDialog = ({ open, onClose }) => {
 
   useEffect(() => {
     if (open) {
-      Logger.info(LOG_CATEGORIES.SYSTEM, 'Dialog opened, fetching printers...');
+      console.log('Dialog opened, fetching printers...');
       fetchPrinters();
     }
   }, [open]);
@@ -78,42 +87,77 @@ const CloudPrinterDialog = ({ open, onClose }) => {
   const fetchPrinters = async () => {
     try {
       setLoading(true);
-      Logger.info(LOG_CATEGORIES.SYSTEM, 'Fetching cloud printers...');
+      console.log('Fetching cloud printers...');
       
       const response = await fetch(`${API_URL}/api/cloud/printers`, {
+        method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
+        credentials: 'include',
+        mode: 'cors'
       });
       
-      Logger.debug(LOG_CATEGORIES.API, 'Cloud printers response:', {
+      console.log('Response:', {
         status: response.status,
         statusText: response.statusText
       });
-      
+
       const data = await response.json();
+      console.log('Response data:', data);
       
-      if (data.devices && Array.isArray(data.devices)) {
-        Logger.debug(LOG_CATEGORIES.SYSTEM, 'Found printers:', data.devices);
-        const cloudPrinters = data.devices.map(printer => ({
-          name: printer.dev_name || printer.name,
-          accessCode: printer.dev_access_code,
-          model: printer.dev_product_name,
-          online: printer.online,
-          cloudId: printer.dev_id,
-          status: printer.online ? 'online' : 'offline',
-          type: 'CLOUD'
-        }));
-        Logger.debug(LOG_CATEGORIES.SYSTEM, 'Mapped printers:', cloudPrinters);
+      // Handle 2FA requirement
+      if (data.error === '2fa_required' || data.message?.includes('2fa')) {
+        setError('Two-factor authentication required. Please complete 2FA in your Bambu account.');
+        setPrinters([]);
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+
+      if (data && Array.isArray(data)) {
+        console.log('Found printers:', data);
+        const cloudPrinters = data.map(printer => {
+          // Ensure we have a valid cloudId
+          const cloudId = printer.dev_id || printer.id || printer.cloudId;
+          if (!cloudId) {
+            console.warn('Printer missing cloudId:', printer);
+          }
+
+          // Check if printer is online based on ACTIVE status
+          const isOnline = printer.status === 'ACTIVE' || printer.print_status === 'ACTIVE';
+
+          const mappedPrinter = {
+            name: printer.dev_name || printer.name || 'Unknown Printer',
+            accessCode: printer.dev_access_code || printer.access_code,
+            model: printer.dev_product_name || printer.dev_model_name || printer.model || 'Unknown Model',
+            cloudId: cloudId,
+            online: isOnline,  // Set online based on ACTIVE status
+            status: isOnline ? 'online' : 'offline',
+            nozzle_diameter: printer.nozzle_diameter || 0.4,
+            type: 'CLOUD',
+            dev_id: printer.dev_id,
+            id: printer.id,
+            print_status: printer.print_status || 'unknown'
+          };
+          console.log('Mapped printer:', mappedPrinter);
+          return mappedPrinter;
+        }).filter(printer => printer.cloudId); // Only keep printers with valid cloudId
+
+        console.log('Mapped printers:', cloudPrinters);
         setPrinters(cloudPrinters);
       } else {
-        Logger.info(LOG_CATEGORIES.SYSTEM, 'No printers found');
+        console.log('No printers found or invalid data format:', data);
         setPrinters([]);
       }
     } catch (error) {
-      Logger.error(LOG_CATEGORIES.SYSTEM, 'Fetch error:', error);
-      setError('Failed to load cloud printers. Please check your connection.');
+      console.error('Fetch error:', error);
+      setError(error.message || 'Network error');
+      setPrinters([]);
     } finally {
       setLoading(false);
     }
@@ -121,36 +165,49 @@ const CloudPrinterDialog = ({ open, onClose }) => {
 
   const handleAddPrinter = async (printer) => {
     try {
+      console.log('Adding printer:', printer);
       const printerData = {
         name: printer.name,
         type: 'CLOUD',
-        cloudId: printer.cloudId,
-        accessCode: printer.accessCode,
+        cloudId: printer.cloudId || printer.dev_id,
+        accessCode: printer.accessCode || printer.dev_access_code,
         model: printer.model,
-        status: printer.status
+        status: printer.status,
+        nozzle_diameter: printer.nozzle_diameter,
+        print_status: printer.print_status || 'unknown'
       };
 
-      Logger.debug(LOG_CATEGORIES.SYSTEM, 'Adding printer:', printerData);
+      console.log('Sending printer data:', printerData);
       
+      if (!printerData.cloudId || !printerData.accessCode) {
+        console.error('Missing required data:', {
+          cloudId: printerData.cloudId,
+          accessCode: printerData.accessCode
+        });
+        throw new Error('Missing required cloud printer data (cloudId or accessCode)');
+      }
+
       const response = await fetch(`${API_URL}/api/cloud/printers/add`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(printerData)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        Logger.error(LOG_CATEGORIES.API, 'Error adding printer:', errorData);
+        console.error('Error response:', errorData);
         throw new Error(errorData.error || 'Failed to add printer');
       }
 
       const result = await response.json();
-      Logger.info(LOG_CATEGORIES.SYSTEM, 'Printer added successfully:', result);
+      console.log('Add printer result:', result);
       onClose(true);
     } catch (error) {
-      Logger.error(LOG_CATEGORIES.SYSTEM, 'Error adding printer:', error);
+      console.error('Error adding printer:', error);
       setError(error.message);
     }
   };
@@ -172,7 +229,7 @@ const CloudPrinterDialog = ({ open, onClose }) => {
         ) : (
           <List>
             {printers.map((printer) => (
-              <ListItem key={printer.cloudId}>
+              <ListItem key={`${printer.cloudId}-${printer.name}`}>
                 <ListItemText 
                   primary={printer.name}
                   secondary={
@@ -182,15 +239,15 @@ const CloudPrinterDialog = ({ open, onClose }) => {
                   }
                 />
                 <Chip 
-                  label={printer.online ? "Online" : "Offline"}
-                  color={printer.online ? "success" : "error"}
+                  label={printer.status === 'ACTIVE' || printer.print_status === 'ACTIVE' ? "Online" : "Offline"}
+                  color={printer.status === 'ACTIVE' || printer.print_status === 'ACTIVE' ? "success" : "error"}
                   variant="outlined"
                   sx={{ mr: 1 }}
                 />
                 <IconButton 
                   onClick={() => handleAddPrinter(printer)}
-                  disabled={!printer.online}
-                  title={printer.online ? "Add Printer" : "Printer is offline"}
+                  disabled={!(printer.status === 'ACTIVE' || printer.print_status === 'ACTIVE')}
+                  title={printer.status === 'ACTIVE' || printer.print_status === 'ACTIVE' ? "Add Printer" : "Printer is offline"}
                 >
                   <AddIcon />
                 </IconButton>

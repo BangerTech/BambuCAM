@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Dialog, IconButton, Box, Typography, AppBar, Toolbar, LinearProgress, Paper } from '@mui/material';
 import { Close as CloseIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import RTSPStream from './RTSPStream';
 import { Logger, LOG_CATEGORIES } from '../utils/logger';
 import BambuLabInfo from './printer-info/BambuLabInfo';
 import CrealityInfo from './printer-info/CrealityInfo';
-
-// Dynamische API URL basierend auf dem aktuellen Host
-const API_URL = `http://${window.location.hostname}:4000`;
+import { API_URL } from '../config';
+import EmergencyStopDialog from './EmergencyStopDialog';
 
 const FullscreenDialog = ({ open, printer, onClose, onDelete }) => {
   const [printerData, setPrinterData] = useState({
@@ -17,12 +17,14 @@ const FullscreenDialog = ({ open, printer, onClose, onDelete }) => {
     targets: { nozzle: 0, bed: 0 },
     progress: 0
   });
+  const [isEmergencyStopping, setIsEmergencyStopping] = useState(false);
+  const [showEmergencyDialog, setShowEmergencyDialog] = useState(false);
 
   useEffect(() => {
     if (open && printer) {
       const fetchStatus = async () => {
         try {
-          const response = await fetch(`/api/printers/${printer.id}/status`);
+          const response = await fetch(`${API_URL}/printers/${printer.id}/status`);
           const data = await response.json();
           
           if (printer.type === 'BAMBULAB') {
@@ -70,6 +72,37 @@ const FullscreenDialog = ({ open, printer, onClose, onDelete }) => {
       return () => clearInterval(interval);
     }
   }, [printer, open]);
+
+  const handleEmergencyStop = async (printerId) => {
+    setShowEmergencyDialog(true);
+  };
+
+  const confirmEmergencyStop = async () => {
+    setShowEmergencyDialog(false);
+    setIsEmergencyStopping(true);
+    try {
+      const response = await fetch(`${API_URL}/printers/${printer.id}/emergency_stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        Logger.printer('Emergency stop successful', { printer: printer.id });
+      } else {
+        Logger.printer('Emergency stop failed', { printer: printer.id, error: result.error || result.message });
+        alert(`Error during emergency stop: ${result.error || result.message}`);
+      }
+    } catch (error) {
+      Logger.printer('Emergency stop error', { printer: printer.id, error });
+      alert(`Error during emergency stop: ${error.message}`);
+    } finally {
+      setIsEmergencyStopping(false);
+    }
+  };
 
   return (
     <Dialog
@@ -201,11 +234,40 @@ const FullscreenDialog = ({ open, printer, onClose, onDelete }) => {
         </Box>
 
         {printer?.type === 'BAMBULAB' ? (
-          <BambuLabInfo printer={printerData} fullscreen={true} />
+          <BambuLabInfo printer={printerData} fullscreen={true} onEmergencyStop={handleEmergencyStop} />
         ) : (
-          <CrealityInfo printer={printerData} fullscreen={true} />
+          <CrealityInfo printer={printerData} fullscreen={true} onEmergencyStop={handleEmergencyStop} />
+        )}
+
+        {isEmergencyStopping && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(255,0,0,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+          >
+            <Typography sx={{ color: '#fff', fontWeight: 'bold' }}>
+              Executing emergency stop...
+            </Typography>
+          </Box>
         )}
       </Paper>
+
+      {/* Emergency Stop Dialog */}
+      <EmergencyStopDialog
+        open={showEmergencyDialog}
+        onClose={() => setShowEmergencyDialog(false)}
+        onConfirm={confirmEmergencyStop}
+        printerName={printer?.name}
+      />
     </Dialog>
   );
 };
