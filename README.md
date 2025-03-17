@@ -45,10 +45,11 @@ BambuCAM is a user-friendly web application for monitoring different 3D printers
 
 The fastest way to get started is using our pre-built Docker images:
 
-1. Create a Folder sudo mkdir BambuCAM
-2. Jump into the folder cd BambuCAM
+1. Create a Folder: `sudo mkdir BambuCAM`
+2. Jump into the folder: `cd BambuCAM`
 3. Create a `docker-compose.yml`:
 ```yaml
+version: '3'
 
 services:
   frontend:
@@ -60,9 +61,70 @@ services:
     image: bangertech/bambucam-backend:latest
     restart: unless-stopped
     volumes:
-      - bambucam_data:/app/data
-      - bambucam_logs:/app/logs
+      - type: bind
+        source: ./data
+        target: /app/data
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ./logs
+        target: /app/logs
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ./data/go2rtc
+        target: /app/data/go2rtc
+        bind:
+          create_host_path: true
+    environment:
+      - LOG_LEVEL=DEBUG
     network_mode: "host"
+
+  nginx:
+    image: nginx:alpine
+    network_mode: "host"
+    restart: unless-stopped
+    command: >
+      /bin/sh -c "echo 'worker_processes auto;
+      events {
+        worker_connections 1024;
+      }
+      http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        sendfile on;
+        keepalive_timeout 65;
+        
+        server {
+          listen 80;
+          
+          location / {
+            proxy_pass http://localhost:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $$http_upgrade;
+            proxy_set_header Connection \"upgrade\";
+            proxy_set_header Host $$host;
+          }
+          
+          location /api {
+            proxy_pass http://localhost:4000;
+            proxy_http_version 1.1;
+            proxy_set_header Host $$host;
+          }
+          
+          location /go2rtc/ {
+            proxy_pass http://localhost:1984/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $$http_upgrade;
+            proxy_set_header Connection \"upgrade\";
+            proxy_set_header Host $$host;
+          }
+        }
+      }' > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
+    depends_on:
+      - frontend
+      - backend
+      - go2rtc
 
   go2rtc:
     image: alexxit/go2rtc
@@ -70,16 +132,32 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - bambucam_go2rtc:/config
+      - type: bind
+        source: ./data/go2rtc
+        target: /config
+        bind:
+          create_host_path: true
     environment:
       - GO2RTC_CONFIG=/config/go2rtc.yaml
       - GO2RTC_API=listen=:1984
       - GO2RTC_API_BASE=/go2rtc
-
-volumes:
-  bambucam_logs:
-  bambucam_data:
-  bambucam_go2rtc:
+      - GO2RTC_LOG_LEVEL=debug
+    command: >
+      /bin/sh -c "
+      mkdir -p /config &&
+      touch /config/go2rtc.yaml &&
+      chmod 777 /config/go2rtc.yaml &&
+      echo 'api:' > /config/go2rtc.yaml &&
+      echo '  listen: :1984' >> /config/go2rtc.yaml &&
+      echo '  base: /go2rtc' >> /config/go2rtc.yaml &&
+      echo 'webrtc:' >> /config/go2rtc.yaml &&
+      echo '  listen: :8555' >> /config/go2rtc.yaml &&
+      echo 'rtsp:' >> /config/go2rtc.yaml &&
+      echo '  listen: :8554' >> /config/go2rtc.yaml &&
+      go2rtc
+      "
+    depends_on:
+      - backend
 ```
 
 4. Start BambuCAM:
@@ -87,7 +165,7 @@ volumes:
 docker compose up -d
 ```
 
-That's it! The application will be available at http://localhost
+That's it! The application will be available at http://localhost. Your data will be stored in the `./data` and `./logs` directories, making it easy to access and backup.
 
 ### Windows Users
 
