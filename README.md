@@ -49,7 +49,6 @@ The fastest way to get started is using our pre-built Docker images:
 2. Jump into the folder: `cd BambuCAM`
 3. Create a `docker-compose.yml`:
 ```yaml
-version: '3'
 
 services:
   frontend:
@@ -220,7 +219,7 @@ cd BambuCAM
 
 2. Start Docker Compose:
 ```bash
-docker-compose up --build
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 3. Open in browser:
